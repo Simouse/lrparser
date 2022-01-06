@@ -1,0 +1,9 @@
+TERM :{a, b, c}
+
+!
+
+A -> a A
+
+B -> C b
+
+C -> c | C c | A B
