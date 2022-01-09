@@ -1,0 +1,13 @@
+TERM :{ID, PLUS, TIMES, LP, RP}
+
+!
+
+START: exp
+
+exp -> exp PLUS term
+    |term
+
+term -> term TIMES fac
+    | fac
+
+fac -> ID | LP exp RP
