@@ -1,13 +1,32 @@
-TERM :{ID, PLUS, TIMES, LP, RP}
+! This is a comment
+! You can use '!' just like "//" in C99 and C++.
+
+# '#' style comment is also supported. (Doing so will allow
+# you to use the comment function provided by your editor when
+# you associate this text file with bash mode. You can temporarily
+# comment some grammar rules and later uncomment them easily
+# in this way.)
+
+# But "//" and "/**/" are not supported
+
+! Escape sequences are not supported, which means you
+! cannot use "'" and '"' together. To use one of them,
+! you need to use the other as the quote sign.
+
+# TERM :{ID, PLUS, TIMES, "(", ')', '+', '*'}
+
+TERM :{ID, "(", ')', '+', '*'}
 
 !
 
 START: exp
 
-exp -> exp PLUS term
-    |term
+# exp   -> term exp1
+# exp1  -> '+' term exp1 | \epsilon     # Yet another comment
+# term  -> fac term1
+# term1 -> '*' fac term1 | \epsilon
+# fac   -> ID            | '(' exp ')'
 
-term -> term TIMES fac
-    | fac
-
-fac -> ID | LP exp RP
+exp   -> exp '+' term  | term
+term  -> term '*' fac  | fac
+fac   -> "(" exp ')'   | ID
