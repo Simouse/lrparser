@@ -8,7 +8,6 @@
 
 namespace gram {
 class Grammar;
-class Display;
 } // namespace gram
 
 namespace gram {

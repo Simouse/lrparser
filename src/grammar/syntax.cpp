@@ -8,7 +8,6 @@
 #include "grammar.h"
 #include "src/automata/automata.h"
 #include "src/common.h"
-#include "src/display/display.h"
 #include "src/util/bitset.h"
 #include "src/util/formatter.h"
 
@@ -22,7 +21,7 @@ namespace gram {
 static String createStateNameLR0(const gram::Grammar &G, const gram::Symbol &N,
                                  const std::vector<int> &productionBody,
                                  int dotPos) {
-    assert(dotPos <= productionBody.size());
+    assert(static_cast<size_t>(dotPos) <= productionBody.size());
 
     const auto &symbols = G.getAllSymbols();
     String s = N.name;
@@ -35,7 +34,7 @@ static String createStateNameLR0(const gram::Grammar &G, const gram::Symbol &N,
     }
     s += ' ';
     s += Grammar::SignStrings::dot;
-    for (; i < productionBody.size(); ++i) {
+    for (; i < static_cast<int>(productionBody.size()); ++i) {
         s += ' ';
         s += symbols[productionBody[i]].name;
     }
@@ -50,7 +49,7 @@ void SyntaxAnalysisSLR::buildNFA() {
     const auto &symbols = G.getAllSymbols();
     //    const auto &prodVecTable = G.getProductions();
 
-    // Store links here so we can demonstrate how to add epsilon
+    // Store links here, so we can demonstrate how to add epsilon
     // transitions from each state which wants N to all states
     // that generates N eventually.
     // { stateid => nid }
@@ -116,14 +115,16 @@ void SyntaxAnalysisSLR::buildNFA() {
         auto const &production = productionTable[i];
         auto const &rightSymbols = production.rightSymbols;
         vector<StateID> stateIds(rightSymbols.size() + 1);
-        for (int dotPos = 0; dotPos <= rightSymbols.size(); ++dotPos) {
+        for (int dotPos = 0; dotPos <= static_cast<int>(rightSymbols.size());
+             ++dotPos) {
             String name = createStateNameLR0(G, symbols[production.leftSymbol],
                                              rightSymbols, dotPos);
             StateID stateId = M.addState(name);
             stateIds[dotPos] = stateId;
         }
         // Link states
-        for (int dotPos = 0; dotPos < rightSymbols.size(); ++dotPos) {
+        for (int dotPos = 0; dotPos < static_cast<int>(rightSymbols.size());
+             ++dotPos) {
             StateID thisState{stateIds[dotPos]};
             StateID nextState{stateIds[dotPos + 1]};
             auto &nextSymbol = symbols[rightSymbols[dotPos]];
@@ -225,7 +226,7 @@ void SyntaxAnalysisSLR::buildParseTables() {
     // auto const &actionReceivers = dfa.getActionReceivers();
 
     auto nActions = static_cast<int>(dfa.getAllActions().size());
-    auto nNFAStates = static_cast<int>(formerStates.size());
+    //    auto nNFAStates = static_cast<int>(formerStates.size());
     auto nDFAStates = static_cast<int>(states.size());
 
     // Shift and Goto items
@@ -243,7 +244,7 @@ void SyntaxAnalysisSLR::buildParseTables() {
     }
 
     // Process "reduce"
-    // Bitset for reducible NFA states (so we can known if a DFA state is
+    // Bitset for reducible NFA states (so we can know if a DFA state is
     // reducible)
     util::BitSet mask{
         static_cast<util::BitSet::size_type>(formerStates.size())};
@@ -310,7 +311,7 @@ gram::Grammar const &SyntaxAnalysisSLR::getGrammer() const { return gram; }
 gram::Automaton const &SyntaxAnalysisSLR::getDFA() const { return dfa; }
 
 String SyntaxAnalysisSLR::dumpParseTableEntry(StateID state,
-                                              ActionID action) const try {
+                                              ActionID action) const {
 
     auto const &items = actionTable.at(state).at(action);
     String s;
@@ -341,8 +342,6 @@ String SyntaxAnalysisSLR::dumpParseTableEntry(StateID state,
         }
     }
     return s;
-} catch (std::out_of_range const &e) {
-    return "";
 }
 
 } // namespace gram

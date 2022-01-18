@@ -1,5 +1,6 @@
 #include "grammar.h"
 
+#include <array>
 #include <cctype>
 #include <fstream>
 #include <iostream>
@@ -8,7 +9,6 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-#include <array>
 
 #include "src/common.h"
 #include "src/display/display.h"
@@ -36,7 +36,7 @@ class GrammarReader {
 
     auto getLineAndCount(std::istream &is, String &s) -> bool;
     auto skipSpaces(const char *p) -> const char *;
-    auto skipBlanks(const char *p) -> const char *;
+    static auto skipBlanks(const char *p) -> const char *;
     auto nextEquals(char ch) -> bool;
     auto expect(char ch) -> bool;
     void expectOrThrow(const char *expected);
@@ -52,6 +52,15 @@ class GrammarReader {
 } // namespace gram
 
 namespace gram {
+
+Grammar::Grammar() {
+    // Add built-in symbols
+    epsilon = putSymbol(Grammar::SignStrings::epsilon, true);
+    addAlias(epsilon, "_e");
+    addAlias(epsilon, "\\e");
+    addAlias(epsilon, "\\epsilon");
+    endOfInput = putSymbol(Grammar::SignStrings::endOfInput, true);
+}
 
 auto Grammar::putSymbolNoDuplicate(Symbol &&sym) -> int {
     // `id` in sym is just the next id, we should check name instead
@@ -97,27 +106,28 @@ void Grammar::addAlias(int id, const char *alias) {
     idTable.emplace(alias, id);
 }
 
-void Grammar::addRule(int nid, vector<vector<int>> &&newRule) {
-    for (auto const &r : newRule) {
-        addProduction(nid, r);
-    }
-    prodVecTable.emplace(nid, std::move(newRule));
-}
+// void Grammar::addRule(int nid, vector<vector<int>> &&newRule) {
+//     for (auto const &r : newRule) {
+//         addProduction(nid, r);
+//     }
+//     prodVecTable.emplace(nid, std::move(newRule));
+// }
 
-ProductionID Grammar::addProduction(int leftSymbol, std::vector<int> rightSymbols) {
-    auto id = (ProductionID)experimentProdTbl.size();
-    experimentProdTbl.emplace_back(leftSymbol, std::move(rightSymbols));
+ProductionID Grammar::addProduction(int leftSymbol,
+                                    std::vector<int> rightSymbols) {
+    // Production ID
+    auto id = (ProductionID)productionTable.size();
+    productionTable.emplace_back(leftSymbol, std::move(rightSymbols));
+    symVec[leftSymbol].productions.push_back(id);
     return id;
 }
 
 ProductionTable const &Grammar::getProductionTable() const {
-    return experimentProdTbl;
+    return productionTable;
 }
 
 String Grammar::dump() const {
     String s;
-    auto &symVec = getAllSymbols();
-    auto &rules = getProductions();
     const char *typeStr[] = {"  Nonterminals:\n", "  Terminals:\n"};
     vector<int> classifiedSyms[2];
 
@@ -139,25 +149,15 @@ String Grammar::dump() const {
     }
 
     s += "Rules:\n";
-    for (auto &ruleEntry : rules) {
-        auto &rule = ruleEntry.second;
-        int nid = ruleEntry.first; // Nonterminal id
-
-        if (rule.empty())
-            continue; // No rule for this symbol
-        s += "  " + symVec[nid].name + " ->";
-        bool firstRule = true;
-        for (auto &ruleItem : rule) {
-            if (!firstRule) {
-                s += "    |";
-            }
-            for (int ruleRhs : ruleItem) {
-                s += ' ';
-                s += symVec[ruleRhs].name;
-            }
-            s += '\n';
-            firstRule = false;
+    for (auto &production : productionTable) {
+        s += "  ";
+        s += symVec[production.leftSymbol].name;
+        s += " ->";
+        for (auto sym : production.rightSymbols) {
+            s += ' ';
+            s += symVec[sym].name;
         }
+        s += '\n';
     }
 
     return s;
@@ -175,7 +175,7 @@ auto Grammar::fromStdin() -> Grammar {
     return GrammarReader::parse(::std::cin).fillSymbolAttrs();
 }
 
-void Grammar::checkViolcations() {
+void Grammar::checkViolations() {
     // Check if there's a sym with no type
     for (auto &sym : symVec) {
         if (sym.type == SymbolType::UNCHECKED) {
@@ -191,13 +191,17 @@ void Grammar::setStart(const char *name) {
     start = putSymbolUnchecked(name);
 }
 
-// This function needs to get a Symbol & from symvec,
-// so symvec must be a mutable reference
-static bool resolveNullable(Grammar::symvec_t &symvec,
-                            Grammar::prodvt_t const &prodVecTable,
-                            Symbol &sym) {
+// This function needs to get a Symbol & from symVec,
+// so symVec must be a mutable reference
+bool Grammar::resolveNullable(Symbol &sym) {
     if (sym.nullable.has_value()) {
         return sym.nullable.value();
+    }
+
+    // Epsilon is nullable
+    if (sym.id == epsilon) {
+        sym.nullable.emplace(true);
+        return true;
     }
 
     // Place false first to prevent infinite recursive calls
@@ -209,15 +213,16 @@ static bool resolveNullable(Grammar::symvec_t &symvec,
     }
 
     // For A -> a...b, A is nullable <=> a ... b are all nullable
-    for (auto const &prod : prodVecTable.at(sym.id)) {
+    for (auto const &prodID : symVec[sym.id].productions) {
+        auto const &production = productionTable[prodID];
         // This symbol has epsilon production
-        if (prod.empty()) {
+        if (production.rightSymbols.empty()) {
             sym.nullable.emplace(true);
             return true;
         }
         bool prodNullable = true;
-        for (int component : prod) {
-            if (!resolveNullable(symvec, prodVecTable, symvec[component])) {
+        for (int rid : production.rightSymbols) {
+            if (!resolveNullable(symVec[rid])) {
                 prodNullable = false;
                 break;
             }
@@ -231,59 +236,58 @@ static bool resolveNullable(Grammar::symvec_t &symvec,
     return false;
 }
 
-// This function needs to get a Symbol & from symvec,
-// so symvec must be a mutable reference
-static void resolveFirstSet(vector<int> &visit, Grammar::symvec_t &symvec,
-                            Grammar::prodvt_t const &prodVecTable, Symbol &sym,
-                            int epsId) {
-    if (visit[sym.id])
+// This function needs to get a Symbol & from symVec,
+// so symVec must be a mutable reference
+void Grammar::resolveFirstSet(vector<int> &visit, Symbol &curSymbol) {
+    if (visit[curSymbol.id])
         return;
 
     // Mark the flag to prevent circular recursive call
-    visit[sym.id] = 1;
+    visit[curSymbol.id] = 1;
 
-    auto const &prods = prodVecTable.at(sym.id);
-    for (auto const &prod : prods) {
-        bool allNull = true;
-        for (int symidInProd : prod) {
-            auto &symInProd = symvec[symidInProd];
-            if (!visit[symidInProd]) {
-                resolveFirstSet(visit, symvec, prodVecTable, symInProd, epsId);
+    for (auto const &prodID : symVec[curSymbol.id].productions) {
+        auto const &production = productionTable[prodID];
+        // This flag is true when the body of this production is nullable
+        bool allNullable = true;
+        for (int rid : production.rightSymbols) {
+            auto &rightSymbol = symVec[rid];
+            if (!visit[rid]) {
+                resolveFirstSet(visit, rightSymbol);
             }
-            for (int sid : symInProd.firstSet) {
-                if (sid != epsId)
-                    sym.firstSet.insert(sid);
+            for (int sid : rightSymbol.firstSet) {
+                if (sid != epsilon)
+                    curSymbol.firstSet.insert(sid);
             }
-            if (!symInProd.nullable.value()) {
-                allNull = false;
+            if (!rightSymbol.nullable.value()) {
+                allNullable = false;
                 break;
             }
         }
-        if (allNull) {
-            sym.firstSet.insert(epsId);
+        if (allNullable) {
+            curSymbol.firstSet.insert(epsilon);
         }
     }
 }
 
 // This function figures out the dependencies among Follow sets.
-static void
-resolveFollowSet(vector<int> &visit, Grammar::symvec_t &symvec,
-                 unordered_map<int, unordered_set<int>> &dependencyTable,
-                 std::pair<const int, std::unordered_set<int>> &entry) {
-    if (visit[entry.first]) {
+void Grammar::resolveFollowSet(
+    vector<int> &visit, unordered_map<int, unordered_set<int>> &dependencyTable,
+    std::pair<const int, std::unordered_set<int>> &dependency) {
+
+    if (visit[dependency.first]) {
         return;
     }
-    visit[entry.first] = 1;
+    visit[dependency.first] = 1;
 
-    auto &parentSet = entry.second;
+    auto &parentSet = dependency.second;
     for (int parent : parentSet) {
         auto it = dependencyTable.find(parent);
         if (it != dependencyTable.end() && !it->second.empty()) {
-            resolveFollowSet(visit, symvec, dependencyTable, *it);
+            resolveFollowSet(visit, dependencyTable, *it);
         }
         // Add follow set items from parent
-        auto const &parentFollowSet = symvec[parent].followSet;
-        auto &followSet = symvec[entry.first].followSet;
+        auto const &parentFollowSet = symVec[parent].followSet;
+        auto &followSet = symVec[dependency.first].followSet;
         followSet.insert(parentFollowSet.begin(), parentFollowSet.end());
     }
     parentSet.clear();
@@ -298,7 +302,7 @@ Grammar &Grammar::fillSymbolAttrs() {
     // For t in T, t is not nullable
     // For A -> a...b, A is nullable <=> a ... b are all nullable
     for (auto &symbol : symVec) {
-        resolveNullable(symVec, prodVecTable, symbol);
+        resolveNullable(symbol);
     }
 
     display(DisplayType::SYMBOL_TABLE, "Calculate nullables", this);
@@ -322,7 +326,7 @@ Grammar &Grammar::fillSymbolAttrs() {
 
     // For n in T, check production chain
     for (auto &symbol : symVec) {
-        resolveFirstSet(visit, symVec, prodVecTable, symbol, epsilon);
+        resolveFirstSet(visit, symbol);
     }
 
     display(DisplayType::SYMBOL_TABLE, "Calculate first set", this);
@@ -336,31 +340,38 @@ Grammar &Grammar::fillSymbolAttrs() {
     // e.g. table[a] = {b, c} ===> a needs b and c
     unordered_map<int, unordered_set<int>> dependencyTable;
 
-    for (auto const &entry : prodVecTable) {
-        long int product = entry.first;
-        auto const &prods = entry.second;
-
-        for (auto const &prod : prods) {
+    for (auto const &symbol : symVec) {
+        // If this for-loop is entered, the symbol cannot be a
+        // terminal.
+        for (auto prodID : symbol.productions) {
+            auto const &prod = productionTable[prodID];
+            auto const &productionBody = prod.rightSymbols;
             // Skip epsilon productions
-            if (prod.empty())
+            if (productionBody.empty())
                 continue;
 
-            auto const &last = symVec[prod.back()];
+            auto const &last = symVec[productionBody.back()];
+
+            // Only calculate Follow sets for non-terminals
             if (last.type == SymbolType::NON_TERM)
-                dependencyTable[last.id].insert(product);
+                dependencyTable[last.id].insert(prod.leftSymbol);
 
-            long prodlen = static_cast<long>(prod.size());
-            for (long i = prodlen - 2; i >= 0; --i) {
-                // Only calcuate Follow sets for non-terminals
-                if (symVec[prod[i]].type != SymbolType::NON_TERM)
+            long size = static_cast<long>(productionBody.size());
+            for (long i = size - 2; i >= 0; --i) {
+                // Only calculate Follow sets for non-terminals
+                auto &thisSymbol = symVec[productionBody[i]];
+                auto const &nextSymbol = symVec[productionBody[i + 1]];
+
+                if (thisSymbol.type != SymbolType::NON_TERM) {
                     continue;
-
-                for (int first : symVec[prod[i + 1]].firstSet) {
-                    if (first != epsilon)
-                        symVec[prod[i]].followSet.insert(first);
                 }
-                if (symVec[prod[i + 1]].nullable.value())
-                    dependencyTable[prod[i]].insert(prod[i + 1]);
+
+                for (int first : nextSymbol.firstSet) {
+                    if (first != epsilon)
+                        thisSymbol.followSet.insert(first);
+                }
+                if (nextSymbol.nullable.value())
+                    dependencyTable[thisSymbol.id].insert(nextSymbol.id);
             }
         }
     }
@@ -368,7 +379,7 @@ Grammar &Grammar::fillSymbolAttrs() {
     // Figure out dependencies
     std::fill(visit.begin(), visit.end(), 0);
     for (auto &entry : dependencyTable) {
-        resolveFollowSet(visit, symVec, dependencyTable, entry);
+        resolveFollowSet(visit, dependencyTable, entry);
     }
 
     display(DisplayType::SYMBOL_TABLE, "Calculate follow set", this);
@@ -401,6 +412,14 @@ String Grammar::dumpFirstSet(const Symbol &symbol) const {
 String Grammar::dumpFollowSet(const Symbol &symbol) const {
     return dumpSymbolSet(*this, symbol.followSet);
 }
+const Symbol &Grammar::getEndOfInputSymbol() const {
+    return symVec[endOfInput];
+}
+const Symbol &Grammar::getEpsilonSymbol() const { return symVec[epsilon]; }
+
+const Symbol &Grammar::getStartSymbol() const { return symVec[start]; }
+
+const Grammar::symvec_t &Grammar::getAllSymbols() const { return symVec; }
 
 } // namespace gram
 
@@ -442,35 +461,36 @@ void GrammarReader::parse(Grammar &g) try {
 
     while (getToken(s)) { // Has more rules
         int nid = g.putSymbol(s.c_str(), false);
-        std::vector<std::vector<int>> rule;
+        //        std::vector<std::vector<int>> rule;
 
         expectOrThrow("->");
         do {
-            std::vector<int> ruleRhs;
+            std::vector<int> productionBody;
             bool hasEpsilon = false;
             while (getToken(s, false)) {
                 // put symbol and delay checking
                 int symid = g.putSymbolUnchecked(s.c_str());
-                ruleRhs.push_back(symid);
+                productionBody.push_back(symid);
                 if (symid == g.getEpsilonSymbol().id) {
                     hasEpsilon = true;
                 }
             }
-            if (ruleRhs.empty()) {
+            if (productionBody.empty()) {
                 throw std::runtime_error(
                     "No token found in right side of the rule");
             }
-            if (hasEpsilon && ruleRhs.size() > 1) {
+            if (hasEpsilon && productionBody.size() > 1) {
                 throw std::runtime_error("Epsilon cannot be used along with "
                                          "other symbols in the same rule");
             }
             if (hasEpsilon) {
-                ruleRhs.clear(); // Epsilon rule
+                productionBody.clear(); // Epsilon rule
             }
-            rule.push_back(std::move(ruleRhs));
+            //            rule.push_back(std::move(productionBody));
+            g.addProduction(nid, std::move(productionBody));
         } while (expect('|'));
 
-        g.addRule(nid, std::move(rule));
+        //        g.addRule(nid, std::move(rule));
     }
 
     // Check redundant input (which normally means invalid syntax)
@@ -482,7 +502,7 @@ void GrammarReader::parse(Grammar &g) try {
     if (e)
         throw std::runtime_error(String("Redunant input: ") + e);
 
-    g.checkViolcations();
+    g.checkViolations();
 
 } catch (UnsolvedSymbolError &e) {
     String s = "Parsing error at line " +
@@ -620,7 +640,7 @@ auto GrammarReader::getToken(String &s, bool newlineAutoFetch) -> bool {
         return false;
 
     // Check the first character
-    // There're 4 cases: backslash quote digit(invalid) _alpha
+    // There are 4 cases: backslash quote digit(invalid) _alpha
     if (std::isdigit(*p)) {
         throw std::runtime_error(
             "The first character of a token cannot be a digit");

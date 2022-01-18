@@ -3,7 +3,6 @@
 //
 
 #include "src/util/bitset.h"
-#include "src/util/formatter.h"
 
 namespace util {
 
@@ -39,7 +38,7 @@ BitSet &BitSet::operator=(BitSet const &other) {
 
     size = other.size;
     nbits = other.nbits;
-    delete [] data;
+    delete[] data;
     data = new block_type[size];
     for (size_type i = 0; i < size; ++i) {
         data[i] = other.data[i];

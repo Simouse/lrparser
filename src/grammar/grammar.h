@@ -2,17 +2,17 @@
 #define __GRAMMAR_H__
 
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <unordered_map>
-// #include <unordered_set>
-#include <set>
+#include <unordered_set>
 #include <vector>
 
 #include "src/common.h"
 
 namespace gram {
 class Automaton;
-class Display;
+// class Display;
 } // namespace gram
 
 namespace gram {
@@ -41,6 +41,8 @@ struct Symbol {
     SymbolType type;
     int id;
     String name;
+    // Productions that can generate this symbol
+    std::vector<ProductionID> productions;
     symset_t firstSet;
     symset_t followSet;
 
@@ -50,7 +52,7 @@ struct Symbol {
 
 class UnsolvedSymbolError : public std::runtime_error {
   public:
-    UnsolvedSymbolError(const Symbol &sym)
+    explicit UnsolvedSymbolError(const Symbol &sym)
         : symInQuestion(sym), std::runtime_error("Unsolved symbol: " +
                                                  sym.name) {}
     const Symbol &symInQuestion;
@@ -58,7 +60,6 @@ class UnsolvedSymbolError : public std::runtime_error {
 
 class Grammar {
   public:
-    using prodvt_t = std::unordered_map<int, std::vector<std::vector<int>>>;
     using symvec_t = std::vector<Symbol>;
     using idtbl_t = std::unordered_map<String, int>;
 
@@ -69,47 +70,48 @@ class Grammar {
     int endOfInput = -1;
     symvec_t symVec;
     idtbl_t idTable;
-    prodvt_t prodVecTable;
-
-    ProductionTable experimentProdTbl;
-    ProductionID addProduction(int leftSymbol, std::vector<int> rightSymbols);
-
-    int putSymbolNoDuplicate(Symbol &&sym); // Detect duplicates
-    void checkViolcations();                // Throws if there're violations
+    ProductionTable productionTable;
 
     // Private constructor
-    Grammar() {
-        // Add built-in symbols
-        epsilon = putSymbol(Grammar::SignStrings::epsilon, true);
-        addAlias(epsilon, "_e");
-        addAlias(epsilon, "\\e");
-        addAlias(epsilon, "\\epsilon");
-        endOfInput = putSymbol(Grammar::SignStrings::endOfInput, true);
-    }
+    Grammar();
+
+    ProductionID addProduction(int leftSymbol, std::vector<int> rightSymbols);
+
+    // This method can detect duplicates. All symbol-putting methods should
+    // eventually call this one.
+    int putSymbolNoDuplicate(Symbol &&sym);
+
+    int putSymbol(const char *name, bool isTerm);
+
+    // This method can put symbol with delayed existence checking
+    int putSymbolUnchecked(const char *name);
+
+    // Throws if there are violations
+    void checkViolations();
 
     void setStart(const char *name);
-    int putSymbol(const char *name, bool isTerm);
-    int putSymbolUnchecked(const char *name); // Delay checking
-    void setEpsilon(int symid);
+
     void addAlias(int sid, const char *alias);
-    void addRule(int nid, std::vector<std::vector<int>> &&rule);
+
+    // Recursively resolve Follow set dependency: a dependency table must be
+    // built first.
+    void resolveFollowSet(
+        std::vector<int> &visit,
+        std::unordered_map<int, std::unordered_set<int>> &dependencyTable,
+        std::pair<const int, std::unordered_set<int>> &dependency);
+
+    // Recursively resolve First set dependency
+    void resolveFirstSet(std::vector<int> &visit, Symbol &curSymbol);
+
+    // Recursively resolve nullable dependency
+    bool resolveNullable(Symbol &sym);
 
   public:
-    [[nodiscard]] symvec_t const &getAllSymbols() const { return symVec; }
-    [[nodiscard]] prodvt_t const &getProductions() const {
-        return prodVecTable;
-    }
-    [[nodiscard]] const Symbol &getStartSymbol() const {
-        return symVec[start];
-    };
-    [[nodiscard]] const Symbol &getEpsilonSymbol() const {
-        return symVec[epsilon];
-    };
-    [[nodiscard]] const Symbol &getEndOfInputSymbol() const {
-        return symVec[endOfInput];
-    };
+    [[nodiscard]] symvec_t const &getAllSymbols() const;
+    [[nodiscard]] const Symbol &getStartSymbol() const;
+    [[nodiscard]] const Symbol &getEpsilonSymbol() const;
+    [[nodiscard]] const Symbol &getEndOfInputSymbol() const;
     [[nodiscard]] ProductionTable const &getProductionTable() const;
-
     [[nodiscard]] String dump() const;
     [[nodiscard]] String dumpNullable(const Symbol &symbol) const;
     [[nodiscard]] String dumpFirstSet(const Symbol &symbol) const;

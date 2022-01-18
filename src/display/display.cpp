@@ -1,12 +1,6 @@
-#include "display.h"
-
-#include <array>
-#include <chrono>
 #include <cstdio>
 #include <filesystem>
-#include <iostream>
 #include <stdexcept>
-#include <thread>
 #include <vector>
 
 #include "src/automata/automata.h"
@@ -14,7 +8,6 @@
 #include "src/grammar/grammar.h"
 #include "src/grammar/syntax.h"
 #include "src/util/exec.h"
-#include "src/util/formatter.h"
 
 namespace fs = std::filesystem;
 using proc = util::Process;
@@ -64,7 +57,7 @@ struct DefaultDisplay {
 
         // Split symbols into terminals and non-terminals:
         // 1. Do not add epsilon.
-        // 2. `$` must be included but it's already in `symbols` so there's
+        // 2. `$` must be included, but it's already in `symbols` so there's
         // no special care.
         std::vector<int> termVec, nontermVec;
         termVec.reserve(symbols.size());
@@ -80,8 +73,8 @@ struct DefaultDisplay {
         int allActionsWidth =
             (actionWidth + 2) * static_cast<int>(nontermVec.size());
         int allGotosWidth = (gotoWidth + 2) * static_cast<int>(termVec.size());
-        printf("%*s %*s %*s\n", indexWidth, "States", allActionsWidth, "Actions",
-               allGotosWidth, "Gotos");
+        printf("%*s %*s %*s\n", indexWidth, "States", allActionsWidth,
+               "Actions", allGotosWidth, "Gotos");
         printf("%*s %*s %*s\n", indexWidth, dashline, allActionsWidth, dashline,
                allGotosWidth, dashline);
 
@@ -94,7 +87,6 @@ struct DefaultDisplay {
             printf("|%*s ", gotoWidth, symbols[nonterm].name.c_str());
         }
         printf("\n");
-
 
         // Print table entries
         for (int i = 0; i < dfaStates.size(); ++i) {
