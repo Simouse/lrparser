@@ -1,13 +1,14 @@
-#include "syntax.h"
+#include "lr.h"
 
 #include <cassert>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
-#include "grammar.h"
+#include "gram.h"
 #include "src/automata/automata.h"
 #include "src/common.h"
+#include "src/grammar/reader.h"
 #include "src/util/bitset.h"
 #include "src/util/formatter.h"
 
@@ -205,12 +206,12 @@ void SyntaxAnalysisSLR::buildNFA() {
         //     &M);
     }
 
-    display(DisplayType::AUTOMATON, "NFA is built", &M);
+    display(DisplayType::AUTOMATON, &M, "NFA is built");
 }
 
 void SyntaxAnalysisSLR::buildDFA() {
     dfa = nfa.toDFA();
-    display(DisplayType::AUTOMATON, "DFA is built", &dfa);
+    display(DisplayType::AUTOMATON, &dfa, "DFA is built");
 }
 
 void SyntaxAnalysisSLR::buildParseTables() {
@@ -266,13 +267,13 @@ void SyntaxAnalysisSLR::buildParseTables() {
             for (ActionID action{0}; action < nActions;
                  action = ActionID{action + 1}) {
                 // Check if the action is allowed by followSet
-                ProductionID product = reduceMap.at(nfaState);
-                int reducedSymbolID = productions[product].leftSymbol;
+                ProductionID prodID = reduceMap.at(nfaState);
+                int reducedSymbolID = productions[prodID].leftSymbol;
                 auto const &symbol = symbols[reducedSymbolID];
                 if (symbol.followSet.find(action) != symbol.followSet.end()) {
                     addParseTableEntry(
                         state, action,
-                        ParseAction{ParseAction::REDUCE, reducedSymbolID});
+                        ParseAction{ParseAction::REDUCE, prodID});
                 }
             }
         }
@@ -286,11 +287,9 @@ void SyntaxAnalysisSLR::buildParseTables() {
                                ParseAction{ParseAction::SUCCESS, -1});
         }
     }
-}
 
-// StateID SyntaxAnalysisSLR::getExtEnd() const {
-//     return extendedEnd;
-// }
+    display(DisplayType::PARSE_TABLE, this, "Parse table");
+}
 
 void SyntaxAnalysisSLR::addParseTableEntry(StateID state, ActionID act,
                                            ParseAction pact) {
@@ -306,13 +305,12 @@ SyntaxAnalysisLR::ParseTable const &SyntaxAnalysisSLR::getActionTable() const {
     return actionTable;
 }
 
-gram::Grammar const &SyntaxAnalysisSLR::getGrammer() const { return gram; }
+gram::Grammar const &SyntaxAnalysisSLR::getGrammar() const { return gram; }
 
 gram::Automaton const &SyntaxAnalysisSLR::getDFA() const { return dfa; }
 
 String SyntaxAnalysisSLR::dumpParseTableEntry(StateID state,
                                               ActionID action) const {
-
     auto const &items = actionTable.at(state).at(action);
     String s;
     bool commaFlag = false;
@@ -334,7 +332,7 @@ String SyntaxAnalysisSLR::dumpParseTableEntry(StateID state,
             break;
         case Type::REDUCE:
             s += 'r';
-            s += std::to_string(item.action);
+            s += std::to_string(item.productionID);
             break;
         default:
             throw std::runtime_error(
@@ -342,6 +340,141 @@ String SyntaxAnalysisSLR::dumpParseTableEntry(StateID state,
         }
     }
     return s;
+}
+
+// Test given stream with parsed results
+bool SyntaxAnalysisSLR::test(std::istream &stream) try {
+    GrammarReader reader(stream);
+    reader.setGetTokenVerbose(true);
+
+    // auto const &symbols = gram.getAllSymbols();
+    bool endOfInput = false;
+    int nextSymbolID = -1;
+    String s;
+
+    vector<StateID> stateStack;
+    vector<int> symbolStack;
+    symbolStack.reserve(16);
+    stateStack.reserve(16);
+    stateStack.push_back(dfa.getStartState());
+
+    SymbolStackInfo symbolStackInfo{&gram, &symbolStack};
+
+    display(DisplayType::LR_STATE_STACK, &stateStack, "State stack");
+    display(DisplayType::LR_SYMBOL_STACK, &symbolStackInfo, "Symbol stack");
+    display(DisplayType::LOG, DisplayLogLevel::INFO,
+            "Please input symbols for test (Use '$' to end the input):");
+
+    while (true) {
+        // Only shift action will set nextSymbolID to -1.
+        // So if nextSymbolID >= 0, we already have a symbol to use.
+        if (!endOfInput && nextSymbolID < 0) {
+            if (!reader.getToken(s)) {
+                throw std::runtime_error("Test failed. Run out of input while "
+                                         "state is still not acceptable");
+            }
+            auto const &symbol = gram.findSymbol(s);
+            if (symbol.type == NON_TERM ||
+                symbol.id == gram.getEpsilonSymbol().id) {
+                throw std::runtime_error(
+                    "Only non-epsilon terminals can be used as inputs");
+            }
+            if (symbol.id == gram.getEndOfInputSymbol().id) {
+                endOfInput = true;
+            }
+            nextSymbolID = symbol.id;
+        }
+
+        // Look up in the table
+        if (stateStack.empty())
+            throw std::runtime_error("Reduce state stack is empty");
+        auto const &tableEntry = actionTable[stateStack.back()][nextSymbolID];
+
+        auto choices = tableEntry.size();
+        if (choices <= 0)
+            throw ActionNotAcceptedError();
+        if (choices > 1) {
+            throw std::runtime_error(
+                "Multiple viable choices. Cannot decide which action "
+                "to take");
+        }
+
+        // Take action
+        auto const &decision = tableEntry.front();
+        switch (decision.type) {
+        case ParseAction::GOTO:
+            throw std::logic_error(
+                "Goto item cannot appear without reduce item");
+            break;
+        case ParseAction::SHIFT:
+            stateStack.push_back(decision.dest);
+            symbolStack.push_back(nextSymbolID);
+            nextSymbolID = -1;
+            break;
+        case ParseAction::REDUCE:
+            reduce(symbolStack, stateStack, decision.productionID);
+            applyGoto(stateStack, symbolStack.back());
+            break;
+        case ParseAction::SUCCESS:
+            display(DisplayType::LOG, DisplayLogLevel::INFO, "Success");
+            return true;
+        }
+
+        display(DisplayType::LR_STATE_STACK, &stateStack, "State stack");
+        display(DisplayType::LR_SYMBOL_STACK, &symbolStackInfo, "Symbol stack");
+    }
+    throw UnreachableCodeError();
+} catch (std::exception const &e) {
+    display(DisplayType::LOG, DisplayLogLevel::ERR, e.what());
+    return false;
+}
+
+// May throw errors
+void SyntaxAnalysisSLR::reduce(vector<int> &symbolStack,
+                               vector<StateID> &stateStack,
+                               ProductionID prodID) const {
+    auto const &prod = gram.getProductionTable()[prodID];
+    auto bodySize = prod.rightSymbols.size();
+    if (symbolStack.size() < bodySize) {
+        throw std::runtime_error(
+            "Stack's symbols are not enough for reduction");
+    }
+    if (stateStack.size() < bodySize) {
+        throw std::runtime_error("Stack's states are not enough for reduction");
+    }
+    auto symbolStackOffset = symbolStack.size() - prod.rightSymbols.size();
+    for (size_t i = 0; i < bodySize; ++i) {
+        if (symbolStack[symbolStackOffset + i] != prod.rightSymbols[i]) {
+            throw std::runtime_error(
+                "Stack's symbols cannot fit production body for reduction");
+        }
+    }
+    // Pop those states by production
+    for (size_t i = 0; i < bodySize; ++i) {
+        symbolStack.pop_back();
+        stateStack.pop_back();
+    }
+    symbolStack.push_back(prod.leftSymbol);
+    String info = "Apply reduction rule: " + std::to_string(prodID);
+    display(DisplayType::LOG, DisplayLogLevel::VERBOSE, info.c_str());
+}
+
+void SyntaxAnalysisSLR::applyGoto(vector<StateID> &stateStack,
+                                  int newSymbolID) const {
+    auto const &tableEntry = actionTable[stateStack.back()][newSymbolID];
+    if (tableEntry.empty()) {
+        throw std::runtime_error("Goto table item is empty");
+    }
+    if (tableEntry.size() > 1) {
+        throw std::runtime_error(
+            "Multiple viable choices. Cannot decide which action to take");
+    }
+    auto const &decision = tableEntry.front();
+    if (decision.type != ParseAction::GOTO) {
+        throw std::runtime_error("Current state doesn't have a `goto` item but "
+                                 "parse action is `goto`");
+    }
+    stateStack.push_back(decision.dest);
 }
 
 } // namespace gram

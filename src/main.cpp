@@ -8,23 +8,11 @@
 
 #include "src/automata/automata.h"
 #include "src/common.h"
-#include "src/display/display.h"
-#include "src/grammar/grammar.h"
-#include "src/grammar/syntax.h"
-#include "src/util/bitset.h"
+#include "src/grammar/gram.h"
+#include "src/grammar/lr.h"
 #include "src/util/exec.h"
 
 using namespace gram;
-// using ft = FileOutputDisplay::FileType;
-
-void grammarToNFATest() {
-    // ConsoleDisplay cd;
-    // FileOutputDisplay fd(".", 100, ft::SVG);
-    // Grammar g = Grammar::fromFile("grammar.txt", cd);
-
-    // SyntaxAnalysisLR0 lr0(g);
-    // lr0.buildNFA(fd);
-}
 
 void automataTest() {
     Automaton m;
@@ -40,24 +28,15 @@ void automataTest() {
 }
 
 void NFA2DFATest() {
-    // VoidDisplay d;
-    // FileOutputDisplay fd(".", 0, ft::SVG);
-    // ConsoleDisplay cd;
     Grammar g = Grammar::fromFile("grammar.txt");
     SyntaxAnalysisSLR slr(g);
     slr.buildNFA();
     slr.buildDFA();
     slr.buildParseTables();
-    display(DisplayType::PARSE_TABLE, "Parse table", &slr);
+    slr.test(std::cin);
 }
 
-int main()
-// try
-{
+int main() {
     util::Process::prevent_zombie();
-    // grammarToNFATest();
     NFA2DFATest();
 }
-// catch (std::exception &e) {
-//     std::cerr << "[Error] " << e.what() << std::endl;
-// }

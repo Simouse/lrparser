@@ -1,5 +1,5 @@
-#ifndef __AUTOMATA_H__
-#define __AUTOMATA_H__
+#ifndef LRPARSER_AUTOMATA_H
+#define LRPARSER_AUTOMATA_H
 
 #include <map>
 #include <optional>
@@ -25,6 +25,20 @@ namespace gram {
 
 enum ActionID : int;
 enum StateID : int;
+
+// This error is thrown when current state is illegal. This may
+// be caused by not setting start state.
+class IllegalAutomatonStateError : public std::runtime_error {
+  public:
+    IllegalAutomatonStateError()
+        : std::runtime_error("Automaton state is illegal") {}
+};
+
+class ActionNotAcceptedError : public std::runtime_error {
+  public:
+    ActionNotAcceptedError()
+        : std::runtime_error("Action is not accepted by automaton") {}
+};
 
 // Transition is not used as a storage type, but when constructing
 // DFA, this structure is temporarily helpful.
@@ -81,10 +95,6 @@ class Automaton {
     void markFinalState(StateID state);
     void setState(StateID state);
 
-    // Used in LR syntax analysis. Set the action the reduce can produce.
-    // TODO: rm setReduce() from automaton
-    // void setReduce(StateID state, ActionID action);
-
     // Used in DFA generation
     void toEpsClosure(DFAState &S) const;
     [[nodiscard]] auto transit(DFAState const &S, ActionID action) const
@@ -92,19 +102,25 @@ class Automaton {
     Automaton toDFA();
 
     [[nodiscard]] auto getAllStates() const -> std::vector<State> const &;
-    [[nodiscard]] int getState() const;
-    [[nodiscard]] int getStartState() const;
+    [[nodiscard]] StateID getState() const;
+    [[nodiscard]] StateID getStartState() const;
     [[nodiscard]] auto getAllActions() const -> std::vector<String> const &;
-    [[nodiscard]] auto getActionReceivers() const
-        -> std::vector<DFAState> const &;
-    [[nodiscard]] auto getStatesBitmap() const
-        -> std::vector<DFAState> const &;
+    //    [[nodiscard]] auto getActionReceivers() const
+    //        -> std::vector<DFAState> const &;
+    [[nodiscard]] auto getStatesBitmap() const -> std::vector<DFAState> const &;
     [[nodiscard]] auto getFormerStates() const -> std::vector<State> const &;
     [[nodiscard]] bool isEpsilonAction(ActionID action) const;
     [[nodiscard]] bool isDFA() const;
 
-    // Dump in graphviz format
-    [[nodiscard]] String dump() const;
+    // Dump in graphviz format.
+    // `posMap` is used to switch state indexes so the result can be easier to
+    // observe. It stores: {realState => stateAlias(label)}
+    [[nodiscard]] String dump(const StateID *posMap = nullptr) const;
+
+    // Try to accept a new action. Returns false when action is not accepted.
+    // The action shouldn't be an end-of-input. Compared to unconditional
+    // setState(), move() simulates step-by-step moving.
+    void move(ActionID action);
 
   private:
     // Whenever a state has multiple transitions with the same action,

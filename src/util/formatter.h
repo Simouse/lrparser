@@ -1,5 +1,5 @@
-#ifndef __FORMATTER_H__
-#define __FORMATTER_H__
+#ifndef LRPARSER_FORMATTER_H
+#define LRPARSER_FORMATTER_H
 
 #include <cstdarg>
 #include <cstdio>
@@ -14,7 +14,7 @@ class Formatter {
     char *buf;
     int maxSize = INIT_SIZE;
 
-   public:
+  public:
     Formatter() : buf(mbuf) { mbuf[0] = '\0'; }
     Formatter(Formatter const &f) = delete;
 
@@ -37,8 +37,7 @@ class Formatter {
         return {buf, static_cast<size_t>(sz)};
     }
 
-    template <class... Ts>
-    String format(const char *fmt, Ts const &...args) {
+    template <class... Ts> String format(const char *fmt, Ts const &...args) {
         return formatView(fmt, args...);
     }
 
@@ -49,14 +48,14 @@ class Formatter {
         String s;
         for (char ch : sv) {
             switch (ch) {
-                case '\'':
-                case '\"':
-                case '\\':
-                    s += '\\';
-                    s += ch;
-                    break;
-                default:
-                    s += ch;
+            case '\'':
+            case '\"':
+            case '\\':
+                s += '\\';
+                s += ch;
+                break;
+            default:
+                s += ch;
             }
         }
         return s;
@@ -65,7 +64,7 @@ class Formatter {
     // Concat executable path and thoses arguments used by command line.
     // The 0th argument is ignored, and there should be a trailing NULL pointer.
     // NULL as an argument is not checked.
-    String concatArgs(const char *path, char **ptr) { 
+    String concatArgs(const char *path, char **ptr) {
         String s = path;
         bool firstArgSkipped = false;
         for (; *ptr; ++ptr) {
@@ -74,14 +73,15 @@ class Formatter {
                 s += *ptr;
             }
             firstArgSkipped = true;
-        } 
+        }
         return s;
     }
 
     ~Formatter() {
-        if (buf != mbuf) delete[] buf;
+        if (buf != mbuf)
+            delete[] buf;
     }
 };
-}  // namespace util
+} // namespace util
 
 #endif

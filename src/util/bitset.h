@@ -2,8 +2,8 @@
 // Created by Simon Yu on 2022/1/14.
 //
 
-#ifndef __BITSET_H__
-#define __BITSET_H__
+#ifndef LRPARSER_BITSET_H
+#define LRPARSER_BITSET_H
 
 #include "src/common.h"
 #include <cstddef>
@@ -13,10 +13,9 @@
 
 namespace util {
 
-// A bit set which can only be used to set items, check, iterate and clear.
-// Size can be given in run time but once size is given, it's fixed.
-// The index is started from 0.
-// Capacity is rounded to multiple of 64.
+// A bit set whose size can be given in runtime but once size
+// is given, it's fixed. The index is started from 0, and capacity
+// is rounded to multiple of `block_bits` bits.
 class BitSet {
   public:
     using block_type = unsigned int;
@@ -89,4 +88,4 @@ template <> struct hash<util::BitSet> {
 };
 } // namespace std
 
-#endif // __BITSET_H__
+#endif // LRPARSER_BITSET_H

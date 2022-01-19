@@ -1,5 +1,5 @@
-#ifndef __EXEC_H__
-#define __EXEC_H__
+#ifndef LRPARSER_EXEC_H
+#define LRPARSER_EXEC_H
 
 // Windows
 #if defined(_WIN64) || defined(_WIN32) || defined(__CYGWIN__)

@@ -1,8 +1,10 @@
-#ifndef __ANALYSIS_H__
-#define __ANALYSIS_H__
+#ifndef LRPARSER_ANALYSIS_H
+#define LRPARSER_ANALYSIS_H
 
 #include "src/automata/automata.h"
-#include "src/grammar/grammar.h"
+#include "src/grammar/gram.h"
+#include <istream>
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
@@ -11,6 +13,14 @@ class Grammar;
 } // namespace gram
 
 namespace gram {
+
+struct SymbolStackInfo {
+    Grammar const *grammar;
+    std::vector<int> const *symbolStack;
+};
+
+// There should be a SyntaxAnalysis base class, but since
+// I don't use that, it's unnecessary.
 class SyntaxAnalysisLR {
   public:
     struct ParseAction {
@@ -18,36 +28,42 @@ class SyntaxAnalysisLR {
         Type type;
         union {
             StateID dest;
-            ActionID action;
-            int untyped;
+            ProductionID productionID;
+            int untyped_data;
         };
-        ParseAction(Type t, int data) : type(t), untyped(data) {}
+
+        static_assert(sizeof(dest) == sizeof(productionID) &&
+                      sizeof(dest) == sizeof(untyped_data));
+
+        ParseAction(Type t, int data) : type(t), untyped_data(data) {}
 
         // Only for putting action into a set
         bool operator<(ParseAction const &other) const {
             if (type != other.type)
                 return type < other.type;
-            return untyped < other.untyped;
+            return untyped_data < other.untyped_data;
         }
     };
 
-    // Store actionTable and gotoTable in the same place
-    // using ParseTable = std::unordered_map<
-    //     StateID, std::unordered_map<ActionID, std::vector<ParseAction>>>;
+    // Store actionTable and gotoTable in the same place.
+    // Unfortunately, C++ doesn't have dynamic high-dimensional arrays, so
+    // we have to use std::vector instead.
     using ParseTable = std::vector<std::vector<std::vector<ParseAction>>>;
 
-    SyntaxAnalysisLR(const gram::Grammar &g) : gram(g) {}
+    explicit SyntaxAnalysisLR(const gram::Grammar &g) : gram(g) {}
     // For those analysis processes which don't need automatons,
     // those methods should throw exceptions.
     virtual void buildNFA() = 0;
     virtual void buildDFA() = 0;
     virtual void buildParseTables() = 0;
     [[nodiscard]] virtual ParseTable const &getActionTable() const = 0;
-    [[nodiscard]] virtual Grammar const &getGrammer() const = 0;
+    [[nodiscard]] virtual Grammar const &getGrammar() const = 0;
     [[nodiscard]] virtual Automaton const &getDFA() const = 0;
+    // `posMap` is used to switch state indexes for better observation.
     [[nodiscard]] virtual String dumpParseTableEntry(StateID state,
                                                      ActionID action) const = 0;
-    // [[nodiscard]] virtual StateID getExtEnd() const = 0;
+    // Test given stream with parsed results
+    virtual bool test(std::istream &stream) = 0;
 
   protected:
     const gram::Grammar &gram;
@@ -55,16 +71,17 @@ class SyntaxAnalysisLR {
 
 class SyntaxAnalysisSLR : public SyntaxAnalysisLR {
   public:
-    SyntaxAnalysisSLR(const gram::Grammar &g) : SyntaxAnalysisLR(g) {}
+    explicit SyntaxAnalysisSLR(const gram::Grammar &g) : SyntaxAnalysisLR(g) {}
     void buildNFA() override;
     void buildDFA() override;
     void buildParseTables() override;
     [[nodiscard]] ParseTable const &getActionTable() const override;
-    [[nodiscard]] Grammar const &getGrammer() const override;
+    [[nodiscard]] Grammar const &getGrammar() const override;
     [[nodiscard]] Automaton const &getDFA() const override;
     [[nodiscard]] String dumpParseTableEntry(StateID state,
                                              ActionID action) const override;
-    // [[nodiscard]] StateID getExtEnd() const override;
+    // Test given stream with parsed results
+    bool test(std::istream &stream) override;
 
   private:
     StateID extendedEnd{-1};
@@ -74,6 +91,10 @@ class SyntaxAnalysisSLR : public SyntaxAnalysisLR {
     // This map stores states that can reduce by certain productions
     std::unordered_map<StateID, ProductionID> reduceMap;
     void addParseTableEntry(StateID state, ActionID act, ParseAction pact);
+    // Returns id of the symbol it can produce, or -1 if it's not possible
+    void reduce(std::vector<int> &symbolStack, std::vector<StateID> &stateStack,
+                ProductionID prodID) const;
+    void applyGoto(std::vector<StateID> &stateStack, int newSymbolID) const;
 };
 
 } // namespace gram

@@ -1,3 +1,4 @@
+#include <array>
 #include <cstdio>
 #include <filesystem>
 #include <stdexcept>
@@ -5,30 +6,41 @@
 
 #include "src/automata/automata.h"
 #include "src/common.h"
-#include "src/grammar/grammar.h"
-#include "src/grammar/syntax.h"
+#include "src/grammar/gram.h"
+#include "src/grammar/lr.h"
 #include "src/util/exec.h"
 
 namespace fs = std::filesystem;
+using namespace gram;
 using proc = util::Process;
 
 struct DefaultDisplay {
-    void operator()(DisplayType type, const char *description, void *data) {
+    void operator()(DisplayType type, DisplayData data,
+                    const char *description) {
         switch (type) {
         case DisplayType::AUTOMATON:
-            handleAutomaton(description,
-                            static_cast<gram::Automaton const *>(data));
+            handleAutomaton(description, (Automaton const *)data.pointer);
             break;
         case DisplayType::SYMBOL_TABLE:
-            handleSymbolTable(description,
-                              static_cast<gram::Grammar const *>(data));
+            handleSymbolTable(description, (Grammar const *)data.pointer);
             break;
         case DisplayType::LOG:
-            handleLog(description);
+            handleLog(description, (DisplayLogLevel)data.logLevel);
             break;
         case DisplayType::PARSE_TABLE:
             handleParseTable(description,
-                             static_cast<gram::SyntaxAnalysisLR const *>(data));
+                             (SyntaxAnalysisLR const *)data.pointer);
+            break;
+        case DisplayType::GRAMMAR_RULES:
+            handleGrammarRules(description, (Grammar const *)data.pointer);
+            break;
+        case DisplayType::LR_STATE_STACK:
+            handleStateStack(description,
+                             (std::vector<StateID> const *)data.pointer);
+            break;
+        case DisplayType::LR_SYMBOL_STACK:
+            handleSymbolStack(description,
+                              (SymbolStackInfo const *)data.pointer);
             break;
         default:
             fprintf(stderr, "[WARN] Unknown display type. Check your code.\n");
@@ -36,8 +48,46 @@ struct DefaultDisplay {
         }
     }
 
+    DefaultDisplay() {
+        logs[DisplayLogLevel::INFO] = "INFO";
+        logs[DisplayLogLevel::VERBOSE] = "VERBOSE";
+        logs[DisplayLogLevel::DEBUG] = "DEBUG";
+        logs[DisplayLogLevel::ERR] = "ERROR";
+    }
+
   private:
-    void handleLog(const char *description) { printf("> %s\n", description); }
+    std::array<const char *, DisplayLogLevel::LOG_LEVELS_COUNT> logs = {0};
+
+    void handleLog(const char *description, DisplayLogLevel level) {
+        if (level == DisplayLogLevel::INFO)
+            printf("> %s\n", description);
+        else
+            printf("[%-7s] %s\n", logs[level], description);
+    }
+
+    void handleSymbolStack(const char *description,
+                           SymbolStackInfo const *info) {
+        printf("> %-14s: Bottom| ", description);
+        size_t sz = info->symbolStack->size();
+        auto const &symbols = info->grammar->getAllSymbols();
+        for (size_t i = 0; i < sz; ++i) {
+            printf(i == 0 ? "%s" : ",%s",
+                   symbols[info->symbolStack->operator[](i)].name.c_str());
+        }
+        printf("\n");
+        fflush(stdout);
+    }
+
+    void handleStateStack(const char *description,
+                          std::vector<gram::StateID> const *stack) {
+        printf("> %-14s: Bottom| ", description);
+        size_t sz = stack->size();
+        for (size_t i = 0; i < sz; ++i) {
+            printf(i == 0 ? "%d" : ",%d", stack->operator[](i));
+        }
+        printf("\n");
+        fflush(stdout);
+    }
 
     void handleParseTable(const char *description,
                           gram::SyntaxAnalysisLR const *lr) {
@@ -47,7 +97,7 @@ struct DefaultDisplay {
         constexpr const char *dashline = "--------";
 
         auto const &actionTable = lr->getActionTable();
-        auto const &grammar = lr->getGrammer();
+        auto const &grammar = lr->getGrammar();
         auto const &symbols = grammar.getAllSymbols();
         auto const &dfa = lr->getDFA();
         auto const &dfaStates = dfa.getAllStates();
@@ -89,7 +139,7 @@ struct DefaultDisplay {
         printf("\n");
 
         // Print table entries
-        for (int i = 0; i < dfaStates.size(); ++i) {
+        for (int i = 0; static_cast<size_t>(i) < dfaStates.size(); ++i) {
             printf("%*d ", indexWidth, i);
             for (int terminal : termVec) {
                 String s = lr->dumpParseTableEntry(gram::StateID{i},
@@ -155,7 +205,7 @@ struct DefaultDisplay {
             String followSet = g.dumpFollowSet(symbol);
             int namew = (epsilon.id == symbol.id) ? nameWidth + 1 : nameWidth;
             int firstw = (firstSet.find(gram::Grammar::SignStrings::epsilon) !=
-                          firstSet.npos)
+                          String::npos)
                              ? firstWidth + 1
                              : firstWidth;
             printf(lineFmt, namew, symbol.name.c_str(), nullable.c_str(),
@@ -163,86 +213,13 @@ struct DefaultDisplay {
         }
         fflush(stdout);
     }
+
+    void handleGrammarRules(const char *description,
+                            gram::Grammar const *grammar) {
+        String s = grammar->dump();
+        printf("> %s\n%s", description, s.c_str());
+        fflush(stdout);
+    }
 };
 
 DisplayCallable display = DefaultDisplay{};
-
-namespace gram {
-
-/*
-
-void FileOutputDisplay::show(const gram::Automaton &m, StringView description) {
-    fs::path outFile = outDir;
-    String automatonType = m.isDFA() ? "dfa" : "nfa";
-    outFile /= (automatonType + fileSuffix);
-    String outFileName = outFile.string();
-
-    const char *args[] = {
-        "dot", "-T", &fileSuffix[1], "-o", outFileName.c_str(), nullptr};
-    proc::Stream stream = proc::execw("dot", const_cast<char **>(args));
-
-    String s = m.dump();  // s should already have a '\n'
-    proc::writeStream(stream, "%s", s.c_str());
-    proc::closeStream(stream);
-
-    std::cout << "> " << description << std::endl;
-    std::this_thread::sleep_for(std::chrono::milliseconds(delay));
-}
-
-FileOutputDisplay::FileOutputDisplay(const char *dir, long long int delayInMs,
-                                     FileOutputDisplay::FileType ft)
-    : outDir(dir), delay(delayInMs) {
-    switch (ft) {
-        case FileType::SVG:
-            fileSuffix = ".svg";
-            break;
-        case FileType::PDF:
-            fileSuffix = ".pdf";
-            break;
-        case FileType::PNG:
-            fileSuffix = ".png";
-            break;
-        default:
-            fileSuffix = nullptr;
-    }
-}
-
-void ConsoleDisplay::show(const gram::Automaton &m, StringView description) {
-    std::cout << "> " << description << '\n';
-    std::cout << m.dump() << std::flush;
-}
-
-void ConsoleDisplay::showSymbols(const gram::Grammar &g,
-                                 StringView description) {
-    constexpr const char *lineFmt = "%*s %10s %*s %16s\n";
-    constexpr const int nameWidth = 10;
-    constexpr const int firstWidth = 20;
-
-    std::cout << "> " << description << '\n';
-    const char *dashline = "--------";
-    std::printf(lineFmt, nameWidth, "Name", "Nullable", firstWidth, "First{}",
-                "Follow{}");
-    std::printf(lineFmt, nameWidth, dashline, dashline, firstWidth, dashline,
-                dashline);
-
-    auto const &epsilon = g.getEpsilonSymbol();
-    for (auto &symbol : g.getAllSymbols()) {
-        // Do not output terminal information
-        if (symbol.type == SymbolType::TERM) {
-            continue;
-        }
-        String nullable = g.dumpNullable(symbol);
-        String firstSet = g.dumpFirstSet(symbol);
-        String followSet = g.dumpFollowSet(symbol);
-        int namew = (epsilon.id == symbol.id) ? nameWidth + 1 : nameWidth;
-        int firstw = (firstSet.find(Grammar::SignStrings::epsilon) !=
-firstSet.npos) ? firstWidth + 1 : firstWidth; std::printf(lineFmt, namew,
-symbol.name.c_str(), nullable.c_str(), firstw, firstSet.c_str(),
-followSet.c_str());
-    }
-    std::cout << std::flush;
-}
-
-*/
-
-} // namespace gram

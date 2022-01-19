@@ -1,5 +1,5 @@
-#ifndef __GRAMMAR_H__
-#define __GRAMMAR_H__
+#ifndef LRPARSER_GRAM_H
+#define LRPARSER_GRAM_H
 
 #include <optional>
 #include <set>
@@ -58,6 +58,14 @@ class UnsolvedSymbolError : public std::runtime_error {
     const Symbol &symInQuestion;
 };
 
+// This error is thrown if we try to look up a symbol which does not exist after
+// grammar is built.
+class NoSuchSymbolError : public std::runtime_error {
+  public:
+    explicit NoSuchSymbolError(String const &name)
+        : std::runtime_error("No such symbol: " + name) {}
+};
+
 class Grammar {
   public:
     using symvec_t = std::vector<Symbol>;
@@ -72,7 +80,9 @@ class Grammar {
     idtbl_t idTable;
     ProductionTable productionTable;
 
-    // Private constructor
+    // Private constructor.
+    // Grammar class is mostly private when building grammar, because we
+    // only want GrammarReader to access its methods.
     Grammar();
 
     ProductionID addProduction(int leftSymbol, std::vector<int> rightSymbols);
@@ -113,9 +123,14 @@ class Grammar {
     [[nodiscard]] const Symbol &getEndOfInputSymbol() const;
     [[nodiscard]] ProductionTable const &getProductionTable() const;
     [[nodiscard]] String dump() const;
-    [[nodiscard]] String dumpNullable(const Symbol &symbol) const;
+    [[nodiscard]] static String dumpNullable(const Symbol &symbol);
     [[nodiscard]] String dumpFirstSet(const Symbol &symbol) const;
     [[nodiscard]] String dumpFollowSet(const Symbol &symbol) const;
+
+    // std::unordered_map doesn't support heterogeneous lookup, so when
+    // we pass a const char *, the string is copied. So we just use a string
+    // const & to avoid copy when we already have a string...
+    [[nodiscard]] Symbol const &findSymbol(String const &s) const;
 
     // Fill symbol attributes: nullable, firstSet, followSet
     Grammar &fillSymbolAttrs();

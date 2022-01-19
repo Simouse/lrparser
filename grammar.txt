@@ -9,9 +9,14 @@
 
 # But "//" and "/**/" are not supported
 
-! Escape sequences are not supported, which means you
-! cannot use "'" and '"' together. To use one of them,
-! you need to use the other as the quote sign.
+# Escape sequences are not supported, which means you
+# cannot use "'" and '"' together. To use one of them,
+# you need to use the other as the quote sign.
+
+# \epsilon \e _e are reserved as aliases for epsilon. You may need to use
+# it in your productions.
+
+# "$" is reserved for end-of-input, so do not use it in your productions.
 
 # TERM :{ID, PLUS, TIMES, "(", ')', '+', '*'}
 
@@ -25,8 +30,8 @@ START: exp
 # exp1  -> '+' term exp1 | \epsilon     # Yet another comment
 # term  -> fac term1
 # term1 -> '*' fac term1 | \epsilon
-# fac   -> ID            | '(' exp ')'
+# fac   -> '(' exp ')'   | ID
 
 exp   -> exp '+' term  | term
 term  -> term '*' fac  | fac
-fac   -> "(" exp ')'   | ID
+fac   -> ID            | "(" exp ')'

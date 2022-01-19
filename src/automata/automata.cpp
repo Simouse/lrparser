@@ -1,14 +1,11 @@
 #include "automata.h"
 
 #include "src/common.h"
-#include "src/display/display.h"
-#include "src/grammar/grammar.h"
+#include "src/grammar/gram.h"
 #include "src/util/bitset.h"
 #include "src/util/formatter.h"
 #include <algorithm>
-#include <array>
 #include <cassert>
-#include <iostream>
 #include <optional>
 #include <stack>
 #include <unordered_map>
@@ -20,7 +17,7 @@ using std::unordered_map;
 namespace gram {
 
 // Do not add any initial states so when we copy grammar symbols into
-// the automaton, the order is preserved: a symbol has a according
+// the automaton, the order is preserved: a symbol has an according
 // automaton action.
 Automaton::Automaton() = default;
 
@@ -62,13 +59,13 @@ std::vector<State> const &Automaton::getAllStates() const { return states; }
 
 std::vector<String> const &Automaton::getAllActions() const { return actions; }
 
-int Automaton::getState() const { return currentState; }
+StateID Automaton::getState() const { return currentState; }
 
-int Automaton::getStartState() const { return startState; }
+StateID Automaton::getStartState() const { return startState; }
 
-auto Automaton::getActionReceivers() const -> std::vector<DFAState> const & {
-    return actionReceivers;
-}
+// auto Automaton::getActionReceivers() const -> std::vector<DFAState> const & {
+//     return actionReceivers;
+// }
 
 auto Automaton::getStatesBitmap() const -> std::vector<DFAState> const & {
     return statesBitmap;
@@ -102,7 +99,7 @@ ActionID Automaton::addAction(StringView desc) {
     return action;
 }
 
-auto Automaton::dump() const -> String {
+auto Automaton::dump(const StateID *posMap) const -> String {
     String s;
     util::Formatter f;
 
@@ -121,23 +118,25 @@ auto Automaton::dump() const -> String {
         s += "  start [label=Start shape=plain]\n";
     }
     for (auto &state : states) {
+        StateID mappedStateID = posMap ? posMap[state.id] : state.id;
         String label = f.reverseEscaped(state.label);
-        s += f.formatView("  %d [label=\"%d: %s\"", state.id, state.id,
-                          label.c_str());
+        s += f.formatView("  %d [label=\"%d: %s\"", mappedStateID,
+                          mappedStateID, label.c_str());
         if (state.acceptable) {
             s += " peripheries=2";
         }
-        if (state.id == getState()) {
+        if (mappedStateID == getState()) {
             s += " fillcolor=yellow style=filled";
         }
         s += "]\n";
-        if (state.id == getStartState()) {
-            s += f.formatView("  start -> %d\n", state.id);
+        if (mappedStateID == getStartState()) {
+            s += f.formatView("  start -> %d\n", mappedStateID);
         }
         for (auto &tran : state.trans) {
+            StateID mappedDestID = posMap ? posMap[tran.second] : tran.second;
             label = f.reverseEscaped(actions[tran.first]);
-            s += f.formatView("  %d -> %d [label=\"%s\"", state.id, tran.second,
-                              label.c_str());
+            s += f.formatView("  %d -> %d [label=\"%s\"", mappedStateID,
+                              mappedDestID, label.c_str());
             if (isEpsilonAction(tran.first)) {
                 s += " constraint=false";
             }
@@ -243,7 +242,7 @@ Automaton Automaton::toDFA() {
         auto stateIter = stack.top();
         stack.pop();
 
-        for (ActionID action{0}; action < actions.size();
+        for (ActionID action{0}; static_cast<size_t>(action) < actions.size();
              action = ActionID{action + 1}) {
 
             if (action == epsilonAction) {
@@ -327,16 +326,16 @@ Automaton Automaton::toDFA() {
         dfa.addTransition(link.first, link.second.dest, link.second.action);
     }
 
-    // Copy former NFA states to DFA so we can trace original
+    // Copy former NFA states to DFA, so we can trace original
     // states.
-    std::vector<DFAState> formerStates;
-    formerStates.reserve(dfa.states.size());
+    std::vector<DFAState> nfaStatesBitmap;
+    nfaStatesBitmap.reserve(dfa.states.size());
     for (auto &iter : iterVec) {
-        formerStates.push_back(
+        nfaStatesBitmap.push_back(
             std::move(const_cast<util::BitSet &>(iter->first)));
     }
-    dfa.statesBitmap = std::move(formerStates); // Move bitmap
-    dfa.formerStates = this->states;            // Copy vec
+    dfa.statesBitmap = std::move(nfaStatesBitmap); // Move bitmap
+    dfa.formerStates = this->states;               // Copy vec
 
     // Can I use a moved vector again?
     // https://stackoverflow.com/a/9168917/13785815
@@ -344,6 +343,19 @@ Automaton Automaton::toDFA() {
     dfa.actionReceivers = std::move(actionReceivers);
 
     return dfa;
+}
+
+void Automaton::move(ActionID action) {
+    if (currentState < 0)
+        currentState = startState;
+    if (currentState < 0)
+        throw IllegalAutomatonStateError();
+    auto const &trans = states[currentState].trans;
+    auto it = trans.find(action);
+    if (it == trans.end())
+        throw ActionNotAcceptedError();
+    // Action is okay
+    setState(it->second);
 }
 
 } // namespace gram
