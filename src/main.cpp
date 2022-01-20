@@ -6,11 +6,11 @@
 #include <thread>
 #include <vector>
 
-#include "src/automata/automata.h"
+#include "src/automata/Automaton.h"
 #include "src/common.h"
-#include "src/grammar/gram.h"
+#include "src/grammar/Grammar.h"
 #include "src/grammar/lr.h"
-#include "src/util/exec.h"
+#include "src/util/Process.h"
 
 using namespace gram;
 

@@ -4,11 +4,11 @@
 #include <stdexcept>
 #include <vector>
 
-#include "src/automata/automata.h"
+#include "src/automata/Automaton.h"
 #include "src/common.h"
-#include "src/grammar/gram.h"
+#include "src/grammar/Grammar.h"
 #include "src/grammar/lr.h"
-#include "src/util/exec.h"
+#include "src/util/Process.h"
 
 namespace fs = std::filesystem;
 using namespace gram;
@@ -75,7 +75,7 @@ struct DefaultDisplay {
                    symbols[info->symbolStack->operator[](i)].name.c_str());
         }
         printf("\n");
-        fflush(stdout);
+        // fflush(stdout);
     }
 
     void handleStateStack(const char *description,
@@ -86,7 +86,7 @@ struct DefaultDisplay {
             printf(i == 0 ? "%d" : ",%d", stack->operator[](i));
         }
         printf("\n");
-        fflush(stdout);
+        // fflush(stdout);
     }
 
     void handleParseTable(const char *description,
@@ -154,7 +154,7 @@ struct DefaultDisplay {
             printf("\n");
         }
 
-        fflush(stdout);
+        // fflush(stdout);
     }
 
     void handleAutomaton(const char *description,
@@ -175,8 +175,7 @@ struct DefaultDisplay {
         proc::closeStream(stream);
 
         printf("> %s\n", description);
-        fflush(stdout);
-        // std::this_thread::sleep_for(std::chrono::milliseconds(15));
+        // fflush(stdout);
     }
 
     void handleSymbolTable(const char *description,
@@ -211,14 +210,14 @@ struct DefaultDisplay {
             printf(lineFmt, namew, symbol.name.c_str(), nullable.c_str(),
                    firstw, firstSet.c_str(), followSet.c_str());
         }
-        fflush(stdout);
+        // fflush(stdout);
     }
 
     void handleGrammarRules(const char *description,
                             gram::Grammar const *grammar) {
         String s = grammar->dump();
         printf("> %s\n%s", description, s.c_str());
-        fflush(stdout);
+        // fflush(stdout);
     }
 };
 

@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "src/common.h"
-#include "src/util/bitset.h"
+#include "src/util/BitSet.h"
 
 namespace gram {
 class Display;

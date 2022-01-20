@@ -2,8 +2,8 @@
 // Created by "Simon Yu" on 2022/1/19.
 //
 
-#include "src/grammar/reader.h"
-#include "src/grammar/gram.h"
+#include "src/grammar/GrammarReader.h"
+#include "src/grammar/Grammar.h"
 #include <fstream>
 
 using std::ifstream;

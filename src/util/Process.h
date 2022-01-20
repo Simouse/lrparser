@@ -12,7 +12,7 @@
 #include <stdexcept>
 
 #include "src/common.h"
-#include "src/util/formatter.h"
+#include "src/util/Formatter.h"
 
 namespace util {
 

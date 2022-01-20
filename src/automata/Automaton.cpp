@@ -1,9 +1,9 @@
-#include "automata.h"
+#include "Automaton.h"
 
 #include "src/common.h"
-#include "src/grammar/gram.h"
-#include "src/util/bitset.h"
-#include "src/util/formatter.h"
+#include "src/grammar/Grammar.h"
+#include "src/util/BitSet.h"
+#include "src/util/Formatter.h"
 #include <algorithm>
 #include <cassert>
 #include <optional>

@@ -1,10 +1,9 @@
 #ifndef LRPARSER_ANALYSIS_H
 #define LRPARSER_ANALYSIS_H
 
-#include "src/automata/automata.h"
-#include "src/grammar/gram.h"
+#include "src/automata/Automaton.h"
+#include "src/grammar/Grammar.h"
 #include <istream>
-#include <memory>
 #include <unordered_map>
 #include <vector>
 
@@ -88,13 +87,14 @@ class SyntaxAnalysisSLR : public SyntaxAnalysisLR {
     Automaton nfa;
     Automaton dfa;
     ParseTable actionTable;
-    // This map stores states that can reduce by certain productions
+    std::vector<int> nextSymbolStack;
+    std::vector<StateID> stateStack;
+    std::vector<int> symbolStack;
+    // This map stores states that can be reduced by certain productions
     std::unordered_map<StateID, ProductionID> reduceMap;
     void addParseTableEntry(StateID state, ActionID act, ParseAction pact);
     // Returns id of the symbol it can produce, or -1 if it's not possible
-    void reduce(std::vector<int> &symbolStack, std::vector<StateID> &stateStack,
-                ProductionID prodID) const;
-    void applyGoto(std::vector<StateID> &stateStack, int newSymbolID) const;
+    void reduce(ProductionID prodID);
 };
 
 } // namespace gram

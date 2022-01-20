@@ -14,7 +14,7 @@ file(GLOB PORT_SRC "src/display/*.cpp")
 file(GLOB UTIL_SRC "src/util/*.cpp")
 
 include_directories(${PROJECT_SOURCE_DIR})
-set(SOURCES src/main.cpp ${AUTOMATA_SRC} ${GRAMMAR_SRC} ${PORT_SRC} ${UTIL_SRC} src/util/bitset.h src/util/bitset.cpp src/grammar/reader.h src/grammar/reader.cpp)
+set(SOURCES src/main.cpp ${AUTOMATA_SRC} ${GRAMMAR_SRC} ${PORT_SRC} ${UTIL_SRC})
 add_executable(lrparser ${SOURCES})
 
 # install (TARGETS lrparser DESTINATION ${PROJECT_SOURCE_DIR}/bin)

@@ -1,16 +1,18 @@
 #include "lr.h"
 
 #include <cassert>
+#include <stack>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
-#include "gram.h"
-#include "src/automata/automata.h"
+#include "Grammar.h"
+#include "src/automata/Automaton.h"
 #include "src/common.h"
-#include "src/grammar/reader.h"
-#include "src/util/bitset.h"
-#include "src/util/formatter.h"
+#include "src/grammar/GrammarReader.h"
+#include "src/util/BitSet.h"
+#include "src/util/Formatter.h"
+#include "src/util/TokenReader.h"
 
 using std::vector;
 
@@ -344,19 +346,16 @@ String SyntaxAnalysisSLR::dumpParseTableEntry(StateID state,
 
 // Test given stream with parsed results
 bool SyntaxAnalysisSLR::test(std::istream &stream) try {
-    GrammarReader reader(stream);
-    reader.setGetTokenVerbose(true);
+    stateStack.clear();
+    symbolStack.clear();
+    nextSymbolStack.clear();
+    stateStack.push_back(dfa.getStartState());
+
+    util::TokenReader reader(stream);
 
     // auto const &symbols = gram.getAllSymbols();
     bool endOfInput = false;
-    int nextSymbolID = -1;
     String s;
-
-    vector<StateID> stateStack;
-    vector<int> symbolStack;
-    symbolStack.reserve(16);
-    stateStack.reserve(16);
-    stateStack.push_back(dfa.getStartState());
 
     SymbolStackInfo symbolStackInfo{&gram, &symbolStack};
 
@@ -366,33 +365,35 @@ bool SyntaxAnalysisSLR::test(std::istream &stream) try {
             "Please input symbols for test (Use '$' to end the input):");
 
     while (true) {
-        // Only shift action will set nextSymbolID to -1.
-        // So if nextSymbolID >= 0, we already have a symbol to use.
-        if (!endOfInput && nextSymbolID < 0) {
-            if (!reader.getToken(s)) {
-                throw std::runtime_error("Test failed. Run out of input while "
-                                         "state is still not acceptable");
-            }
-            auto const &symbol = gram.findSymbol(s);
-            if (symbol.type == NON_TERM ||
-                symbol.id == gram.getEpsilonSymbol().id) {
-                throw std::runtime_error(
-                    "Only non-epsilon terminals can be used as inputs");
-            }
-            if (symbol.id == gram.getEndOfInputSymbol().id) {
+        if (nextSymbolStack.empty() && !endOfInput) {
+            if (reader.getToken(s)) {
+                auto const &symbol = gram.findSymbol(s);
+                if (symbol.id == gram.getEpsilonSymbol().id) {
+                    throw std::runtime_error("Epsilon cannot be used in input");
+                } else if (symbol.id == gram.getEndOfInputSymbol().id) {
+                    endOfInput = true;
+                }
+                nextSymbolStack.push_back(symbol.id);
+            } else {
                 endOfInput = true;
+                nextSymbolStack.push_back(gram.getEndOfInputSymbol().id);
             }
-            nextSymbolID = symbol.id;
         }
 
-        // Look up in the table
-        if (stateStack.empty())
-            throw std::runtime_error("Reduce state stack is empty");
-        auto const &tableEntry = actionTable[stateStack.back()][nextSymbolID];
+        // if (stateStack.empty())
+        //     throw std::runtime_error("Reduce state stack is empty");
+
+        if (nextSymbolStack.empty())
+            throw std::logic_error(
+                "No next symbol to use, this shouldn't be possible");
+
+        auto const &tableEntry =
+            actionTable[stateStack.back()][nextSymbolStack.back()];
 
         auto choices = tableEntry.size();
         if (choices <= 0)
-            throw ActionNotAcceptedError();
+            throw std::runtime_error(
+                "No viable action in parse table for this input");
         if (choices > 1) {
             throw std::runtime_error(
                 "Multiple viable choices. Cannot decide which action "
@@ -403,17 +404,13 @@ bool SyntaxAnalysisSLR::test(std::istream &stream) try {
         auto const &decision = tableEntry.front();
         switch (decision.type) {
         case ParseAction::GOTO:
-            throw std::logic_error(
-                "Goto item cannot appear without reduce item");
-            break;
         case ParseAction::SHIFT:
             stateStack.push_back(decision.dest);
-            symbolStack.push_back(nextSymbolID);
-            nextSymbolID = -1;
+            symbolStack.push_back(nextSymbolStack.back());
+            nextSymbolStack.pop_back();
             break;
         case ParseAction::REDUCE:
-            reduce(symbolStack, stateStack, decision.productionID);
-            applyGoto(stateStack, symbolStack.back());
+            reduce(decision.productionID);
             break;
         case ParseAction::SUCCESS:
             display(DisplayType::LOG, DisplayLogLevel::INFO, "Success");
@@ -430,9 +427,7 @@ bool SyntaxAnalysisSLR::test(std::istream &stream) try {
 }
 
 // May throw errors
-void SyntaxAnalysisSLR::reduce(vector<int> &symbolStack,
-                               vector<StateID> &stateStack,
-                               ProductionID prodID) const {
+void SyntaxAnalysisSLR::reduce(ProductionID prodID) {
     auto const &prod = gram.getProductionTable()[prodID];
     auto bodySize = prod.rightSymbols.size();
     if (symbolStack.size() < bodySize) {
@@ -454,27 +449,10 @@ void SyntaxAnalysisSLR::reduce(vector<int> &symbolStack,
         symbolStack.pop_back();
         stateStack.pop_back();
     }
-    symbolStack.push_back(prod.leftSymbol);
+    // symbolStack.push_back(prod.leftSymbol);
+    nextSymbolStack.push_back(prod.leftSymbol);
     String info = "Apply reduction rule: " + std::to_string(prodID);
     display(DisplayType::LOG, DisplayLogLevel::VERBOSE, info.c_str());
-}
-
-void SyntaxAnalysisSLR::applyGoto(vector<StateID> &stateStack,
-                                  int newSymbolID) const {
-    auto const &tableEntry = actionTable[stateStack.back()][newSymbolID];
-    if (tableEntry.empty()) {
-        throw std::runtime_error("Goto table item is empty");
-    }
-    if (tableEntry.size() > 1) {
-        throw std::runtime_error(
-            "Multiple viable choices. Cannot decide which action to take");
-    }
-    auto const &decision = tableEntry.front();
-    if (decision.type != ParseAction::GOTO) {
-        throw std::runtime_error("Current state doesn't have a `goto` item but "
-                                 "parse action is `goto`");
-    }
-    stateStack.push_back(decision.dest);
 }
 
 } // namespace gram

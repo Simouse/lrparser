@@ -1,4 +1,4 @@
-#include "gram.h"
+#include "Grammar.h"
 
 #include <array>
 #include <fstream>
@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "src/common.h"
-#include "src/grammar/reader.h"
+#include "src/grammar/GrammarReader.h"
 
 using std::unordered_map;
 using std::unordered_set;
