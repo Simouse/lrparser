@@ -6,6 +6,7 @@
 #define LRPARSER_READER_H
 
 #include "src/common.h"
+#include "src/util/TokenReader.h"
 #include <unordered_map>
 
 namespace gram {
@@ -14,7 +15,7 @@ class Grammar;
 
 namespace gram {
 // TODO: check if unnecessary terminals exist
-class GrammarReader {
+class GrammarReader: public util::TokenReader {
   private:
     bool getTokenVerboseFlag = false;
     int linenum = 0;
@@ -25,7 +26,6 @@ class GrammarReader {
     String line;
     // `token` is used by ungetToken()
     String token;
-    std::istream &stream;
     std::unordered_map<String, int> tokenLineNo;
 
     auto getLineAndCount(std::istream &is, String &s) -> bool;
@@ -34,8 +34,9 @@ class GrammarReader {
 
   public:
     static Grammar parse(std::istream &stream);
-    explicit GrammarReader(std::istream &is) : stream(is) {}
-    bool getToken(String &s, bool newlineAutoFetch = true);
+    explicit GrammarReader(std::istream &is) : util::TokenReader(is) {}
+    bool getToken(String &s, bool newlineAutoFetch);
+    bool getToken(String &s) override;
     void ungetToken(const String &s);
     void parse(Grammar &g);
     auto nextEquals(char ch) -> bool;

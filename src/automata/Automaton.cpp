@@ -4,6 +4,7 @@
 #include "src/grammar/Grammar.h"
 #include "src/util/BitSet.h"
 #include "src/util/Formatter.h"
+#include "src/util/Process.h"
 #include <algorithm>
 #include <cassert>
 #include <optional>
@@ -24,6 +25,10 @@ Automaton::Automaton() = default;
 StateID Automaton::addState(String desc, bool acceptable) {
     auto id = static_cast<StateID>(states.size());
     states.emplace_back(id, std::move(desc), acceptable);
+
+    // Set highlight
+    stateHighlightSet.insert(id);
+
     return id;
 }
 
@@ -38,6 +43,9 @@ void Automaton::addTransition(StateID from, StateID to, ActionID action) {
         multiDestFlag = true;
         trans.emplace(action, to);
     } // else: transition is already added: ignore
+
+    // Set highlight
+    transitionHighlightSet.emplace(from, to);
 }
 
 void Automaton::addEpsilonTransition(StateID from, StateID to) {
@@ -47,7 +55,10 @@ void Automaton::addEpsilonTransition(StateID from, StateID to) {
     addTransition(from, to, epsilonAction);
 }
 
-void Automaton::markStartState(StateID state) { startState = state; }
+void Automaton::markStartState(StateID state) {
+    startState = state;
+    currentState = state;
+}
 
 void Automaton::setState(StateID state) { currentState = state; }
 
@@ -63,10 +74,6 @@ StateID Automaton::getState() const { return currentState; }
 
 StateID Automaton::getStartState() const { return startState; }
 
-// auto Automaton::getActionReceivers() const -> std::vector<DFAState> const & {
-//     return actionReceivers;
-// }
-
 auto Automaton::getStatesBitmap() const -> std::vector<DFAState> const & {
     return statesBitmap;
 }
@@ -81,14 +88,6 @@ bool Automaton::isEpsilonAction(ActionID action) const {
 
 bool Automaton::isDFA() const { return !multiDestFlag; }
 
-// void Automaton::setShiftOrGoto(StateID state, StateID nextState) {
-//     states[state].shiftOrGotoAction = nextState;
-// }
-
-// void Automaton::setReduce(StateID state, ActionID action) {
-//     states[state].reduceAction = action;
-// }
-
 ActionID Automaton::addAction(StringView desc) {
     auto it = actIDMap.find(desc);
     if (it != actIDMap.end())
@@ -102,6 +101,8 @@ ActionID Automaton::addAction(StringView desc) {
 auto Automaton::dump(const StateID *posMap) const -> String {
     String s;
     util::Formatter f;
+
+    s.reserve(1024);
 
     s += "digraph G {\n"
          "  graph[center=true]\n"
@@ -122,12 +123,12 @@ auto Automaton::dump(const StateID *posMap) const -> String {
         String label = f.reverseEscaped(state.label);
         s += f.formatView("  %d [label=\"%d: %s\"", mappedStateID,
                           mappedStateID, label.c_str());
-        if (state.acceptable) {
+        if (state.acceptable)
             s += " peripheries=2";
-        }
-        if (mappedStateID == getState()) {
-            s += " fillcolor=yellow style=filled";
-        }
+        if (mappedStateID == getState())
+            s += " fillcolor=yellow style=\"rounded,filled\"";
+        if (stateHighlightSet.find(state.id) != stateHighlightSet.end())
+            s += " color=red penwidth=2 fontcolor=red fontsize=18";
         s += "]\n";
         if (mappedStateID == getStartState()) {
             s += f.formatView("  start -> %d\n", mappedStateID);
@@ -137,15 +138,30 @@ auto Automaton::dump(const StateID *posMap) const -> String {
             label = f.reverseEscaped(actions[tran.first]);
             s += f.formatView("  %d -> %d [label=\"%s\"", mappedStateID,
                               mappedDestID, label.c_str());
-            if (isEpsilonAction(tran.first)) {
+            if (isEpsilonAction(tran.first))
                 s += " constraint=false";
+            if (transitionHighlightSet.find({mappedStateID, mappedDestID}) !=
+                transitionHighlightSet.end()) {
+                s += " color=red penwidth=2 fontcolor=red fontsize=18";
             }
             s += "]\n";
         }
     }
 
-    s += "}\n";
+    s += "}";
+
+    stateHighlightSet.clear();
+    transitionHighlightSet.clear();
+
     return s;
+}
+
+void Automaton::highlightState(StateID state) const {
+    stateHighlightSet.insert(state);
+}
+
+void Automaton::highlightTransition(StateID from, StateID to) const {
+    transitionHighlightSet.emplace(from, to);
 }
 
 // This function calculate closure and store information in place;
@@ -347,13 +363,11 @@ Automaton Automaton::toDFA() {
 
 void Automaton::move(ActionID action) {
     if (currentState < 0)
-        currentState = startState;
-    if (currentState < 0)
-        throw IllegalAutomatonStateError();
+        throw AutomatonIllegalStateError();
     auto const &trans = states[currentState].trans;
     auto it = trans.find(action);
     if (it == trans.end())
-        throw ActionNotAcceptedError();
+        throw AutomatonUnacceptedActionError();
     // Action is okay
     setState(it->second);
 }

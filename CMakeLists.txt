@@ -17,4 +17,8 @@ include_directories(${PROJECT_SOURCE_DIR})
 set(SOURCES src/main.cpp ${AUTOMATA_SRC} ${GRAMMAR_SRC} ${PORT_SRC} ${UTIL_SRC})
 add_executable(lrparser ${SOURCES})
 
+if (UNIX)
+    target_link_libraries(lrparser libpthread.so)
+endif()
+
 # install (TARGETS lrparser DESTINATION ${PROJECT_SOURCE_DIR}/bin)

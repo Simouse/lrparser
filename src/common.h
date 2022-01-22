@@ -59,4 +59,14 @@ struct UnreachableCodeError : public ::std::logic_error {
     UnreachableCodeError() : ::std::logic_error("Unreachable code") {}
 };
 
+// 4. Arguments
+struct LaunchArguments {
+    bool nodot = false;
+    bool strict = false;
+    String grammarFileName;
+    String resultsDir = "results";
+};
+
+extern LaunchArguments launchArgs;
+
 #endif

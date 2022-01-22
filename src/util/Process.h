@@ -26,7 +26,7 @@ struct Process {
         Formatter f;
         StringView sv = f.formatView(fmt, ts...);
         DWORD n;
-        (void)WriteFile(stream, sv.data(), sv.size(), &n, nullptr);
+        (void)WriteFile(stream, sv.data(), (DWORD)sv.size(), &n, nullptr);
         return static_cast<int>(n);
     }
 

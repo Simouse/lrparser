@@ -105,10 +105,10 @@ String Grammar::dump() const {
         }
     }
 
-    s += "Productions:\n";
+    s += "Productions:";
     int productionCounter = 0;
     for (auto &production : productionTable) {
-        s += "    ";
+        s += "\n    ";
         s += std::to_string(productionCounter++);
         s += ") ";
         s += symVec[production.leftSymbol].name;
@@ -117,7 +117,6 @@ String Grammar::dump() const {
             s += ' ';
             s += symVec[sym].name;
         }
-        s += "\n";
     }
 
     return s;
@@ -375,9 +374,23 @@ String Grammar::dumpFirstSet(const Symbol &symbol) const {
 String Grammar::dumpFollowSet(const Symbol &symbol) const {
     return dumpSymbolSet(*this, symbol.followSet);
 }
+
+String Grammar::dumpProduction(ProductionID prodID) const {
+    String s;
+    auto const &production = productionTable[prodID];
+    s += symVec[production.leftSymbol].name;
+    s += " ->";
+    for (int rightSymbol : production.rightSymbols) {
+        s += ' ';
+        s += symVec[rightSymbol].name;
+    }
+    return s;
+}
+
 const Symbol &Grammar::getEndOfInputSymbol() const {
     return symVec[endOfInput];
 }
+
 const Symbol &Grammar::getEpsilonSymbol() const { return symVec[epsilon]; }
 
 const Symbol &Grammar::getStartSymbol() const { return symVec[start]; }

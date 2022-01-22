@@ -6,10 +6,12 @@
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "src/common.h"
 #include "src/util/BitSet.h"
+#include "src/util/Process.h"
 
 namespace gram {
 class Display;
@@ -26,17 +28,30 @@ namespace gram {
 enum ActionID : int;
 enum StateID : int;
 
+struct StateIDPair {
+    StateID from, to;
+    StateIDPair(StateID a, StateID b) : from(a), to(b) {}
+    bool operator==(StateIDPair const &other) const {
+        return from == other.from && to == other.to;
+    }
+    bool operator<(StateIDPair const &other) const {
+        if (from != other.from)
+            return from < other.from;
+        return to < other.to;
+    }
+};
+
 // This error is thrown when current state is illegal. This may
 // be caused by not setting start state.
-class IllegalAutomatonStateError : public std::runtime_error {
+class AutomatonIllegalStateError : public std::runtime_error {
   public:
-    IllegalAutomatonStateError()
+    AutomatonIllegalStateError()
         : std::runtime_error("Automaton state is illegal") {}
 };
 
-class ActionNotAcceptedError : public std::runtime_error {
+class AutomatonUnacceptedActionError : public std::runtime_error {
   public:
-    ActionNotAcceptedError()
+    AutomatonUnacceptedActionError()
         : std::runtime_error("Action is not accepted by automaton") {}
 };
 
@@ -59,7 +74,29 @@ struct Transition {
     }
 };
 
+class Automaton;
+
+struct AutomatonOutputInfo {
+    Automaton const *automaton;
+    const char *outGroupTag;
+};
+
 } // namespace gram
+
+namespace std {
+template <> struct hash<gram::StateID> {
+    std::size_t operator()(gram::StateID const &k) const {
+        return hash<int>()(k);
+    }
+};
+
+template <> struct hash<gram::StateIDPair> {
+    std::size_t operator()(gram::StateIDPair const &k) const {
+        auto hasher = hash<int>();
+        return hasher(k.from) * 31 + k.to;
+    }
+};
+} // namespace std
 
 namespace gram {
 
@@ -101,12 +138,11 @@ class Automaton {
         -> ::std::optional<DFAState>;
     Automaton toDFA();
 
+    // Access other information
     [[nodiscard]] auto getAllStates() const -> std::vector<State> const &;
     [[nodiscard]] StateID getState() const;
     [[nodiscard]] StateID getStartState() const;
     [[nodiscard]] auto getAllActions() const -> std::vector<String> const &;
-    //    [[nodiscard]] auto getActionReceivers() const
-    //        -> std::vector<DFAState> const &;
     [[nodiscard]] auto getStatesBitmap() const -> std::vector<DFAState> const &;
     [[nodiscard]] auto getFormerStates() const -> std::vector<State> const &;
     [[nodiscard]] bool isEpsilonAction(ActionID action) const;
@@ -116,6 +152,9 @@ class Automaton {
     // `posMap` is used to switch state indexes so the result can be easier to
     // observe. It stores: {realState => stateAlias(label)}
     [[nodiscard]] String dump(const StateID *posMap = nullptr) const;
+
+    void highlightState(StateID state) const;
+    void highlightTransition(StateID from, StateID to) const;
 
     // Try to accept a new action. Returns false when action is not accepted.
     // The action shouldn't be an end-of-input. Compared to unconditional
@@ -133,6 +172,12 @@ class Automaton {
     std::vector<State> states;
     std::vector<String> actions;
     std::unordered_map<StringView, ActionID> actIDMap;
+
+    // Used for color state in dump
+    mutable std::set<StateID> stateHighlightSet;
+
+    // Used for color transition in dump
+    mutable std::set<StateIDPair> transitionHighlightSet;
 
     // --------------------- For transformed DFA  ---------------------
     // Any attempts to access those methods from an automaton not created

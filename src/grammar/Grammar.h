@@ -126,6 +126,7 @@ class Grammar {
     [[nodiscard]] static String dumpNullable(const Symbol &symbol);
     [[nodiscard]] String dumpFirstSet(const Symbol &symbol) const;
     [[nodiscard]] String dumpFollowSet(const Symbol &symbol) const;
+    [[nodiscard]] String dumpProduction(ProductionID prodID) const;
 
     // std::unordered_map doesn't support heterogeneous lookup, so when
     // we pass a const char *, the string is copied. So we just use a string
