@@ -76,7 +76,7 @@ class Grammar {
     int start = -1;
     int epsilon = -1;
     int endOfInput = -1;
-    symvec_t symVec;
+    symvec_t symbolVector;
     idtbl_t idTable;
     ProductionTable productionTable;
 

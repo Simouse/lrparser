@@ -50,7 +50,7 @@ struct Process {
                           const_cast<char *>(cmd.c_str()), // command line
                           nullptr,      // process security attributes
                           nullptr,      // primary thread security attributes
-                          TRUE,         // handles are inherited
+                          FALSE,        // handles are inherited
                           0,            // creation flags
                           nullptr,      // use parent's environment
                           nullptr,      // use parent's current directory

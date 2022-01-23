@@ -19,6 +19,7 @@ namespace util {
 class BitSet {
   public:
     using block_type = unsigned int;
+    using block_signed_type = int;
     using size_type = unsigned int;
     static constexpr size_type block_bits = sizeof(block_type) * 8;
     static constexpr size_type npos = static_cast<size_type>(-1);

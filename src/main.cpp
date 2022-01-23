@@ -1,5 +1,6 @@
-#include <string.h>
+#include <corecrt_wstdio.h>
 
+#include <cstring>
 #include <iostream>
 
 #include "src/common.h"
@@ -11,39 +12,49 @@ using namespace gram;
 LaunchArguments launchArgs;
 
 void printUsageAndExit() {
-  fprintf(
-      stderr,
-      "Usage: lrparser -g<Grammar file> [-o<Result Dir>] [--nodot] [--strict]\n"
+  launchArgs.launchSuccess = false;
+  printf(
+      "Error: Illegal arguments.\n"
       "\n"
-      "This program read possibly SLR grammar from <Grammar file>, takes test "
-      "sequence\n"
-      "from standard input stream, and store analysis results into <Result "
+      "This program reads possibly SLR grammar from <Grammar file>, takes test "
+      "sequence from standard input stream, and stores analysis results into "
+      "<Result "
       "Dir>.\n"
       "\n"
+      "Usage: lrparser -g<Grammar file> [-o<Result Dir>] [--nodot] [--strict]\n"
+      "\n"
       "Possible command: lrparser -g grammar.txt -o results\n"
-      "Grammar file format:\n"
-      "    1) Use ! or # to start a line comment.\n"
-      "    2) \" or ' can be used to quote a symbol.\n"
-      "    3) \"'\" and '\"' are okay, but there's no way to use them both in "
-      "one symbol\n"
+      "Grammar file:\n"
+      "    1) Use `!` or `#` to start a line comment.\n"
+      "    2) Token naming is based on C-style variable naming. Besides, `\\` "
+      "can appear at the first character of token, and quoted symbols are "
+      "supported so you can use some operators directly. (See the next rule)\n"
+      "    2) `\"` or `'` can be used to quote a symbol, e.g. '+'. \"'\" and '\"' "
+      "are okay, but there's no way to use them both in one symbol. Spaces in "
+      "a quoted string are not allowed.\n"
+      "    4) \\e, _e, and \\epsilon are reserved for epsilon. \n"
+      "    5) You shouldn't use `$` in grammar file.\n"
+      "    6) Define terminals, the start symbol, and productions as the "
+      "following example shows. All symbols at the left hand side of "
+      "productions are automatically defined as non-terminals.\n"
       "    e.g.\n"
       "    # Define terminals\n"
-      "    TERM :{ID, '(', ')', '+', '*'}\n"
+      "    TERM :{ID, '(', ')', '+', '*'}\n\n"
       "    # Define start symbol\n"
-      "    START: exp\n"
+      "    START: exp\n\n"
       "    # Define productions\n"
       "    exp   -> exp '+' term  | term\n"
       "    term  -> term '*' fac  | fac\n"
       "    fac   -> ID            | \"(\" exp ')'\n"
-      "-o       option: Specify output directory. Default: results\n"
+      "-o       option: Specify output directory. Default: \"results\".\n"
       "--nodot  option: Disable svg automaton output. Use this when you don't "
-      "have `dot`)\n"
-      "--strict option: Input tokens must conform to C-variable name style.\n"
-      "                 Without this option, tokens are space splitted.\n");
-  exit(1);
+      "have `dot`.)\n"
+      "--strict option: Input token names must conform to rules of grammar "
+      "file. Without this option, they are simply space-splitted.\n");
+  exit(0);
 }
 
-void parseMain() {
+void lrMain() {
   Grammar g = Grammar::fromFile(launchArgs.grammarFileName.c_str());
   SyntaxAnalysisSLR slr(g);
   slr.buildNFA();
@@ -52,25 +63,24 @@ void parseMain() {
   slr.test(std::cin);
 }
 
-void processLaunchArgs(int argc, char **argv) {
-  int i = 1;
-  while (i < argc) {
+void lrParseArgs(int argc, char **argv) {
+  using std::strcmp;
+  using std::strncmp;
+  for (int i = 1; i < argc; ++i) {
     if (strncmp("-g", argv[i], 2) == 0) {
       if ((launchArgs.grammarFileName = argv[i++] + 2).empty()) {
         if (i >= argc) printUsageAndExit();
-        launchArgs.grammarFileName = argv[i++];
+        launchArgs.grammarFileName = argv[i];
       }
     } else if (strncmp("-o", argv[i], 2) == 0) {
       if ((launchArgs.resultsDir = argv[i++] + 2).empty()) {
         if (i >= argc) printUsageAndExit();
-        launchArgs.resultsDir = argv[i++];
+        launchArgs.resultsDir = argv[i];
       }
     } else if (strcmp("--nodot", argv[i]) == 0) {
       launchArgs.nodot = true;
-      ++i;
     } else if (strcmp("--strict", argv[i]) == 0) {
       launchArgs.strict = true;
-      ++i;
     } else {
       printUsageAndExit();
     }
@@ -81,7 +91,8 @@ void processLaunchArgs(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
-  util::Process::prevent_zombie();
-  processLaunchArgs(argc, argv);
-  parseMain();
+  lrInit();
+  lrParseArgs(argc, argv);
+  lrMain();
+  lrCleanUp();
 }

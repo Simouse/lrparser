@@ -4,10 +4,13 @@
 
 #include "src/grammar/GrammarReader.h"
 
+#include <exception>
 #include <fstream>
+#include <stdexcept>
 
+#include "src/common.h"
 #include "src/grammar/Grammar.h"
-
+#include "src/util/Formatter.h"
 
 using std::ifstream;
 using std::isblank;
@@ -75,11 +78,8 @@ void GrammarReader::parse(Grammar &g) try {
       if (hasEpsilon) {
         productionBody.clear();  // Epsilon rule
       }
-      //            rule.push_back(std::move(productionBody));
       g.addProduction(nid, std::move(productionBody));
     } while (expect('|'));
-
-    //        g.addRule(nid, std::move(rule));
   }
 
   // Check redundant input (which normally means invalid syntax)
@@ -90,13 +90,13 @@ void GrammarReader::parse(Grammar &g) try {
 
   g.checkViolations();
 
-} catch (UnsolvedSymbolError &e) {
+} catch (UnsolvedSymbolError const &e) {
   String s = "Parsing error at line " +
              std::to_string(tokenLineNo[e.symInQuestion.name]) + ": " +
              e.what();
-  throw std::runtime_error(s);
-
-} catch (std::runtime_error &e) {
+  fprintf(stderr, "%s\n", s.c_str());
+  exit(1);
+} catch (std::exception const &e) {
   String s = "Parsing error at line ";
   s += std::to_string(linenum);
   s += ", char ";
@@ -107,7 +107,8 @@ void GrammarReader::parse(Grammar &g) try {
     s += "<Unknown>";
   s += ": ";
   s += e.what();
-  throw std::runtime_error(s);
+  fprintf(stderr, "%s\n", s.c_str());
+  exit(1);
 }
 
 // Wrapper of getline
@@ -135,7 +136,6 @@ auto GrammarReader::skipSpaces(const char *p) -> const char * {
     if (!getLineAndCount(stream, line)) return nullptr;
     p = line.c_str();
   }
-  throw UnreachableCodeError();
 }
 
 // Make sure *p is non-blank
@@ -201,7 +201,12 @@ auto GrammarReader::expectOrThrow(const char *expected) -> void {
   pos = check;
 }
 
-bool GrammarReader::getToken(String &s) { return getToken(s, true); }
+bool GrammarReader::getToken(String &s) try {
+  return getToken(s, true);
+} catch (std::runtime_error const &e) {
+  display(DisplayType::LOG, DisplayLogLevel::ERR, e.what());
+  exit(1);
+}
 
 // Try to get a token. This process may fail, so flag is returned in bool)
 // This process is difficult because C++ does not have a Scanner
@@ -213,12 +218,12 @@ auto GrammarReader::getToken(String &s, bool newlineAutoFetch) -> bool {
     return true;
   }
 
+  util::Formatter f;
+
   const char *p = newlineAutoFetch ? skipSpaces(pos) : skipBlanks(pos);
   if (!p) {
-    if (getTokenVerboseFlag) {
-      display(DisplayType::LOG, DisplayLogLevel::VERBOSE,
-              "getToken(): No more input");
-    }
+    display(DisplayType::LOG, DisplayLogLevel::DEBUG,
+            "getToken(): No more input");
     return false;
   }
 
@@ -226,7 +231,7 @@ auto GrammarReader::getToken(String &s, bool newlineAutoFetch) -> bool {
   // There are 4 cases: backslash quote digit(invalid) _alpha
   if (std::isdigit(*p)) {
     throw std::runtime_error(
-        "The first character of a token cannot be a digit");
+        "getToken(): The first character of a token cannot be a digit");
   }
 
   s.clear();
@@ -241,13 +246,22 @@ auto GrammarReader::getToken(String &s, bool newlineAutoFetch) -> bool {
     // Change pos so error report is more precise.
     pos = cur;
     if (*cur != quoteChar) {
-      throw std::runtime_error(String("Cannot find matching quote pair ") +
-                               quoteChar);
+      throw std::runtime_error(
+          f.formatView("getToken(): Cannot find matching quote pair %c",
+                       quoteChar)
+              .data());
     }
 
     // [p, pos] ===> [" ... "]
     // Advance pos so we don't get overlapped scanning results
     s.append(p + 1, pos++);
+
+    for (char ch : s) {
+      if (std::isspace(ch)) {
+        throw std::runtime_error("getToken(): token cannot contain spaces");
+      }
+    }
+
     tokenLineNo[s] = linenum;
     return true;
   }
@@ -268,11 +282,9 @@ auto GrammarReader::getToken(String &s, bool newlineAutoFetch) -> bool {
     return true;
   }
 
-  if (getTokenVerboseFlag) {
-    String err = "Read interrupted by unknown input: ";
-    err += pos;
-    display(DisplayType::LOG, DisplayLogLevel::VERBOSE, err.c_str());
-  }
+  display(DisplayType::LOG, DisplayLogLevel::DEBUG,
+          f.formatView("getToken() stops here: %s", pos).data());
+
   return false;
 }
 
@@ -282,8 +294,8 @@ auto GrammarReader::ungetToken(const String &s) -> void {
   }
   token = s;
 }
-void GrammarReader::setGetTokenVerbose(bool flag) {
-  getTokenVerboseFlag = flag;
-}
+// void GrammarReader::setGetTokenVerbose(bool flag) {
+//   getTokenVerboseFlag = flag;
+// }
 
 }  // namespace gram

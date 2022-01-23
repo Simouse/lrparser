@@ -17,7 +17,7 @@ namespace gram {
 // TODO: check if unnecessary terminals exist
 class GrammarReader: public util::TokenReader {
   private:
-    bool getTokenVerboseFlag = false;
+    // bool getTokenVerboseFlag = false;
     int linenum = 0;
     // Make sure pos is empty but not NULL in the beginning
     const char *pos = "";
@@ -42,7 +42,7 @@ class GrammarReader: public util::TokenReader {
     auto nextEquals(char ch) -> bool;
     auto expect(char ch) -> bool;
     void expectOrThrow(const char *expected);
-    void setGetTokenVerbose(bool flag);
+    // void setGetTokenVerbose(bool flag);
 };
 } // namespace gram
 

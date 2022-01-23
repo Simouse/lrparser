@@ -1,9 +1,10 @@
+.DS_Store
 .clang-format
 .cache
 .idea
 .vscode
 build
 gbuild
-cmake-build-debug-visual-studio
+wsl_build
 bin
 contains
