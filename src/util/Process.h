@@ -198,7 +198,7 @@ struct Process {
 
     // Never wait for termination of a child process.
     static void prevent_zombie() {
-        struct sigaction arg;
+        struct sigaction arg = {0};
         arg.sa_handler = SIG_IGN;
         arg.sa_flags = SA_NOCLDWAIT;
         sigaction(SIGCHLD, &arg, NULL);

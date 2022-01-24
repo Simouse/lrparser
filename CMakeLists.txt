@@ -10,11 +10,7 @@ project(lrparser)
 
 include_directories(${PROJECT_SOURCE_DIR})
 
-file(GLOB AUTOMATA_SRC "src/automata/*.cpp")
-file(GLOB GRAMMAR_SRC "src/grammar/*.cpp")
-file(GLOB PORT_SRC "src/display/*.cpp")
-file(GLOB UTIL_SRC "src/util/*.cpp")
-set(SOURCES src/main.cpp ${AUTOMATA_SRC} ${GRAMMAR_SRC} ${PORT_SRC} ${UTIL_SRC})
+file(GLOB_RECURSE SOURCES "src/*.cpp")
 
 add_executable(lrparser ${SOURCES})
 

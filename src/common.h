@@ -61,8 +61,8 @@ struct LaunchArguments {
   bool launchSuccess = true;
   bool nodot = false;
   bool strict = false;
-  DisplayLogLevel logLevel = DEBUG;
-  String grammarFileName;
+  DisplayLogLevel logLevel = VERBOSE;
+  String grammarFileName = "grammar.txt";
   String resultsDir = "results";
 };
 

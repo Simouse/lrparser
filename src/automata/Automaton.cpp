@@ -243,6 +243,7 @@ Automaton Automaton::toDFA() {
     DFAState start((util::BitSet::block_type)states.size());
     start.add(startState);
     toEpsClosure(start);
+    // As a const key, `start` will still be copy-assigned.
     auto insertResult =
         dfaStates.emplace(std::move(start), StateID{++dfaStateIndexCounter});
     stack.push(insertResult.first);

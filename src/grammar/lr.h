@@ -1,15 +1,16 @@
 #ifndef LRPARSER_ANALYSIS_H
 #define LRPARSER_ANALYSIS_H
 
-#include "src/automata/Automaton.h"
-#include "src/grammar/Grammar.h"
 #include <istream>
 #include <unordered_map>
 #include <vector>
 
+#include "src/automata/Automaton.h"
+#include "src/grammar/Grammar.h"
+
 namespace gram {
 class Grammar;
-} // namespace gram
+}  // namespace gram
 
 namespace gram {
 
@@ -21,7 +22,7 @@ struct SymbolStackInfo {
 // There should be a SyntaxAnalysis base class, but since
 // I don't use that, it's unnecessary.
 class SyntaxAnalysisLR {
-  public:
+   public:
     struct ParseAction {
         enum Type { GOTO, SHIFT, REDUCE, SUCCESS };
         Type type;
@@ -38,8 +39,7 @@ class SyntaxAnalysisLR {
 
         // Only for putting action into a set
         bool operator<(ParseAction const &other) const {
-            if (type != other.type)
-                return type < other.type;
+            if (type != other.type) return type < other.type;
             return untyped_data < other.untyped_data;
         }
     };
@@ -55,7 +55,7 @@ class SyntaxAnalysisLR {
     virtual void buildNFA() = 0;
     virtual void buildDFA() = 0;
     virtual void buildParseTables() = 0;
-    [[nodiscard]] virtual ParseTable const &getActionTable() const = 0;
+    [[nodiscard]] virtual ParseTable const &getParseTable() const = 0;
     [[nodiscard]] virtual Grammar const &getGrammar() const = 0;
     [[nodiscard]] virtual Automaton const &getDFA() const = 0;
     // `posMap` is used to switch state indexes for better observation.
@@ -64,17 +64,17 @@ class SyntaxAnalysisLR {
     // Test given stream with parsed results
     virtual bool test(std::istream &stream) = 0;
 
-  protected:
+   protected:
     const gram::Grammar &gram;
 };
 
 class SyntaxAnalysisSLR : public SyntaxAnalysisLR {
-  public:
+   public:
     explicit SyntaxAnalysisSLR(const gram::Grammar &g) : SyntaxAnalysisLR(g) {}
     void buildNFA() override;
     void buildDFA() override;
     void buildParseTables() override;
-    [[nodiscard]] ParseTable const &getActionTable() const override;
+    [[nodiscard]] ParseTable const &getParseTable() const override;
     [[nodiscard]] Grammar const &getGrammar() const override;
     [[nodiscard]] Automaton const &getDFA() const override;
     [[nodiscard]] String dumpParseTableEntry(StateID state,
@@ -82,11 +82,11 @@ class SyntaxAnalysisSLR : public SyntaxAnalysisLR {
     // Test given stream with parsed results
     bool test(std::istream &stream) override;
 
-  private:
+   private:
     StateID extendedEnd{-1};
     Automaton nfa;
     Automaton dfa;
-    ParseTable actionTable;
+    ParseTable parseTable;
     std::vector<int> nextSymbolStack;
     std::vector<StateID> stateStack;
     std::vector<int> symbolStack;
@@ -97,6 +97,6 @@ class SyntaxAnalysisSLR : public SyntaxAnalysisLR {
     void reduce(ProductionID prodID);
 };
 
-} // namespace gram
+}  // namespace gram
 
 #endif

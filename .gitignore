@@ -1,3 +1,4 @@
+results
 .DS_Store
 .clang-format
 .cache
@@ -8,3 +9,4 @@ gbuild
 wsl_build
 bin
 contains
+test

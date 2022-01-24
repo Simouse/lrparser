@@ -1,5 +1,3 @@
-#include <corecrt_wstdio.h>
-
 #include <cstring>
 #include <iostream>
 
@@ -29,7 +27,8 @@ void printUsageAndExit() {
       "    2) Token naming is based on C-style variable naming. Besides, `\\` "
       "can appear at the first character of token, and quoted symbols are "
       "supported so you can use some operators directly. (See the next rule)\n"
-      "    2) `\"` or `'` can be used to quote a symbol, e.g. '+'. \"'\" and '\"' "
+      "    2) `\"` or `'` can be used to quote a symbol, e.g. '+'. \"'\" and "
+      "'\"' "
       "are okay, but there's no way to use them both in one symbol. Spaces in "
       "a quoted string are not allowed.\n"
       "    4) \\e, _e, and \\epsilon are reserved for epsilon. \n"
@@ -46,11 +45,12 @@ void printUsageAndExit() {
       "    exp   -> exp '+' term  | term\n"
       "    term  -> term '*' fac  | fac\n"
       "    fac   -> ID            | \"(\" exp ')'\n"
-      "-o       option: Specify output directory. Default: \"results\".\n"
+      "-o       option: Specify output directory. (Default: \"results\").\n"
       "--nodot  option: Disable svg automaton output. Use this when you don't "
-      "have `dot`.)\n"
+      "have `dot`. (The default arguments do not contain this option.)\n"
       "--strict option: Input token names must conform to rules of grammar "
-      "file. Without this option, they are simply space-splitted.\n");
+      "file. Without this option, they are simply space-splitted. (Default: "
+      "\"grammar.txt\")\n");
   exit(0);
 }
 
