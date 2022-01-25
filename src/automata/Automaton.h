@@ -96,9 +96,8 @@ namespace gram {
 struct State {
     bool acceptable;
     StateID id;
-
-    std::unordered_multimap<ActionID, StateID> trans;
     String label;
+    std::unordered_multimap<ActionID, StateID> trans;
 
     // Pass string by value so literals will not cause a twice-copying situation
     State(StateID id, String label, bool acceptable)
@@ -121,7 +120,7 @@ class Automaton {
     void setState(StateID state);
 
     // Used in DFA generation
-    void toEpsClosure(DFAState &S) const;
+    void closurify(DFAState &S) const;
     [[nodiscard]] auto transit(DFAState const &S, ActionID action) const
         -> ::std::optional<DFAState>;
     Automaton toDFA();
@@ -188,6 +187,9 @@ class Automaton {
     // a previous DFA. The vector provides complete information about
     // former NFA states.
     std::vector<State> formerStates;
+
+    // --------------------- Helper functions ---------------------
+    void buildActionReceivers();
 };
 }  // namespace gram
 

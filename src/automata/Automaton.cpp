@@ -1,5 +1,7 @@
 #include "Automaton.h"
 
+#include <vcruntime.h>
+
 #include <algorithm>
 #include <cassert>
 #include <optional>
@@ -180,7 +182,7 @@ void Automaton::highlightTransition(StateID from, StateID to) const {
 
 // This function calculate closure and store information in place;
 // Must be used inside toDFA(), because only then transitions are sorted.
-void Automaton::toEpsClosure(DFAState &dfaState) const {
+void Automaton::closurify(DFAState &dfaState) const {
     std::stack<StateID> stack;
     for (auto s : dfaState) stack.push(static_cast<StateID>(s));
 
@@ -207,7 +209,8 @@ auto Automaton::transit(DFAState const &dfaState, ActionID action) const
     bool found = false;
     DFAState res{states.size()};
 
-    DFAState receivers{actionReceivers[action]};
+    // Copy bitset
+    DFAState receivers = actionReceivers[action];
     receivers &= dfaState;
     for (auto state : receivers) {
         // This state can receive current action
@@ -220,21 +223,11 @@ auto Automaton::transit(DFAState const &dfaState, ActionID action) const
 
     if (!found) return {};
 
-    toEpsClosure(res);
+    closurify(res);
     return std::make_optional<DFAState>(std::move(res));
 }
 
-Automaton Automaton::toDFA() {
-    Automaton dfa;
-
-    if (isDFA()) {
-        // Make a copy
-        dfa = *this;
-        dfa.transformedDFAFlag = true;
-        return dfa;
-    }
-
-    // Build action-receivers vector
+void Automaton::buildActionReceivers() {
     actionReceivers.clear();
     actionReceivers.reserve(actions.size());
     for (size_t i = 0; i < actions.size(); ++i) {
@@ -244,69 +237,15 @@ Automaton Automaton::toDFA() {
         for (auto &tran : state.trans)
             actionReceivers[tran.first].add(state.id);
     }
+}
 
-    // A map which transforms a DFAState to its assigned ID
-    std::unordered_map<DFAState, StateID> dfaStates;
-    std::unordered_multimap<StateID, Transition> links;
-    int dfaStateIndexCounter = -1;
+Automaton Automaton::toDFA() {
+    Automaton dfa;
 
-    // All states in stack will finally go to `closures`.
-    // We need to ensure that for S in `stack`, eps_closure(S) == S.
-    // **This stack stores iterators**
-    std::stack<decltype(dfaStates.cbegin())> stack;
-
-    // Add start state
-    StateID dfaStartState{-1};
-    {
-        DFAState start{states.size()};
-        start.add(startState);
-        toEpsClosure(start);
-        // As a const key, `start` will still be copy-assigned.
-        auto insertResult = dfaStates.emplace(std::move(start),
-                                              StateID{++dfaStateIndexCounter});
-        stack.push(insertResult.first);
-        dfaStartState = StateID{dfaStateIndexCounter};
-    }
-
-    while (!stack.empty()) {
-        auto stateIter = stack.top();
-        stack.pop();
-
-        for (ActionID action{0}; static_cast<size_t>(action) < actions.size();
-             action = ActionID{action + 1}) {
-            if (action == epsilonAction) {
-                continue;
-            }
-            // If this action is not acceptable, the entire test will
-            // be skipped, thanks to parallel calculation of BitSet.
-            auto result = transit(stateIter->first, action);
-            if (result.has_value()) {
-                auto &value = result.value();
-
-                // Found a new state
-                auto existingIter = dfaStates.find(value);
-                if (existingIter == dfaStates.end()) {
-                    // Because we need to assign index from 0 continuously,
-                    // we must make sure the insertion will happen when we
-                    // use "++counter".
-                    auto iter = dfaStates
-                                    .emplace(std::move(value),
-                                             StateID{++dfaStateIndexCounter})
-                                    .first;
-
-                    // Add link to this new state
-                    links.emplace(
-                        stateIter->second,
-                        Transition{StateID{dfaStateIndexCounter}, action});
-
-                    stack.emplace(iter);
-                } else {
-                    // Add link to this previous state
-                    links.emplace(stateIter->second,
-                                  Transition{existingIter->second, action});
-                }
-            }
-        }
+    if (isDFA()) {
+        dfa = *this; // Make a copy
+        dfa.transformedDFAFlag = true;
+        return dfa;
     }
 
     // Copy all actions to this new automaton.
@@ -315,59 +254,83 @@ Automaton Automaton::toDFA() {
     dfa.actions = this->actions;
     dfa.actIDMap = this->actIDMap;  // Maybe unnecessary
 
-    // Add new states
-    // Sort iterators by index
-    std::vector<decltype(dfaStates.cbegin())> iterVec;
-    iterVec.reserve(dfaStates.size());
-    for (auto it = dfaStates.begin(); it != dfaStates.end(); ++it)
-        iterVec.push_back(it);
-    std::sort(iterVec.begin(), iterVec.end(), [](auto const &a, auto const &b) {
-        return a->second < b->second;
-    });
+    // The result is used by transit()
+    buildActionReceivers();
 
-    // Add states to dfa
-    dfa.states.reserve(dfaStates.size());
-    for (size_t i = 0; i < iterVec.size(); ++i) {
-        dfa.states.emplace_back(static_cast<StateID>(i),
-                                iterVec[i]->first.dump(), false);
+    // States that need to be processed.
+    // We need to ensure that for S in `stack`, eps_closure(S) == S.
+    std::stack<StateID> stack;
+    std::unordered_map<DFAState, StateID> DFAStateIDMap;
+    std::vector<DFAState> DFAStateVec;
+
+    auto addNewState = [&DFAStateIDMap, &DFAStateVec, &dfa,
+                        &stack](DFAState &&s) {
+        auto stateIndex = static_cast<StateID>(DFAStateVec.size());
+        DFAStateVec.push_back(std::move(s));
+        DFAStateIDMap.emplace(DFAStateVec.back(), stateIndex);
+        dfa.states.emplace_back(stateIndex, DFAStateVec.back().dump(), false);
+        stack.push(stateIndex);
+        return stateIndex;
+    };
+
+    // Add start state
+    {
+        DFAState start{states.size()};
+        start.add(startState);
+        closurify(start);
+
+        auto stateIndex = addNewState(std::move(start));
+        dfa.markStartState(stateIndex);
     }
 
-    // Mark start state
-    dfa.markStartState(dfaStartState);
+    while (!stack.empty()) {
+        auto stateID = stack.top();
+        stack.pop();
 
-    // Mark final state
-    // Get a mask of final NFA states
+        for (size_t actionIndex = 0; actionIndex < actions.size();
+             ++actionIndex) {
+            auto action = static_cast<ActionID>(actionIndex);
+
+            if (action == epsilonAction) continue;
+
+            // If this action is not acceptable, the entire test will
+            // be skipped.
+            auto result = transit(DFAStateVec[stateID], action);
+            if (result.has_value()) {
+                auto &value = result.value();
+                auto existingIter = DFAStateIDMap.find(value);
+
+                if (existingIter == DFAStateIDMap.end()) {
+                    auto nextStateID = addNewState(std::move(value));
+                    // Add edge to this new state
+                    dfa.addTransition(stateID, nextStateID, action);
+                } else {
+                    // Add edge to this previous state
+                    dfa.addTransition(stateID, existingIter->second, action);
+                }
+            }
+        }
+    }
+
+    // Mark final states
+    // Step 1: Get a bitset of final NFA states
     DFAState nfaFinalStates{states.size()};
     for (auto const &state : states) {
         if (state.acceptable) nfaFinalStates.add(state.id);
     }
-    // Use final NFA states to find NFA final states
-    for (auto &entry : dfaStates) {
+    // Step 2: Use final NFA states to find NFA final states
+    for (auto &entry : DFAStateIDMap) {
         if (entry.first.hasIntersection(nfaFinalStates))
             dfa.markFinalState(entry.second);
     }
 
-    // Add edges
-    for (auto const &link : links) {
-        dfa.addTransition(link.first, link.second.dest, link.second.action);
-    }
-
-    // Copy former NFA states to DFA, so we can trace original
-    // states.
-    std::vector<DFAState> nfaStatesBitmap;
-    nfaStatesBitmap.reserve(dfa.states.size());
-    for (auto &iter : iterVec) {
-        nfaStatesBitmap.push_back(
-            std::move(const_cast<util::BitSet &>(iter->first)));
-    }
-    dfa.statesBitmap = std::move(nfaStatesBitmap);  // Move bitmap
-    dfa.formerStates = this->states;                // Copy vec
-
+    // Copy former NFA states to DFA, so we can trace original states.
+    dfa.statesBitmap = std::move(DFAStateVec);  // Move bitmaps
+    dfa.formerStates = this->states;            // Copy vec
     // Can I use a moved vector again?
     // https://stackoverflow.com/a/9168917/13785815
     // Yes, but after calling clear()
     dfa.actionReceivers = std::move(actionReceivers);
-
     dfa.transformedDFAFlag = true;
     return dfa;
 }
