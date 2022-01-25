@@ -16,14 +16,9 @@
 namespace gram {
 class Display;
 class Grammar;
-} // namespace gram
+}  // namespace gram
 
 namespace gram {
-
-// Transition must be used within Automaton.
-// So an iterator should be enough.
-// using ActionContainer = std::unordered_set<String>;
-// using ActionIdentifier = ActionContainer::const_iterator;
 
 enum ActionID : int;
 enum StateID : int;
@@ -35,8 +30,7 @@ struct StateIDPair {
         return from == other.from && to == other.to;
     }
     bool operator<(StateIDPair const &other) const {
-        if (from != other.from)
-            return from < other.from;
+        if (from != other.from) return from < other.from;
         return to < other.to;
     }
 };
@@ -44,21 +38,19 @@ struct StateIDPair {
 // This error is thrown when current state is illegal. This may
 // be caused by not setting start state.
 class AutomatonIllegalStateError : public std::runtime_error {
-  public:
+   public:
     AutomatonIllegalStateError()
         : std::runtime_error("Automaton state is illegal") {}
 };
 
 class AutomatonUnacceptedActionError : public std::runtime_error {
-  public:
+   public:
     AutomatonUnacceptedActionError()
         : std::runtime_error("Action is not accepted by automaton") {}
 };
 
-// Transition is not used as a storage type, but when constructing
-// DFA, this structure is temporarily helpful.
 struct Transition {
-    StateID dest{-1}; // Next state
+    StateID dest{-1};  // Next state
     ActionID action{-1};
 
     Transition(StateID to, ActionID action) : dest(to), action(action) {}
@@ -68,8 +60,7 @@ struct Transition {
     }
 
     bool operator<(Transition const &other) const {
-        if (action != other.action)
-            return action < other.action;
+        if (action != other.action) return action < other.action;
         return dest < other.dest;
     }
 };
@@ -81,22 +72,24 @@ struct AutomatonOutputInfo {
     const char *outGroupTag;
 };
 
-} // namespace gram
+}  // namespace gram
 
 namespace std {
-template <> struct hash<gram::StateID> {
+template <>
+struct hash<gram::StateID> {
     std::size_t operator()(gram::StateID const &k) const {
         return hash<int>()(k);
     }
 };
 
-template <> struct hash<gram::StateIDPair> {
+template <>
+struct hash<gram::StateIDPair> {
     std::size_t operator()(gram::StateIDPair const &k) const {
         auto hasher = hash<int>();
         return hasher(k.from) * 31 + k.to;
     }
 };
-} // namespace std
+}  // namespace std
 
 namespace gram {
 
@@ -104,21 +97,16 @@ struct State {
     bool acceptable;
     StateID id;
 
-    // Used only for LR syntax analysis. Stores state it can produce
-    // with reducing process.
-    // ActionID reduceAction{-1};
-
     std::unordered_multimap<ActionID, StateID> trans;
     String label;
 
-    // Pass string by value so literals like "John" will not
-    // cause a twice-copying situation
+    // Pass string by value so literals will not cause a twice-copying situation
     State(StateID id, String label, bool acceptable)
         : acceptable(acceptable), id(id), label(std::move(label)) {}
 };
 
 class Automaton {
-  public:
+   public:
     using DFAState = util::BitSet;
 
     Automaton();
@@ -159,9 +147,10 @@ class Automaton {
     // Try to accept a new action. Returns false when action is not accepted.
     // The action shouldn't be an end-of-input. Compared to unconditional
     // setState(), move() simulates step-by-step moving.
+    // Up to 2022.1.25: Not used
     void move(ActionID action);
 
-  private:
+   private:
     // Whenever a state has multiple transitions with the same action,
     // this flag is set. So if multiDestFlag is true, this automaton
     // is not a DFA.
@@ -183,6 +172,8 @@ class Automaton {
     // Any attempts to access those methods from an automaton not created
     // by toDFA() method will cause undefined behaviors.
 
+    bool transformedDFAFlag = false;
+
     // For given action, determine which states can accept it.
     // This is used only in transformation to DFA and a transformed DFA.
     // And we won't calculate it until we know size of bitset.
@@ -197,9 +188,7 @@ class Automaton {
     // a previous DFA. The vector provides complete information about
     // former NFA states.
     std::vector<State> formerStates;
-
-    // std::unordered_multimap<StateID, Transition> links;
 };
-} // namespace gram
+}  // namespace gram
 
 #endif

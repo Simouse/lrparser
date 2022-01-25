@@ -4,45 +4,59 @@
 
 #include "src/util/BitSet.h"
 
+#include <cassert>
+#include <type_traits>
+
 namespace util {
 
 BitSet::BitSet(size_type N)
-    : inner_blocks({0}), m_size((N + block_bits - 1) / block_bits), nbits(N) {
+    : inner_blocks({0}), m_size((N + block_bits - 1) / block_bits) {
+    // Make sure m_size is at least n_inner_blocks
+    if (m_size < n_inner_blocks) m_size = n_inner_blocks;
+    // Initialize m_data
     allocMemory(m_size, true);
 }
 
 BitSet::BitSet(BitSet const &other) {
-    *this = other;
+    copyContent(other);
     // 1. Do not release memory in `m_data`, it belongs to `other`.
     // 2. Now this->m_size == other.m_size.
     allocMemory(m_size, false);
-    for (size_type i = 0; i < m_size; ++i) {
-        m_data[i] = other.m_data[i];
-    }
+    copyRange(m_data, other.m_data, 0, m_size);
 }
 
 BitSet::BitSet(BitSet &&other) noexcept {
-    *this = other;
+    copyContent(other);
     other.m_data = nullptr;
 }
 
+// Caveat: small bitsets have self-references. So the moved `m_data`
+// cannot be used directly. We have to check if it must be modified
+// to point to `this->&inner_blocks[0]`
+void BitSet::copyContent(BitSet const &other) {
+    using ClassType = std::remove_reference<decltype(*this)>::type;
+    using CastType = std::array<unsigned char, sizeof(ClassType)>;
+    *(CastType *)this = *(CastType *)&other;
+    // this->m_data = other.m_data;
+    // this->m_size = other.m_size;
+    // this->inner_blocks = other.inner_blocks;
+
+    if (other.m_data == &other.inner_blocks[0]) {
+        this->m_data = &inner_blocks[0];
+    }
+}
+
 // Containers have constructed dirty objects for us ;-(
-// Initializing all data in class definition is a solution.
-// Or, just change size every time copy assignment happens, and 
-// forget about memory reuse even if you have enough capacity.
+// 2022/1/25: This is caused by usages of operator= in constructors,
+// data is not initalized completely by that time.
 BitSet &BitSet::operator=(BitSet const &other) {
-    // Self-assignment check is important
+    // Self-assignment check
     if (this == &other) return *this;
 
     freeMemory();
+    copyContent(other);
     allocMemory(other.m_size, true);
-
-    nbits = other.nbits;
-    m_size = other.m_size;
-    inner_blocks = other.inner_blocks;
-    for (size_type i = 0; i < other.m_size; ++i) {
-        m_data[i] = other.m_data[i];
-    }
+    copyRange(m_data, other.m_data, 0, other.m_size);
     return *this;
 }
 
@@ -51,7 +65,7 @@ BitSet &BitSet::operator=(BitSet &&other) noexcept {
     if (this == &other) return *this;
 
     freeMemory();
-    *this = other;
+    copyContent(other);
     other.m_data = nullptr;
 
     return *this;
@@ -59,27 +73,30 @@ BitSet &BitSet::operator=(BitSet &&other) noexcept {
 
 void BitSet::allocMemory(size_type size, bool setBitsToZeros) {
     m_data = (size > n_inner_blocks) ? new block_type[size] : &inner_blocks[0];
+    m_size = size;
     if (!setBitsToZeros) return;
-    for (size_type i = 0; i < size; ++i) {
-        m_data[i] = 0;
-    }
+    fillZeros(m_data, 0, size);
 }
 
 void BitSet::freeMemory() {
-    if (m_size > n_inner_blocks) {
+    if (m_data && m_data != &inner_blocks[0]) {
+        assert(m_size > n_inner_blocks);
+
         delete[] m_data;
         m_data = nullptr;
     }
 }
 
 bool BitSet::hasIntersection(BitSet const &other) const {
-    for (size_type i = 0; i < m_size; ++i) {
+    auto min_size = m_size < other.m_size ? m_size : other.m_size;
+    for (size_type i = 0; i < min_size; ++i) {
         if (m_data[i] & other.m_data[i]) return true;
     }
     return false;
 }
 
 BitSet &BitSet::operator&=(BitSet const &other) {
+    ensure(other.m_size * block_bits);
     for (size_type i = 0; i < m_size; ++i) {
         m_data[i] &= other.m_data[i];
     }
@@ -87,6 +104,7 @@ BitSet &BitSet::operator&=(BitSet const &other) {
 }
 
 BitSet &BitSet::operator|=(BitSet const &other) {
+    ensure(other.m_size * block_bits);
     for (size_type i = 0; i < m_size; ++i) {
         m_data[i] |= other.m_data[i];
     }
@@ -94,6 +112,7 @@ BitSet &BitSet::operator|=(BitSet const &other) {
 }
 
 BitSet &BitSet::operator^=(BitSet const &other) {
+    ensure(other.m_size * block_bits);
     for (size_type i = 0; i < m_size; ++i) {
         m_data[i] ^= other.m_data[i];
     }
@@ -103,10 +122,7 @@ BitSet &BitSet::operator^=(BitSet const &other) {
 BitSet::~BitSet() { freeMemory(); }
 
 void BitSet::set(size_type N, bool flag) {
-    if (N >= nbits) {
-        throw std::runtime_error(
-            "BitSet(): set(): Given index is out of range");
-    }
+    assert(N < m_size * block_bits);
     if (flag)
         m_data[N / block_bits] |= 1LLU << (N % block_bits);
     else
@@ -114,18 +130,46 @@ void BitSet::set(size_type N, bool flag) {
 }
 
 bool BitSet::contains(size_type N) const {
-    if (N >= nbits) {
-        throw std::runtime_error(
-            "BitSet(): contains(): Given index is out of range");
-    }
+    if (N >= m_size * block_bits) return false;
     return m_data[N / block_bits] & (1LLU << (N % block_bits));
 }
 
 void BitSet::clear() {
+    // If bitset data is corrupted (moved), allocate new mmeory for it
     if (!m_data) {
-        allocMemory(false);
+        allocMemory(m_size, false);
     }
+    // Clear memory
     for (size_type i = 0; i < m_size; ++i) m_data[i] = 0;
+}
+
+void BitSet::fillZeros(block_type *data, size_type from, size_type to) {
+    for (size_type i = from; i < to; ++i) data[i] = 0;
+}
+
+void BitSet::copyRange(block_type *dest, block_type *src, size_type from,
+                       size_type to) {
+    for (size_type i = from; i < to; ++i) dest[i] = src[i];
+}
+
+void BitSet::ensure(size_type N) {
+    size_type leastBlocksNeeded = ((N + block_bits - 1) / block_bits);
+    if (leastBlocksNeeded <= m_size) {
+        return;
+    }
+    auto prevData = m_data;
+    auto prevSize = m_size;
+    size_type capacity = leastBlocksNeeded | (m_size << 1);
+    // Because m_size is always larger than or equal to n_inner_blocks, and
+    // leastBlocksNeeded > m_size now, we know that inner blocks cannot be used.
+    // allocMemory() will definitely request a dynamically allocated memory
+    // space.
+    allocMemory(capacity, false);
+    copyRange(m_data, prevData, 0, prevSize);
+    fillZeros(m_data, prevSize, m_size);
+    if (prevData != &inner_blocks[0]) {
+        delete[] prevData;
+    }
 }
 
 bool BitSet::operator==(BitSet const &other) const {

@@ -80,10 +80,12 @@ StateID Automaton::getState() const { return currentState; }
 StateID Automaton::getStartState() const { return startState; }
 
 auto Automaton::getStatesBitmap() const -> std::vector<DFAState> const & {
+    assert(transformedDFAFlag);
     return statesBitmap;
 }
 
 auto Automaton::getFormerStates() const -> std::vector<State> const & {
+    assert(transformedDFAFlag);
     return formerStates;
 }
 
@@ -124,14 +126,24 @@ auto Automaton::dump(const StateID *posMap) const -> String {
     }
     for (auto &state : states) {
         StateID mappedStateID = posMap ? posMap[state.id] : state.id;
+
         String label = f.reverseEscaped(state.label);
         s += f.formatView("  %d [label=\"%d: %s\"", mappedStateID,
                           mappedStateID, label.c_str());
+
         if (state.acceptable) s += " peripheries=2";
-        if (mappedStateID == getState())
-            s += " fillcolor=yellow style=\"rounded,filled\"";
-        if (stateHighlightSet.find(state.id) != stateHighlightSet.end())
-            s += " color=red penwidth=2 fontcolor=red fontsize=18";
+
+        bool stateFillFlag = mappedStateID == getState();
+        bool stateHightFlag =
+            stateHighlightSet.find(state.id) != stateHighlightSet.end();
+
+        if (stateFillFlag) {
+            s += R"( style="rounded,filled" fontname="times-bold")";
+            if (stateHightFlag)
+                s += R"( color=red fontcolor=white fontname="times-bold")";
+        } else if (stateHightFlag)
+            s += R"( color=red fontcolor=red fontname="times-bold")";
+
         s += "]\n";
         if (mappedStateID == getStartState()) {
             s += f.formatView("  start -> %d\n", mappedStateID);
@@ -144,7 +156,7 @@ auto Automaton::dump(const StateID *posMap) const -> String {
             if (isEpsilonAction(tran.first)) s += " constraint=false";
             if (transitionHighlightSet.find({mappedStateID, mappedDestID}) !=
                 transitionHighlightSet.end()) {
-                s += " color=red penwidth=2 fontcolor=red fontsize=18";
+                s += " color=red fontcolor=red fontname=\"times-bold\"";
             }
             s += "]\n";
         }
@@ -169,8 +181,8 @@ void Automaton::highlightTransition(StateID from, StateID to) const {
 // This function calculate closure and store information in place;
 // Must be used inside toDFA(), because only then transitions are sorted.
 void Automaton::toEpsClosure(DFAState &dfaState) const {
-    std::stack<int> stack;
-    for (auto s : dfaState) stack.push(static_cast<int>(s));
+    std::stack<StateID> stack;
+    for (auto s : dfaState) stack.push(static_cast<StateID>(s));
 
     while (!stack.empty()) {
         auto s = stack.top();
@@ -213,19 +225,20 @@ auto Automaton::transit(DFAState const &dfaState, ActionID action) const
 }
 
 Automaton Automaton::toDFA() {
-    // TODO: display support
+    Automaton dfa;
 
     if (isDFA()) {
-        // Already a DFA: make a copy of itself
-        return *this;
+        // Make a copy
+        dfa = *this;
+        dfa.transformedDFAFlag = true;
+        return dfa;
     }
 
     // Build action-receivers vector
     actionReceivers.clear();
     actionReceivers.reserve(actions.size());
     for (size_t i = 0; i < actions.size(); ++i) {
-        actionReceivers.emplace_back(
-            static_cast<util::BitSet::size_type>(states.size()));
+        actionReceivers.emplace_back(states.size());
     }
     for (auto &state : states) {
         for (auto &tran : state.trans)
@@ -296,8 +309,6 @@ Automaton Automaton::toDFA() {
         }
     }
 
-    Automaton dfa;
-
     // Copy all actions to this new automaton.
     // Epsilon action is no longer useful but is still copyed,
     // so the index of other actions can stay the same.
@@ -357,6 +368,7 @@ Automaton Automaton::toDFA() {
     // Yes, but after calling clear()
     dfa.actionReceivers = std::move(actionReceivers);
 
+    dfa.transformedDFAFlag = true;
     return dfa;
 }
 

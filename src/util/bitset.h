@@ -31,15 +31,26 @@ class BitSet {
 
    private:
     // **Initializing all data here is much much safer**
-    // Default constructor is of no use to copy-assignment in containers
+
+    // Inner blocks (for small bitset)
     std::array<block_type, n_inner_blocks> inner_blocks = {0};
-    block_type *m_data = &inner_blocks[0];
-    size_type m_size = n_inner_blocks;
-    size_type nbits = n_inner_blocks * block_bits;
+    block_type *m_data = nullptr;
+    // Capacity in blocks
+    size_type m_size = 0;
+    // size_type nbits = n_inner_blocks * block_bits;
 
     // Prerequisite: m_size must be set.
     inline void allocMemory(size_type size, bool setBitsToZeros = true);
     inline void freeMemory();
+    // Fill data to 0 in range [from, to).
+    static inline void fillZeros(block_type *data, size_type from,
+                                 size_type to);
+    static inline void copyRange(block_type *dest, block_type *src,
+                                 size_type from, size_type to);
+    // Copy every data member (treat them as trivial values) from `other`.
+    // After that, `m_data` is modified to point to `&inner_blocks[0]` if
+    // small bitset optimization is possible.
+    inline void copyContent(BitSet const &other);
 
    public:
     explicit BitSet(size_type N);
@@ -49,20 +60,24 @@ class BitSet {
     BitSet &operator=(BitSet const &other);
     BitSet &operator=(BitSet &&other) noexcept;
     ~BitSet();
+    // Set N-th bit to `flag`. If dynamical expansion is needed, use ensure() first.
     void set(size_type N, bool flag = true);
+    // Set N-th bit to true. If dynamical expansion is needed, use ensure() first.
     void add(size_type N);
+    // Set N-th bit to false. If dynamical expansion is needed, use ensure() first.
     void remove(size_type N);
+    // Test if N-th bit exists and is set to true.
     [[nodiscard]] bool contains(size_type N) const;
+    // Clear all bits and make bitset usable again (even if it was moved).
     void clear();
+    // Ensure bitset can hold at least N bits.
+    void ensure(size_type N);
     bool operator==(BitSet const &other) const;
-
-    // No safety check. Use at risk.
     BitSet &operator&=(BitSet const &other);
-    // No safety check. Use at risk.
     BitSet &operator|=(BitSet const &other);
-    // No safety check. Use at risk.
     BitSet &operator^=(BitSet const &other);
-    // No safety check. Use at risk.
+
+    // Test if two bitsets have intersection
     [[nodiscard]] bool hasIntersection(BitSet const &other) const;
 
     struct Iterator {
@@ -84,6 +99,8 @@ class BitSet {
 
     [[nodiscard]] Iterator begin() const { return Iterator(*this); }
     [[nodiscard]] Iterator end() const { return Iterator(*this, true); }
+
+    // Dump this bitset in JSON array format.
     [[nodiscard]] String dump() const;
 };
 

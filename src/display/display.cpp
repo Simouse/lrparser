@@ -65,7 +65,7 @@ void lrCleanUp() {
 
 static void handleLog(const char *description, DisplayLogLevel level) {
     if (launchArgs.logLevel < level) return;
-    if (level == DisplayLogLevel::INFO)
+    if (level == INFO)
         printf("> %s\n", description);
     else
         printf("[%-7s] %s\n", logs[level], description);
@@ -75,7 +75,7 @@ static String generateLogLine(const char *description, DisplayLogLevel level) {
     if (launchArgs.logLevel < level || !description) return "";
     util::Formatter f;
     String s;
-    if (level == DisplayLogLevel::INFO)
+    if (level == INFO)
         s += f.formatView("> %s\n", description);
     else
         s += f.formatView("[%-7s] %s\n", logs[level], description);

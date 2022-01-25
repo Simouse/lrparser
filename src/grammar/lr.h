@@ -14,11 +14,6 @@ class Grammar;
 
 namespace gram {
 
-struct SymbolStackInfo {
-    Grammar const *grammar;
-    std::vector<int> const *symbolStack;
-};
-
 // There should be a SyntaxAnalysis base class, but since
 // I don't use that, it's unnecessary.
 class SyntaxAnalysisLR {
