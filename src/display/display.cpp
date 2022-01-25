@@ -1,3 +1,4 @@
+#include <array>
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
@@ -19,10 +20,10 @@ using proc = util::Process;
 // If vector of future is stored in an object or it's class static storage
 // space, it cannot be initialized. Then a compile-time error occurs.
 static std::vector<std::future<void>> futures;
-static std::once_flag outDirFlag;
 
 // Designated assignment is supported only in C++20...
-static const char *logs[DisplayLogLevel::LOG_LEVELS_COUNT] = {nullptr};
+static std::array<const char *, DisplayLogLevel::LOG_LEVELS_COUNT> logs = {
+    nullptr};
 static int automatonCounter = 0;
 
 void lrInit() {
@@ -34,6 +35,9 @@ void lrInit() {
     futures.reserve(16);
 
     util::Process::prevent_zombie();
+
+    fs::path outDir = launchArgs.resultsDir;
+    if (!fs::exists(outDir)) fs::create_directories(outDir);
 }
 
 void lrCleanUp() {
@@ -55,15 +59,8 @@ void lrCleanUp() {
                  "%.1f ms has been spent in waiting for threads to finish",
                  duration.count())
                 .data();
-        display(DisplayType::LOG, DisplayLogLevel::DEBUG, description);
+        display(LOG, DEBUG, description);
     }
-}
-
-static void checkResultsDir() {
-    std::call_once(outDirFlag, []() {
-        fs::path outDir = launchArgs.resultsDir;
-        if (!fs::exists(outDir)) fs::create_directories(outDir);
-    });
 }
 
 static void handleLog(const char *description, DisplayLogLevel level) {
@@ -74,26 +71,39 @@ static void handleLog(const char *description, DisplayLogLevel level) {
         printf("[%-7s] %s\n", logs[level], description);
 }
 
-static void handleSymbolStack(const char *description,
-                              SymbolStackInfo const *info) {
+static String generateLogLine(const char *description, DisplayLogLevel level) {
+    if (launchArgs.logLevel < level || !description) return "";
     util::Formatter f;
     String s;
-    s += f.formatView("> %-14s: Bottom| ", description);
-    size_t sz = info->symbolStack->size();
-    auto const &symbols = info->grammar->getAllSymbols();
+    if (level == DisplayLogLevel::INFO)
+        s += f.formatView("> %s\n", description);
+    else
+        s += f.formatView("[%-7s] %s\n", logs[level], description);
+    return s;
+}
+
+static void handleSymbolStack(const char *description, DisplayLogLevel logLevel,
+                              std::vector<SymbolID> const *symbolStack,
+                              Grammar const *grammar) {
+    util::Formatter f;
+    String s;
+    s += generateLogLine(description, logLevel);
+    s += "Bottom| ";
+    size_t sz = symbolStack->size();
+    auto const &symbols = grammar->getAllSymbols();
     for (size_t i = 0; i < sz; ++i) {
-        s += f.formatView(
-            i == 0 ? "%s" : ",%s",
-            symbols[info->symbolStack->operator[](i)].name.c_str());
+        s += f.formatView(i == 0 ? "%s" : ",%s",
+                          symbols[symbolStack->at(i)].name.c_str());
     }
     printf("%s\n", s.c_str());
 }
 
-static void handleStateStack(const char *description,
+static void handleStateStack(const char *description, DisplayLogLevel logLevel,
                              std::vector<gram::StateID> const *stack) {
     util::Formatter f;
     String s;
-    s += f.formatView("> %-14s: Bottom| ", description);
+    s += generateLogLine(description, logLevel);
+    s += "Bottom| ";
     size_t sz = stack->size();
     for (size_t i = 0; i < sz; ++i) {
         s += f.formatView(i == 0 ? "%d" : ",%d", stack->operator[](i));
@@ -101,7 +111,7 @@ static void handleStateStack(const char *description,
     printf("%s\n", s.c_str());
 }
 
-static void handleParseTable(const char *description,
+static void handleParseTable(const char *description, DisplayLogLevel logLevel,
                              gram::SyntaxAnalysisLR const *lr) {
     constexpr const int indexWidth = 8;
     constexpr const int actionWidth = 8;
@@ -116,7 +126,7 @@ static void handleParseTable(const char *description,
     util::Formatter f;
     String outputString;
 
-    outputString += f.formatView("> %s\n", description);
+    outputString += generateLogLine(description, logLevel);
 
     // Split symbols into terminals and non-terminals:
     // 1. Do not add epsilon.
@@ -175,21 +185,18 @@ static void handleParseTable(const char *description,
     printf("%s", outputString.c_str());
 }
 
-static void handleAutomaton(const char *description,
-                            gram::AutomatonOutputInfo const *info) {
+static void handleAutomaton(const char *description, DisplayLogLevel logLevel,
+                            const char *prefix, Automaton const *automaton) {
     util::Formatter f;
-
-    checkResultsDir();
 
     // Get file path
     fs::path outFile = launchArgs.resultsDir;
-    outFile.append(
-        f.formatView("%s.%d.gv", info->outGroupTag, automatonCounter++));
+    outFile.append(f.formatView("%s.%d.gv", prefix, automatonCounter++));
     String gvFileName = outFile.string();
 
-    printf("> %s\n", description);
+    handleLog(description, logLevel);
 
-    String s = info->automaton->dump();
+    String s = automaton->dump();
 
     FILE *file = std::fopen(gvFileName.c_str(), "w");
     std::fwrite(s.c_str(), sizeof(char), s.size(), file);
@@ -209,12 +216,12 @@ static void handleAutomaton(const char *description,
                 auto clock = std::chrono::steady_clock();
                 auto t1 = clock.now();
 
-                const char *args[] = {"dot",
-                                      "-Tsvg",
-                                      "-o",
-                                      svgFileName.c_str(),
-                                      gvFileName.c_str(),
-                                      nullptr};
+                std::array<const char *, 6> args = {"dot",
+                                                    "-Tsvg",
+                                                    "-o",
+                                                    svgFileName.c_str(),
+                                                    gvFileName.c_str(),
+                                                    nullptr};
                 proc::exec("dot", const_cast<char **>(&args[0]));
 
                 auto t2 = clock.now();
@@ -225,7 +232,7 @@ static void handleAutomaton(const char *description,
                                                "in creating a process",
                                                duration.count())
                                               .data();
-                display(DisplayType::LOG, DisplayLogLevel::DEBUG, description);
+                display(LOG, DEBUG, description);
             }));
 
         auto t2 = clock.now();
@@ -236,11 +243,11 @@ static void handleAutomaton(const char *description,
                                        "in creating a thread",
                                        duration.count())
                                       .data();
-        display(DisplayType::LOG, DisplayLogLevel::DEBUG, description);
+        display(LOG, DEBUG, description);
     }
 }
 
-static void handleSymbolTable(const char *description,
+static void handleSymbolTable(const char *description, DisplayLogLevel logLevel,
                               gram::Grammar const *grammar) {
     constexpr const char *lineFmt = "%*s %10s %*s %16s\n";
     constexpr const int nameWidth = 10;
@@ -251,7 +258,7 @@ static void handleSymbolTable(const char *description,
     util::Formatter f;
     String outputString;
 
-    outputString += f.formatView("> %s\n", description);
+    outputString += generateLogLine(description, logLevel);
     outputString += f.formatView(lineFmt, nameWidth, "Name", "Nullable",
                                  firstWidth, "First{}", "Follow{}");
     outputString += f.formatView(lineFmt, nameWidth, dashline, dashline,
@@ -281,37 +288,41 @@ static void handleSymbolTable(const char *description,
 }
 
 static void handleGrammarRules(const char *description,
+                               DisplayLogLevel logLevel,
                                gram::Grammar const *grammar) {
     String s = grammar->dump();
-    printf("> %s\n%s\n", description, s.c_str());
+    String logLine = generateLogLine(description, logLevel);
+    printf("> %s%s\n", logLine.c_str(), s.c_str());
 }
 
-void display(DisplayType type, DisplayData data, const char *description) {
+void display(DisplayType type, DisplayLogLevel level, const char *description,
+             void const *pointer, void const *auxPointer) {
     switch (type) {
         case DisplayType::AUTOMATON:
-            handleAutomaton(description,
-                            (AutomatonOutputInfo const *)data.pointer);
+            handleAutomaton(description, level, (const char *)auxPointer,
+                            (Automaton const *)pointer);
             break;
         case DisplayType::SYMBOL_TABLE:
-            handleSymbolTable(description, (Grammar const *)data.pointer);
+            handleSymbolTable(description, level, (Grammar const *)pointer);
             break;
         case DisplayType::LOG:
-            handleLog(description, (DisplayLogLevel)data.logLevel);
+            handleLog(description, level);
             break;
         case DisplayType::PARSE_TABLE:
-            handleParseTable(description,
-                             (SyntaxAnalysisLR const *)data.pointer);
+            handleParseTable(description, level,
+                             (SyntaxAnalysisLR const *)pointer);
             break;
         case DisplayType::GRAMMAR_RULES:
-            handleGrammarRules(description, (Grammar const *)data.pointer);
+            handleGrammarRules(description, level, (Grammar const *)pointer);
             break;
         case DisplayType::LR_STATE_STACK:
-            handleStateStack(description,
-                             (std::vector<StateID> const *)data.pointer);
+            handleStateStack(description, level,
+                             (std::vector<StateID> const *)pointer);
             break;
         case DisplayType::LR_SYMBOL_STACK:
-            handleSymbolStack(description,
-                              (SymbolStackInfo const *)data.pointer);
+            handleSymbolStack(description, level,
+                              (std::vector<SymbolID> const *)pointer,
+                              (Grammar const *)auxPointer);
             break;
         default:
             fprintf(stderr, "[WARN] Unknown display type. Check your code.\n");

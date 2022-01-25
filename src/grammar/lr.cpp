@@ -22,7 +22,7 @@ namespace gram {
 // which generates a description for the state. e.g.
 // S -> aB : S0 = {S -> .aB, S -> a.B, S -> aB.}
 static String createStateNameLR0(const gram::Grammar &G, const gram::Symbol &N,
-                                 const std::vector<int> &productionBody,
+                                 const std::vector<SymbolID> &productionBody,
                                  int dotPos) {
     assert(static_cast<size_t>(dotPos) <= productionBody.size());
 
@@ -69,7 +69,7 @@ void SyntaxAnalysisSLR::buildNFA() {
         M.addAction(symbol.name);
     }
 
-    AutomatonOutputInfo automatonInfo{&M, "build_nfa"};
+    constexpr const char *outFilePrefix = "build_nfa";
 
     // States from grammar
     auto const &productionTable = G.getProductionTable();
@@ -91,7 +91,8 @@ void SyntaxAnalysisSLR::buildNFA() {
             StateID thisState{stateIds[dotPos]};
             StateID nextState{stateIds[dotPos + 1]};
             auto &nextSymbol = symbols[rightSymbols[dotPos]];
-            M.addTransition(thisState, nextState, ActionID{nextSymbol.id});
+            M.addTransition(thisState, nextState,
+                            static_cast<ActionID>(nextSymbol.id));
 
             // Which non-terminal symbol do I want to link to?
             if (nextSymbol.type == gram::SymbolType::NON_TERM) {
@@ -108,12 +109,12 @@ void SyntaxAnalysisSLR::buildNFA() {
 
         String displayInfo =
             "Add states by production: " + gram.dumpProduction(productionId);
-        display(DisplayType::AUTOMATON, &automatonInfo, displayInfo.c_str());
+        display(AUTOMATON, INFO, displayInfo.c_str(), &M,
+                (void *)outFilePrefix);
     }
 
     // Start state: Create S' for S
     // Since name cannot contain a `'` in it, `S'` is legit
-    StateID extStart{-1}, extEnd{-1};
     {
         auto dotSign = Grammar::SignStrings::dot;
         auto &start = G.getStartSymbol();
@@ -121,22 +122,19 @@ void SyntaxAnalysisSLR::buildNFA() {
         StateID s0 = M.addState(name + " -> " + dotSign + " " + start.name);
         M.markStartState(s0);
         StateID s1 = M.addState(name + " -> " + start.name + " " + dotSign);
-        M.addTransition(s0, s1, ActionID{start.id});
+        M.addTransition(s0, s1, static_cast<ActionID>(start.id));
         M.markStartState(s0);
         epsilonLinks.emplace(s0, start.id);
-        extStart = s0;
-        extEnd = s1;
+        this->extendedStart = s0;
+        this->extendedEnd = s1;
     }
 
-    // Save id of NFA final state of augmented grammar
-    this->extendedEnd = extEnd;
-
-    display(DisplayType::AUTOMATON, &automatonInfo,
-            "Create new start and end for augmented grammar");
+    display(AUTOMATON, INFO, "Create new start and end for augmented grammar",
+            &M, (void *)outFilePrefix);
 
     // Mark final states
     // The last state of augmented start symbol production is a final state.
-    M.markFinalState(extEnd);
+    M.markFinalState(this->extendedEnd);
 
     // If a non-terminal has a `$` in its follow set,
     // all productions which generate this symbol will be marked final.
@@ -152,6 +150,8 @@ void SyntaxAnalysisSLR::buildNFA() {
         }
     }
 
+    display(AUTOMATON, INFO, "Mark final states", &M, (void *)outFilePrefix);
+
     // Creating epsilon edge for each symbol
     for (const auto &link : epsilonLinks) {
         StateID from = link.first;
@@ -161,16 +161,16 @@ void SyntaxAnalysisSLR::buildNFA() {
 
         String description =
             "Create epsilon edges for state " + std::to_string(from);
-        display(DisplayType::AUTOMATON, &automatonInfo, description.c_str());
+        display(AUTOMATON, INFO, description.c_str(), &M,
+                (void *)outFilePrefix);
     }
 
-    display(DisplayType::AUTOMATON, &automatonInfo, "NFA is built");
+    display(AUTOMATON, INFO, "NFA is built", &M, (void *)outFilePrefix);
 }
 
 void SyntaxAnalysisSLR::buildDFA() {
     dfa = nfa.toDFA();
-    AutomatonOutputInfo info{&dfa, "build_dfa"};
-    display(DisplayType::AUTOMATON, &info, "DFA is built");
+    display(AUTOMATON, INFO, "DFA is built", &dfa, (void *)"build_dfa");
 }
 
 void SyntaxAnalysisSLR::buildParseTables() {
@@ -206,8 +206,7 @@ void SyntaxAnalysisSLR::buildParseTables() {
     // Process "reduce"
     // Bitset for reducible NFA states (so we can know if a DFA state is
     // reducible)
-    util::BitSet mask{
-        static_cast<util::BitSet::size_type>(formerStates.size())};
+    util::BitSet mask{formerStates.size()};
 
     for (auto const &entry : reduceMap) {
         mask.add(entry.first);
@@ -224,7 +223,8 @@ void SyntaxAnalysisSLR::buildParseTables() {
                 ProductionID prodID = reduceMap.at(nfaState);
                 int reducedSymbolID = productions[prodID].leftSymbol;
                 auto const &symbol = symbols[reducedSymbolID];
-                if (symbol.followSet.find(action) != symbol.followSet.end()) {
+                if (symbol.followSet.find(static_cast<SymbolID>(action)) !=
+                    symbol.followSet.end()) {
                     addParseTableEntry(
                         state, action,
                         ParseAction{ParseAction::REDUCE, prodID});
@@ -234,7 +234,7 @@ void SyntaxAnalysisSLR::buildParseTables() {
     }
 
     // Process end of input
-    auto endOfInput = ActionID{gram.getEndOfInputSymbol().id};
+    auto endOfInput = static_cast<ActionID>(gram.getEndOfInputSymbol().id);
     for (int i = 0; i < nDFAStates; ++i) {
         if (statesBitmap[i].contains(this->extendedEnd)) {
             addParseTableEntry(StateID{i}, endOfInput,
@@ -242,7 +242,7 @@ void SyntaxAnalysisSLR::buildParseTables() {
         }
     }
 
-    display(DisplayType::PARSE_TABLE, this, "Parse table");
+    display(PARSE_TABLE, INFO, "Parse table", this);
 }
 
 void SyntaxAnalysisSLR::addParseTableEntry(StateID state, ActionID act,
@@ -310,11 +310,9 @@ bool SyntaxAnalysisSLR::test(std::istream &stream) try {
     bool endOfInput = false;
     String s;
 
-    SymbolStackInfo symbolStackInfo{&gram, &symbolStack};
-
-    display(DisplayType::LR_STATE_STACK, &stateStack, "State stack");
-    display(DisplayType::LR_SYMBOL_STACK, &symbolStackInfo, "Symbol stack");
-    display(DisplayType::LOG, DisplayLogLevel::INFO,
+    display(LR_STATE_STACK, INFO, "State stack", &stateStack);
+    display(LR_SYMBOL_STACK, INFO, "Symbol stack", &symbolStack, &gram);
+    display(LOG, INFO,
             "Please input symbols for test (Use '$' to end the input):");
 
     while (true) {
@@ -366,16 +364,16 @@ bool SyntaxAnalysisSLR::test(std::istream &stream) try {
                 reduce(decision.productionID);
                 break;
             case ParseAction::SUCCESS:
-                display(DisplayType::LOG, DisplayLogLevel::INFO, "Success");
+                display(LOG, INFO, "Success");
                 return true;
         }
 
-        display(DisplayType::LR_STATE_STACK, &stateStack, "State stack");
-        display(DisplayType::LR_SYMBOL_STACK, &symbolStackInfo, "Symbol stack");
+        display(LR_STATE_STACK, INFO, "State stack", &stateStack);
+        display(LR_SYMBOL_STACK, INFO, "Symbol stack", &symbolStack, &gram);
     }
     throw UnreachableCodeError();
 } catch (std::exception const &e) {
-    display(DisplayType::LOG, DisplayLogLevel::ERR, e.what());
+    display(LOG, ERR, e.what());
     return false;
 }
 
@@ -405,7 +403,7 @@ void SyntaxAnalysisSLR::reduce(ProductionID prodID) {
     // symbolStack.push_back(prod.leftSymbol);
     nextSymbolStack.push_back(prod.leftSymbol);
     String info = "Apply reduction rule: " + std::to_string(prodID);
-    display(DisplayType::LOG, DisplayLogLevel::VERBOSE, info.c_str());
+    display(LOG, VERBOSE, info.c_str());
 }
 
 }  // namespace gram

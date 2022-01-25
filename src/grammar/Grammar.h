@@ -12,22 +12,22 @@
 
 namespace gram {
 class Automaton;
-// class Display;
-} // namespace gram
+}  // namespace gram
 
 namespace gram {
 enum SymbolType {
     NON_TERM = 0,
-    TERM = 1, // For bool comparison
+    TERM = 1,  // For bool comparison
     UNCHECKED
 };
 
 enum ProductionID : int;
+enum SymbolID : int;
 
 struct Production {
-    int leftSymbol;
-    std::vector<int> rightSymbols;
-    Production(int left, std::vector<int> right)
+    SymbolID leftSymbol;
+    std::vector<SymbolID> rightSymbols;
+    Production(SymbolID left, std::vector<SymbolID> right)
         : leftSymbol(left), rightSymbols(std::move(right)) {}
 };
 
@@ -36,46 +36,47 @@ using ProductionTable = std::vector<Production>;
 class Grammar;
 
 struct Symbol {
-    using symset_t = ::std::set<int>;
+    // We want symbol set to be sorted (better for display)
+    using symset_t = ::std::set<SymbolID>;
     std::optional<bool> nullable;
     SymbolType type;
-    int id;
+    SymbolID id;
     String name;
     // Productions that can generate this symbol
     std::vector<ProductionID> productions;
     symset_t firstSet;
     symset_t followSet;
 
-    Symbol(SymbolType type, int id, String name)
+    Symbol(SymbolType type, SymbolID id, String name)
         : type(type), id(id), name(std::move(name)) {}
 };
 
 class UnsolvedSymbolError : public std::runtime_error {
-  public:
+   public:
     explicit UnsolvedSymbolError(const Symbol &sym)
-        : symInQuestion(sym), std::runtime_error("Unsolved symbol: " +
-                                                 sym.name) {}
+        : std::runtime_error("Unsolved symbol: " + sym.name),
+          symInQuestion(sym) {}
     const Symbol &symInQuestion;
 };
 
 // This error is thrown if we try to look up a symbol which does not exist after
 // grammar is built.
 class NoSuchSymbolError : public std::runtime_error {
-  public:
+   public:
     explicit NoSuchSymbolError(String const &name)
         : std::runtime_error("No such symbol: " + name) {}
 };
 
 class Grammar {
-  public:
+   public:
     using symvec_t = std::vector<Symbol>;
-    using idtbl_t = std::unordered_map<String, int>;
+    using idtbl_t = std::unordered_map<String, SymbolID>;
 
-  private:
+   private:
     friend class GrammarReader;
-    int start = -1;
-    int epsilon = -1;
-    int endOfInput = -1;
+    SymbolID start{-1};
+    SymbolID epsilon{-1};
+    SymbolID endOfInput{-1};
     symvec_t symbolVector;
     idtbl_t idTable;
     ProductionTable productionTable;
@@ -85,30 +86,30 @@ class Grammar {
     // only want GrammarReader to access its methods.
     Grammar();
 
-    ProductionID addProduction(int leftSymbol, std::vector<int> rightSymbols);
+    ProductionID addProduction(SymbolID leftSymbol, std::vector<SymbolID> rightSymbols);
 
     // This method can detect duplicates. All symbol-putting methods should
     // eventually call this one.
-    int putSymbolNoDuplicate(Symbol &&sym);
+    SymbolID putSymbolNoDuplicate(Symbol &&sym);
 
-    int putSymbol(const char *name, bool isTerm);
+    SymbolID putSymbol(const char *name, bool isTerm);
 
     // This method can put symbol with delayed existence checking
-    int putSymbolUnchecked(const char *name);
+    SymbolID putSymbolUnchecked(const char *name);
 
     // Throws if there are violations
     void checkViolations();
 
     void setStart(const char *name);
 
-    void addAlias(int sid, const char *alias);
+    void addAlias(SymbolID sid, const char *alias);
 
     // Recursively resolve Follow set dependency: a dependency table must be
     // built first.
     void resolveFollowSet(
         std::vector<int> &visit,
-        std::unordered_map<int, std::unordered_set<int>> &dependencyTable,
-        std::pair<const int, std::unordered_set<int>> &dependency);
+        std::unordered_map<SymbolID, std::unordered_set<SymbolID>> &dependencyTable,
+        std::pair<const SymbolID, std::unordered_set<SymbolID>> &dependency);
 
     // Recursively resolve First set dependency
     void resolveFirstSet(std::vector<int> &visit, Symbol &curSymbol);
@@ -116,7 +117,7 @@ class Grammar {
     // Recursively resolve nullable dependency
     bool resolveNullable(Symbol &sym);
 
-  public:
+   public:
     [[nodiscard]] symvec_t const &getAllSymbols() const;
     [[nodiscard]] const Symbol &getStartSymbol() const;
     [[nodiscard]] const Symbol &getEpsilonSymbol() const;
@@ -141,11 +142,11 @@ class Grammar {
     static auto fromStdin() -> Grammar;
 
     struct SignStrings {
-        static constexpr const char *dot = "\xE2\x97\x8F"; // "●" in UTF-8
-        static constexpr const char *epsilon = "\xCE\xB5"; // "ε" in UTF-8
+        static constexpr const char *dot = "\xE2\x97\x8F";  // "●" in UTF-8
+        static constexpr const char *epsilon = "\xCE\xB5";  // "ε" in UTF-8
         static constexpr const char *endOfInput = "$";
     };
 };
-} // namespace gram
+}  // namespace gram
 
 #endif

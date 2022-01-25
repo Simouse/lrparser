@@ -14,13 +14,13 @@ using StringView = ::std::string_view;
 // Only define types associated with the last void * argument.
 // How to display those types are not specified.
 enum DisplayType {
-  LOG = 0,  // So nullptr can be LOG
-  AUTOMATON,
-  SYMBOL_TABLE,
-  PARSE_TABLE,
-  GRAMMAR_RULES,
-  LR_STATE_STACK,
-  LR_SYMBOL_STACK
+    LOG = 0,  // So nullptr can be LOG
+    AUTOMATON,
+    SYMBOL_TABLE,
+    PARSE_TABLE,
+    GRAMMAR_RULES,
+    LR_STATE_STACK,
+    LR_SYMBOL_STACK
 };
 
 // INFO:    Provide important text information for users
@@ -29,41 +29,41 @@ enum DisplayType {
 // ERR:     Error happened. Maybe it's caused by some illegal input.
 enum DisplayLogLevel { INFO = 0, ERR, VERBOSE, DEBUG, LOG_LEVELS_COUNT };
 
-struct DisplayData {
-  union {
-    void *pointer;
-    DisplayLogLevel logLevel;
-  };
-  DisplayData(void *p) : pointer(p) {}
-  DisplayData(DisplayLogLevel level) : logLevel(level) {}
-};
+// struct DisplayData {
+//     void *pointer;
+//     const char *outputFilePrefix;
+//     DisplayLogLevel logLevel;
+//     DisplayData(DisplayLogLevel level = DisplayLogLevel::INFO,
+//                 void *p = nullptr, const char *prefix = nullptr)
+//         : pointer(p), outputFilePrefix(prefix), logLevel(level) {}
+// };
 
-// Data may be NULL if you don't need it.
-void display(DisplayType type, DisplayData data, const char *description);
+void display(DisplayType type, DisplayLogLevel level, const char *description,
+             void const *pointer = nullptr, void const *auxPointer = nullptr);
 void lrInit();
 void lrCleanUp();
 
 // 3. Errors
 struct UnimplementedError : public ::std::runtime_error {
-  UnimplementedError() : ::std::runtime_error("Operation not implemented") {}
+    UnimplementedError() : ::std::runtime_error("Operation not implemented") {}
 };
 
 struct UnsupportedError : public ::std::runtime_error {
-  UnsupportedError() : ::std::runtime_error("Operation not supported") {}
+    UnsupportedError() : ::std::runtime_error("Operation not supported") {}
 };
 
 struct UnreachableCodeError : public ::std::logic_error {
-  UnreachableCodeError() : ::std::logic_error("Unreachable code") {}
+    UnreachableCodeError() : ::std::logic_error("Unreachable code") {}
 };
 
 // 4. Arguments
 struct LaunchArguments {
-  bool launchSuccess = true;
-  bool nodot = false;
-  bool strict = false;
-  DisplayLogLevel logLevel = VERBOSE;
-  String grammarFileName = "grammar.txt";
-  String resultsDir = "results";
+    bool launchSuccess = true;
+    bool nodot = false;
+    bool strict = false;
+    DisplayLogLevel logLevel = VERBOSE;
+    String grammarFileName = "grammar.txt";
+    String resultsDir = "results";
 };
 
 extern LaunchArguments launchArgs;

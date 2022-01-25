@@ -84,6 +84,7 @@ class SyntaxAnalysisSLR : public SyntaxAnalysisLR {
 
    private:
     StateID extendedEnd{-1};
+    StateID extendedStart{-1};
     Automaton nfa;
     Automaton dfa;
     ParseTable parseTable;

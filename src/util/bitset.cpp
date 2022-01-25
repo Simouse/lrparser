@@ -47,7 +47,7 @@ BitSet &BitSet::operator=(BitSet const &other) {
 }
 
 // This operator is not even used...
-BitSet &BitSet::operator=(BitSet &&other) {
+BitSet &BitSet::operator=(BitSet &&other) noexcept {
     if (this == &other) return *this;
 
     freeMemory();

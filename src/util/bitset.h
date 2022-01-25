@@ -42,12 +42,12 @@ class BitSet {
     inline void freeMemory();
 
    public:
+    explicit BitSet(size_type N);
+    BitSet() = delete;
     BitSet(BitSet const &other);
     BitSet(BitSet &&other) noexcept;
     BitSet &operator=(BitSet const &other);
-    BitSet &operator=(BitSet &&other);
-    explicit BitSet(size_type N);
-    BitSet() = delete;
+    BitSet &operator=(BitSet &&other) noexcept;
     ~BitSet();
     void set(size_type N, bool flag = true);
     void add(size_type N);
