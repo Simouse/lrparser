@@ -100,7 +100,7 @@ class BitSet {
     [[nodiscard]] Iterator begin() const { return Iterator(*this); }
     [[nodiscard]] Iterator end() const { return Iterator(*this, true); }
 
-    // Dump this bitset in JSON array format.
+    // Dump this bitset in human-readable format.
     [[nodiscard]] String dump() const;
 };
 

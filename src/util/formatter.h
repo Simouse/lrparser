@@ -3,6 +3,7 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <type_traits>
 
 #include "src/common.h"
 
@@ -14,13 +15,16 @@ class Formatter {
     char *buf;
     int maxSize = INIT_SIZE;
 
-  public:
+   public:
     Formatter() : buf(mbuf) { mbuf[0] = '\0'; }
     Formatter(Formatter const &f) = delete;
 
     // Return value should be used right away
     template <class... Ts>
     StringView formatView(const char *fmt, Ts const &...args) {
+        static_assert(((std::is_scalar_v<Ts> || std::is_array_v<Ts>)&&...),
+                      "All arguments must be of primitive types");
+
         int sz;
 
         while ((sz = ::std::snprintf(buf, maxSize, fmt, args...)) >= maxSize) {
@@ -37,8 +41,10 @@ class Formatter {
         return {buf, static_cast<size_t>(sz)};
     }
 
-    template <class... Ts> String format(const char *fmt, Ts const &...args) {
-        return formatView(fmt, args...);
+    template <class... Ts>
+    String format(const char *fmt, Ts const &...args) {
+        auto sv = formatView(fmt, args...);
+        return {sv.data(), sv.size()};
     }
 
     // This method protects chars from being escaped.
@@ -48,14 +54,14 @@ class Formatter {
         String s;
         for (char ch : sv) {
             switch (ch) {
-            case '\'':
-            case '\"':
-            case '\\':
-                s += '\\';
-                s += ch;
-                break;
-            default:
-                s += ch;
+                case '\'':
+                case '\"':
+                case '\\':
+                    s += '\\';
+                    s += ch;
+                    break;
+                default:
+                    s += ch;
             }
         }
         return s;
@@ -78,10 +84,9 @@ class Formatter {
     }
 
     ~Formatter() {
-        if (buf != mbuf)
-            delete[] buf;
+        if (buf != mbuf) delete[] buf;
     }
 };
-} // namespace util
+}  // namespace util
 
 #endif

@@ -1,26 +1,33 @@
 #include <cstring>
 #include <iostream>
+#include <string>
 
 #include "src/common.h"
 #include "src/grammar/Grammar.h"
-#include "src/grammar/lr.h"
+#include "src/parser/LR0Parser.h"
+#include "src/parser/LRParser.h"
+#include "src/parser/SLRParser.h"
+#include "src/util/Formatter.h"
 
 using namespace gram;
 
 LaunchArguments launchArgs;
 
-void printUsageAndExit() {
+void printUsageAndExit(bool printErrorLine = true) {
     // Procedures in deconstructors can be tricky.
     launchArgs.launchSuccess = false;
+    if (printErrorLine) {
+        printf("Error: Illegal arguments.\n\n");
+    }
     printf(
-        "This program reads possibly SLR grammar from <Grammar file>, takes "
+        "This program reads possibly LR grammar from <Grammar file>, takes "
         "test sequence from standard input stream, and stores analysis results "
         "into <Result Dir>.\n"
         "\n"
-        "Usage: lrparser -g<Grammar file> [-o<Result Dir>] [--nodot] "
-        "[--strict] [--debug] [-h|--help]\n"
+        "Usage: lrparser -t<Type> -g<Grammar file> [-o<Result Dir>] [--nodot] "
+        "[--strict] [--debug] [-h|--help] [-s]\n"
         "\n"
-        "Possible command: lrparser -g grammar.txt -o results\n"
+        "Possible command: lrparser -tslr -g grammar.txt -o results\n"
         "Grammar file:\n"
         "    1) Use `!` or `#` to start a line comment.\n"
         "    2) Token naming is based on C-style variable naming. Besides, "
@@ -44,6 +51,8 @@ void printUsageAndExit() {
         "    exp   -> exp '+' term  | term\n"
         "    term  -> term '*' fac  | fac\n"
         "    fac   -> ID            | \"(\" exp ')'\n"
+        "-t        option: Choose a parser type. Available: lr0, slr, lalr, "
+        "lr1. (Default: slr)\n"
         "-o        option: Specify output directory. (Default: \"results\").\n"
         "-g        option: Specify grammar file path. (Default: "
         "\"grammar.txt\")\n"
@@ -52,17 +61,55 @@ void printUsageAndExit() {
         "--strict  option: Input token names must conform to rules of grammar "
         "file. Without this option, they are simply space-splitted.\n"
         "--debug   option: Set output level to DEBUG.\n"
-        "-h|--help option: Output help message.\n");
+        "-h|--help option: Output help message.\n"
+        "-s        option: Read <stdin> step by step. If you have to process a "
+        "very large input file, you may need this option. But without this "
+        "option the parser can provide better display for input queue.\n");
     exit(0);
 }
 
 void lrMain() {
     Grammar g = Grammar::fromFile(launchArgs.grammarFileName.c_str());
-    SyntaxAnalysisSLR slr(g);
-    slr.buildNFA();
-    slr.buildDFA();
-    slr.buildParseTables();
-    slr.test(std::cin);
+    reportTime("Grammar rules read");
+
+    // Choose a parser
+    LRParser *parser;
+    LR0Parser lr0(g);
+    SLRParser slr(g);
+    switch (launchArgs.parserType) {
+        case LR0:
+            parser = &lr0;
+            break;
+        case SLR:
+            parser = &slr;
+            break;
+        default:
+            fprintf(stderr, "Unknown parser type. Check your code\n");
+            exit(1);
+    }
+
+    parser->buildNFA();
+    reportTime("NFA built");
+    parser->buildDFA();
+    reportTime("DFA built");
+    parser->buildParseTables();
+    reportTime("Parse table built");
+    parser->test(std::cin);
+    reportTime("Test finished");
+}
+
+void chooseParserType(const char *s) {
+    if (strcmp("lr0", s) == 0) {
+        launchArgs.parserType = LR0;
+    } else if (strcmp("slr", s) == 0) {
+        launchArgs.parserType = SLR;
+    } else if (strcmp("lalr", s) == 0) {
+        launchArgs.parserType = LALR;
+    } else if (strcmp("lr1", s) == 0) {
+        launchArgs.parserType = LR1;
+    } else {
+        printUsageAndExit();
+    }
 }
 
 void lrParseArgs(int argc, char **argv) {
@@ -70,14 +117,21 @@ void lrParseArgs(int argc, char **argv) {
     using std::strncmp;
     for (int i = 1; i < argc; ++i) {
         if (strncmp("-g", argv[i], 2) == 0) {
-            if ((launchArgs.grammarFileName = argv[i++] + 2).empty()) {
-                if (i >= argc) printUsageAndExit();
+            if ((launchArgs.grammarFileName = argv[i] + 2).empty()) {
+                if (++i >= argc) printUsageAndExit();
                 launchArgs.grammarFileName = argv[i];
             }
         } else if (strncmp("-o", argv[i], 2) == 0) {
-            if ((launchArgs.resultsDir = argv[i++] + 2).empty()) {
-                if (i >= argc) printUsageAndExit();
+            if ((launchArgs.resultsDir = argv[i] + 2).empty()) {
+                if (++i >= argc) printUsageAndExit();
                 launchArgs.resultsDir = argv[i];
+            }
+        } else if (strncmp("-t", argv[i], 2) == 0) {
+            if (*(argv[i] + 2)) {
+                chooseParserType(argv[i] + 2);
+            } else {
+                if (++i >= argc) printUsageAndExit();
+                chooseParserType(argv[i] + 2);
             }
         } else if (strcmp("--nodot", argv[i]) == 0) {
             launchArgs.nodot = true;
@@ -87,9 +141,10 @@ void lrParseArgs(int argc, char **argv) {
             launchArgs.logLevel = DEBUG;
         } else if (strcmp("--help", argv[i]) == 0 ||
                    strcmp("-h", argv[i]) == 0) {
-            printUsageAndExit();
+            printUsageAndExit(false);
+        } else if (strcmp("-s", argv[i]) == 0) {
+            launchArgs.exhaustInput = false;
         } else {
-            printf("Error: Illegal arguments.\n\n");
             printUsageAndExit();
         }
     }
@@ -103,4 +158,5 @@ int main(int argc, char **argv) {
     lrParseArgs(argc, argv);
     lrMain();
     lrCleanUp();
+    reportTime("Clean up");
 }

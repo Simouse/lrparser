@@ -9,7 +9,8 @@
 #include "src/automata/Automaton.h"
 #include "src/common.h"
 #include "src/grammar/Grammar.h"
-#include "src/grammar/lr.h"
+#include "src/parser/LRParser.h"
+#include "src/parser/SLRParser.h"
 #include "src/util/Formatter.h"
 #include "src/util/Process.h"
 
@@ -25,8 +26,27 @@ static std::vector<std::future<void>> futures;
 static std::array<const char *, DisplayLogLevel::LOG_LEVELS_COUNT> logs = {
     nullptr};
 static int automatonCounter = 0;
+static std::chrono::steady_clock globalClock;
+static decltype(globalClock.now()) startUpTime;
+
+double upTimeInMilli() {
+    auto now = globalClock.now();
+    std::chrono::duration<double, std::milli> duration = now - startUpTime;
+    return duration.count();
+}
+
+void reportTime(const char *tag) {
+    static util::Formatter debugFormatter;
+    display(LOG, DEBUG,
+            debugFormatter
+                .formatView("%-20s: %.1f ms has elapsed since startup",
+                            tag ? tag : "NUL", upTimeInMilli())
+                .data());
+}
 
 void lrInit() {
+    startUpTime = globalClock.now();
+
     logs[DisplayLogLevel::INFO] = "INFO";
     logs[DisplayLogLevel::VERBOSE] = "VERBOSE";
     logs[DisplayLogLevel::DEBUG] = "DEBUG";
@@ -82,37 +102,42 @@ static String generateLogLine(const char *description, DisplayLogLevel level) {
     return s;
 }
 
-static void handleSymbolStack(const char *description, DisplayLogLevel logLevel,
-                              std::vector<SymbolID> const *symbolStack,
-                              Grammar const *grammar) {
+static void handleParseStates(const char *description, DisplayLogLevel logLevel,
+                              gram::LRParser const *lr) {
     util::Formatter f;
     String s;
-    s += generateLogLine(description, logLevel);
-    s += "Bottom| ";
-    size_t sz = symbolStack->size();
-    auto const &symbols = grammar->getAllSymbols();
-    for (size_t i = 0; i < sz; ++i) {
-        s += f.formatView(i == 0 ? "%s" : ",%s",
-                          symbols[symbolStack->at(i)].name.c_str());
-    }
-    printf("%s\n", s.c_str());
-}
+    auto const &stateStack = lr->getStateStack();
+    auto const &symbolStack = lr->getSymbolStack();
+    auto const &inputQueue = lr->getInputQueue();
+    auto const &symbols = lr->getGrammar().getAllSymbols();
+    bool commaFlag;
 
-static void handleStateStack(const char *description, DisplayLogLevel logLevel,
-                             std::vector<gram::StateID> const *stack) {
-    util::Formatter f;
-    String s;
     s += generateLogLine(description, logLevel);
-    s += "Bottom| ";
-    size_t sz = stack->size();
-    for (size_t i = 0; i < sz; ++i) {
-        s += f.formatView(i == 0 ? "%d" : ",%d", stack->operator[](i));
+    s += "State stack : Bottom->| ";
+    commaFlag = false;
+    for (auto i : stateStack) {
+        s += f.formatView(commaFlag ? ",%d" : "%d", i);
+        commaFlag = true;
     }
+    s += "\nSymbol stack: Bottom->| ";
+    commaFlag = false;
+    for (auto i : symbolStack) {
+        s += f.formatView(commaFlag ? ",%s" : "%s", symbols[i].name.c_str());
+        commaFlag = true;
+    }
+    s += "\nInput queue : Front ->| ";
+    commaFlag = false;
+    for (auto i : inputQueue) {
+        s += f.formatView(commaFlag ? ",%s" : "%s", symbols[i].name.c_str());
+        commaFlag = true;
+    }
+    if (lr->hasMoreInput()) s += "...";
+
     printf("%s\n", s.c_str());
 }
 
 static void handleParseTable(const char *description, DisplayLogLevel logLevel,
-                             gram::SyntaxAnalysisLR const *lr) {
+                             gram::LRParser const *lr) {
     constexpr const int indexWidth = 8;
     constexpr const int actionWidth = 8;
     constexpr const int gotoWidth = 6;
@@ -292,7 +317,7 @@ static void handleGrammarRules(const char *description,
                                gram::Grammar const *grammar) {
     String s = grammar->dump();
     String logLine = generateLogLine(description, logLevel);
-    printf("> %s%s\n", logLine.c_str(), s.c_str());
+    printf("%s%s\n", logLine.c_str(), s.c_str());
 }
 
 void display(DisplayType type, DisplayLogLevel level, const char *description,
@@ -309,23 +334,17 @@ void display(DisplayType type, DisplayLogLevel level, const char *description,
             handleLog(description, level);
             break;
         case DisplayType::PARSE_TABLE:
-            handleParseTable(description, level,
-                             (SyntaxAnalysisLR const *)pointer);
+            handleParseTable(description, level, (LRParser const *)pointer);
             break;
         case DisplayType::GRAMMAR_RULES:
             handleGrammarRules(description, level, (Grammar const *)pointer);
             break;
-        case DisplayType::LR_STATE_STACK:
-            handleStateStack(description, level,
-                             (std::vector<StateID> const *)pointer);
-            break;
-        case DisplayType::LR_SYMBOL_STACK:
-            handleSymbolStack(description, level,
-                              (std::vector<SymbolID> const *)pointer,
-                              (Grammar const *)auxPointer);
+        case DisplayType::PARSE_STATES:
+            handleParseStates(description, level, (LRParser const *)pointer);
             break;
         default:
-            fprintf(stderr, "[WARN] Unknown display type. Check your code.\n");
+            fprintf(stderr,
+                    "[ERROR  ] Unknown display type. Check your code.\n");
             exit(1);
             break;
     }

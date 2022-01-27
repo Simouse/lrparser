@@ -1,5 +1,5 @@
-#ifndef LRPARSER_TOKENREADER_H
-#define LRPARSER_TOKENREADER_H
+#ifndef LRPARSER_TOKEN_READER_H
+#define LRPARSER_TOKEN_READER_H
 #include <iostream>
 
 #include "src/common.h"

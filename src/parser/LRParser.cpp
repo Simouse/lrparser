@@ -1,4 +1,4 @@
-#include "lr.h"
+#include "src/parser/LRParser.h"
 
 #include <cassert>
 #include <stack>
@@ -14,16 +14,14 @@
 #include "src/util/Formatter.h"
 #include "src/util/TokenReader.h"
 
-using std::vector;
-
 namespace gram {
 
 // Helper of automaton creation from LR0 grammar,
 // which generates a description for the state. e.g.
 // S -> aB : S0 = {S -> .aB, S -> a.B, S -> aB.}
-static String createStateNameLR0(const gram::Grammar &G, const gram::Symbol &N,
-                                 const std::vector<SymbolID> &productionBody,
-                                 int dotPos) {
+static String createStateName(const gram::Grammar &G, const gram::Symbol &N,
+                              const std::vector<SymbolID> &productionBody,
+                              int dotPos) {
     assert(static_cast<size_t>(dotPos) <= productionBody.size());
 
     const auto &symbols = G.getAllSymbols();
@@ -44,7 +42,7 @@ static String createStateNameLR0(const gram::Grammar &G, const gram::Symbol &N,
     return s;
 }
 
-void SyntaxAnalysisSLR::buildNFA() {
+void LRParser::buildNFA() {
     Automaton &M = this->nfa;
     const Grammar &G = this->gram;
     const auto &symbols = G.getAllSymbols();
@@ -77,11 +75,11 @@ void SyntaxAnalysisSLR::buildNFA() {
         ProductionID productionId{i};
         auto const &production = productionTable[i];
         auto const &rightSymbols = production.rightSymbols;
-        vector<StateID> stateIds(rightSymbols.size() + 1);
+        std::vector<StateID> stateIds(rightSymbols.size() + 1);
         for (int dotPos = 0; dotPos <= static_cast<int>(rightSymbols.size());
              ++dotPos) {
-            String name = createStateNameLR0(G, symbols[production.leftSymbol],
-                                             rightSymbols, dotPos);
+            String name = createStateName(G, symbols[production.leftSymbol],
+                                          rightSymbols, dotPos);
             StateID stateId = M.addState(name);
             stateIds[dotPos] = stateId;
         }
@@ -168,38 +166,33 @@ void SyntaxAnalysisSLR::buildNFA() {
     display(AUTOMATON, INFO, "NFA is built", &M, (void *)outFilePrefix);
 }
 
-void SyntaxAnalysisSLR::buildDFA() {
+void LRParser::buildDFA() {
     dfa = nfa.toDFA();
     display(AUTOMATON, INFO, "DFA is built", &dfa, (void *)"build_dfa");
 }
 
-void SyntaxAnalysisSLR::buildParseTables() {
+void LRParser::buildParseTables() {
     // Now DFA has complete information
     // 1. DFA has epsilon action in its action vector, so we need to skip it.
     // 2. DFA doesn't have a '$' action, and we need to process it specially.
 
     auto const &states = dfa.getAllStates();
-    auto const &statesBitmap = dfa.getStatesBitmap();
+    auto const &closures = dfa.getClosures();
     auto const &formerStates = dfa.getFormerStates();
     auto const &symbols = gram.getAllSymbols();
-    auto const &productions = gram.getProductionTable();
-    // auto const &actionReceivers = dfa.getActionReceivers();
 
     auto nActions = static_cast<int>(dfa.getAllActions().size());
-    //    auto nNFAStates = static_cast<int>(formerStates.size());
     auto nDFAStates = static_cast<int>(states.size());
 
     // Shift and Goto items
     for (const auto &state : states) {
-        auto const &trans = state.trans;
-        for (auto const &entry : trans) {
-            ActionID action{entry.first};
-            StateID nextState{entry.second};
-            ParseAction item{(symbols[action].type == SymbolType::NON_TERM)
+        auto const &tranSet = state.tranSet;
+        for (auto const &tran : tranSet) {
+            ParseAction item{(symbols[tran.action].type == SymbolType::NON_TERM)
                                  ? ParseAction::GOTO
                                  : ParseAction::SHIFT,
-                             nextState};
-            addParseTableEntry(state.id, action, item);
+                             tran.to};
+            addParseTableEntry(state.id, tran.action, item);
         }
     }
 
@@ -213,7 +206,7 @@ void SyntaxAnalysisSLR::buildParseTables() {
     }
 
     for (StateID state{0}; state < nDFAStates; state = StateID{state + 1}) {
-        auto dfaStateBitmap = statesBitmap[state];  // Copy a bitmap
+        auto dfaStateBitmap = closures[state].states;  // Copy a bitmap
         dfaStateBitmap &= mask;
         for (auto s : dfaStateBitmap) {
             auto nfaState = static_cast<StateID>(s);
@@ -221,14 +214,9 @@ void SyntaxAnalysisSLR::buildParseTables() {
                  action = ActionID{action + 1}) {
                 // Check if the action is allowed by followSet
                 ProductionID prodID = reduceMap.at(nfaState);
-                int reducedSymbolID = productions[prodID].leftSymbol;
-                auto const &symbol = symbols[reducedSymbolID];
-                if (symbol.followSet.find(static_cast<SymbolID>(action)) !=
-                    symbol.followSet.end()) {
-                    addParseTableEntry(
-                        state, action,
-                        ParseAction{ParseAction::REDUCE, prodID});
-                }
+
+                addParseTableEntry(state, action,
+                                   ParseAction{ParseAction::REDUCE, prodID});
             }
         }
     }
@@ -236,7 +224,7 @@ void SyntaxAnalysisSLR::buildParseTables() {
     // Process end of input
     auto endOfInput = static_cast<ActionID>(gram.getEndOfInputSymbol().id);
     for (int i = 0; i < nDFAStates; ++i) {
-        if (statesBitmap[i].contains(this->extendedEnd)) {
+        if (closures[i].states.contains(this->extendedEnd)) {
             addParseTableEntry(StateID{i}, endOfInput,
                                ParseAction{ParseAction::SUCCESS, -1});
         }
@@ -245,26 +233,22 @@ void SyntaxAnalysisSLR::buildParseTables() {
     display(PARSE_TABLE, INFO, "Parse table", this);
 }
 
-void SyntaxAnalysisSLR::addParseTableEntry(StateID state, ActionID act,
-                                           ParseAction pact) {
+void LRParser::addParseTableEntry(StateID state, ActionID act,
+                                  ParseAction pact) {
+    using std::vector;
+    if (!canAddParseTableEntry(state, act, pact)) {
+        return;
+    }
+
     if (parseTable.empty()) {
-        parseTable = std::vector<std::vector<std::vector<ParseAction>>>(
+        parseTable = vector<vector<vector<ParseAction>>>(
             dfa.getAllStates().size(),
-            std::vector<std::vector<ParseAction>>(gram.getAllSymbols().size()));
+            vector<vector<ParseAction>>(gram.getAllSymbols().size()));
     }
     parseTable[state][act].push_back(pact);
 }
 
-SyntaxAnalysisLR::ParseTable const &SyntaxAnalysisSLR::getParseTable() const {
-    return parseTable;
-}
-
-gram::Grammar const &SyntaxAnalysisSLR::getGrammar() const { return gram; }
-
-gram::Automaton const &SyntaxAnalysisSLR::getDFA() const { return dfa; }
-
-String SyntaxAnalysisSLR::dumpParseTableEntry(StateID state,
-                                              ActionID action) const {
+String LRParser::dumpParseTableEntry(StateID state, ActionID action) const {
     auto const &items = parseTable.at(state).at(action);
     String s;
     bool commaFlag = false;
@@ -295,51 +279,65 @@ String SyntaxAnalysisSLR::dumpParseTableEntry(StateID state,
     return s;
 }
 
+void LRParser::readSymbol(util::TokenReader &reader) {
+    String s;
+    if (reader.getToken(s)) {
+        auto const &symbol = gram.findSymbol(s);
+        if (symbol.id == gram.getEpsilonSymbol().id) {
+            throw std::runtime_error("Epsilon cannot be used in input");
+        } else if (symbol.id == gram.getEndOfInputSymbol().id) {
+            inputFlag = false;
+        }
+        // push_back() should be equivalent to push_front(), since queue
+        // is empty
+        InputQueue.push_back(symbol.id);
+    } else {
+        inputFlag = false;
+        InputQueue.push_back(gram.getEndOfInputSymbol().id);
+    }
+}
+
 // Test given stream with parsed results
-bool SyntaxAnalysisSLR::test(std::istream &stream) try {
+bool LRParser::test(std::istream &stream) try {
+    inputFlag = true;
     stateStack.clear();
     symbolStack.clear();
-    nextSymbolStack.clear();
+    InputQueue.clear();
     stateStack.push_back(dfa.getStartState());
 
+    // Only one of them is used
     GrammarReader grammarReader(stream);
     util::TokenReader tokenReader(stream);
     util::TokenReader &reader = launchArgs.strict ? grammarReader : tokenReader;
 
-    // auto const &symbols = gram.getAllSymbols();
-    bool endOfInput = false;
-    String s;
+    if (launchArgs.exhaustInput) {
+        display(LOG, INFO,
+                "Please input symbols for test (Use '$' to end the input):");
+        while (inputFlag) {
+            readSymbol(reader);
+        }
+    }
 
-    display(LR_STATE_STACK, INFO, "State stack", &stateStack);
-    display(LR_SYMBOL_STACK, INFO, "Symbol stack", &symbolStack, &gram);
-    display(LOG, INFO,
-            "Please input symbols for test (Use '$' to end the input):");
+    display(PARSE_STATES, INFO, "Parse states", this);
+
+    if (!launchArgs.exhaustInput) {
+        display(LOG, INFO,
+                "Please input symbols for test (Use '$' to end the input):");
+    }
+
+    util::Formatter f;
 
     while (true) {
-        if (nextSymbolStack.empty() && !endOfInput) {
-            if (reader.getToken(s)) {
-                auto const &symbol = gram.findSymbol(s);
-                if (symbol.id == gram.getEpsilonSymbol().id) {
-                    throw std::runtime_error("Epsilon cannot be used in input");
-                } else if (symbol.id == gram.getEndOfInputSymbol().id) {
-                    endOfInput = true;
-                }
-                nextSymbolStack.push_back(symbol.id);
-            } else {
-                endOfInput = true;
-                nextSymbolStack.push_back(gram.getEndOfInputSymbol().id);
-            }
+        if (InputQueue.empty() && inputFlag) {
+            readSymbol(reader);
         }
 
-        // if (stateStack.empty())
-        //     throw std::runtime_error("Reduce state stack is empty");
-
-        if (nextSymbolStack.empty())
+        if (InputQueue.empty())
             throw std::logic_error(
                 "No next symbol to use, this shouldn't be possible");
 
         auto const &tableEntry =
-            parseTable[stateStack.back()][nextSymbolStack.back()];
+            parseTable[stateStack.back()][InputQueue.front()];
 
         auto choices = tableEntry.size();
         if (choices <= 0)
@@ -357,19 +355,26 @@ bool SyntaxAnalysisSLR::test(std::istream &stream) try {
             case ParseAction::GOTO:
             case ParseAction::SHIFT:
                 stateStack.push_back(decision.dest);
-                symbolStack.push_back(nextSymbolStack.back());
-                nextSymbolStack.pop_back();
+                symbolStack.push_back(InputQueue.front());
+                InputQueue.pop_front();
+                display(LOG, VERBOSE,
+                        decision.type == ParseAction::GOTO
+                            ? "Apply GOTO rule"
+                            : "Apply SHIFT rule");
                 break;
             case ParseAction::REDUCE:
                 reduce(decision.productionID);
+                display(LOG, VERBOSE,
+                        f.formatView("Apply REDUCE by production: %d",
+                                     decision.productionID)
+                            .data());
                 break;
             case ParseAction::SUCCESS:
                 display(LOG, INFO, "Success");
                 return true;
         }
 
-        display(LR_STATE_STACK, INFO, "State stack", &stateStack);
-        display(LR_SYMBOL_STACK, INFO, "Symbol stack", &symbolStack, &gram);
+        display(PARSE_STATES, INFO, "Parse states", this);
     }
     throw UnreachableCodeError();
 } catch (std::exception const &e) {
@@ -378,7 +383,7 @@ bool SyntaxAnalysisSLR::test(std::istream &stream) try {
 }
 
 // May throw errors
-void SyntaxAnalysisSLR::reduce(ProductionID prodID) {
+void LRParser::reduce(ProductionID prodID) {
     auto const &prod = gram.getProductionTable()[prodID];
     auto bodySize = prod.rightSymbols.size();
     if (symbolStack.size() < bodySize) {
@@ -400,10 +405,7 @@ void SyntaxAnalysisSLR::reduce(ProductionID prodID) {
         symbolStack.pop_back();
         stateStack.pop_back();
     }
-    // symbolStack.push_back(prod.leftSymbol);
-    nextSymbolStack.push_back(prod.leftSymbol);
-    String info = "Apply reduction rule: " + std::to_string(prodID);
-    display(LOG, VERBOSE, info.c_str());
+    InputQueue.push_front(prod.leftSymbol);
 }
 
 }  // namespace gram

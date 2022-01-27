@@ -1,7 +1,5 @@
 #include "Automaton.h"
 
-#include <vcruntime.h>
-
 #include <algorithm>
 #include <cassert>
 #include <optional>
@@ -28,34 +26,28 @@ Automaton::Automaton() = default;
 StateID Automaton::addState(String desc, bool acceptable) {
     auto id = static_cast<StateID>(states.size());
     states.emplace_back(id, std::move(desc), acceptable);
-
-    // Set highlight
-    stateHighlightSet.insert(id);
-
     return id;
 }
 
 void Automaton::addTransition(StateID from, StateID to, ActionID action) {
-    auto &trans = states[from].trans;
-    auto it = trans.find(action);
-    if (it == trans.end()) {
-        // Add a new transition
-        trans.emplace(action, to);
-    } else if (it->second != to) {
-        // The same action towards different states: set flag
-        multiDestFlag = true;
-        trans.emplace(action, to);
-    }  // else: transition is already added: ignore
+    auto &tranSet = states[from].tranSet;
 
-    // Set highlight
-    transitionHighlightSet.emplace(from, to);
+    if (tranSet.containsAction(action)) {
+        this->multiDestFlag = true;
+    }
+
+    tranSet.insert(Transition{to, action});
 }
 
 void Automaton::addEpsilonTransition(StateID from, StateID to) {
     if (epsilonAction < 0) {
         epsilonAction = addAction(Grammar::SignStrings::epsilon);
     }
-    addTransition(from, to, epsilonAction);
+    return addTransition(from, to, epsilonAction);
+}
+
+void Automaton::highlightState(StateID state) const {
+    states[state].colored = true;
 }
 
 void Automaton::markStartState(StateID state) {
@@ -81,9 +73,9 @@ StateID Automaton::getState() const { return currentState; }
 
 StateID Automaton::getStartState() const { return startState; }
 
-auto Automaton::getStatesBitmap() const -> std::vector<DFAState> const & {
+auto Automaton::getClosures() const -> std::vector<StateClosure> const & {
     assert(transformedDFAFlag);
-    return statesBitmap;
+    return closures;
 }
 
 auto Automaton::getFormerStates() const -> std::vector<State> const & {
@@ -126,7 +118,7 @@ auto Automaton::dump(const StateID *posMap) const -> String {
     if (getStartState() >= 0) {
         s += "  start [label=Start shape=plain]\n";
     }
-    for (auto &state : states) {
+    for (auto const &state : states) {
         StateID mappedStateID = posMap ? posMap[state.id] : state.id;
 
         String label = f.reverseEscaped(state.label);
@@ -136,29 +128,28 @@ auto Automaton::dump(const StateID *posMap) const -> String {
         if (state.acceptable) s += " peripheries=2";
 
         bool stateFillFlag = mappedStateID == getState();
-        bool stateHightFlag =
-            stateHighlightSet.find(state.id) != stateHighlightSet.end();
+        bool stateColorFlag = state.colored;
+        state.colored = false;
 
         if (stateFillFlag) {
-            s += R"( style="rounded,filled" fontname="times-bold")";
-            if (stateHightFlag)
-                s += R"( color=red fontcolor=white fontname="times-bold")";
-        } else if (stateHightFlag)
-            s += R"( color=red fontcolor=red fontname="times-bold")";
+            s += R"( style="rounded,filled")";
+            if (stateColorFlag) s += " color=red fontcolor=white";
+        } else if (stateColorFlag)
+            s += " color=red fontcolor=red";
 
         s += "]\n";
         if (mappedStateID == getStartState()) {
             s += f.formatView("  start -> %d\n", mappedStateID);
         }
-        for (auto &tran : state.trans) {
-            StateID mappedDestID = posMap ? posMap[tran.second] : tran.second;
-            label = f.reverseEscaped(actions[tran.first]);
+        for (auto &tran : state.tranSet) {
+            StateID mappedDestID = posMap ? posMap[tran.to] : tran.to;
+            label = f.reverseEscaped(actions[tran.action]);
             s += f.formatView("  %d -> %d [label=\"%s\"", mappedStateID,
                               mappedDestID, label.c_str());
-            if (isEpsilonAction(tran.first)) s += " constraint=false";
-            if (transitionHighlightSet.find({mappedStateID, mappedDestID}) !=
-                transitionHighlightSet.end()) {
+            if (isEpsilonAction(tran.action)) s += " constraint=false";
+            if (tran.colored) {
                 s += " color=red fontcolor=red fontname=\"times-bold\"";
+                tran.colored = false;
             }
             s += "]\n";
         }
@@ -166,57 +157,47 @@ auto Automaton::dump(const StateID *posMap) const -> String {
 
     s += "}";
 
-    stateHighlightSet.clear();
-    transitionHighlightSet.clear();
-
     return s;
-}
-
-void Automaton::highlightState(StateID state) const {
-    stateHighlightSet.insert(state);
-}
-
-void Automaton::highlightTransition(StateID from, StateID to) const {
-    transitionHighlightSet.emplace(from, to);
 }
 
 // This function calculate closure and store information in place;
 // Must be used inside toDFA(), because only then transitions are sorted.
-void Automaton::closurify(DFAState &dfaState) const {
+void Automaton::closurify(StateClosure &closure) const {
     std::stack<StateID> stack;
-    for (auto s : dfaState) stack.push(static_cast<StateID>(s));
+    for (auto s : closure.states) stack.push(static_cast<StateID>(s));
 
     while (!stack.empty()) {
         auto s = stack.top();
         stack.pop();
-        auto range = states[s].trans.equal_range(epsilonAction);
-        for (auto it = range.first; it != range.second; ++it) {
+        auto it = states[s].tranSet.lowerBound(epsilonAction);
+        auto end = states[s].tranSet.end();
+        for (; it != end && it->action == epsilonAction; ++it) {
             // Can reach this state by epsilon
-            auto destination = it->second;
-            if (!dfaState.contains(destination)) {
-                dfaState.add(destination);
-                stack.push(destination);
+            if (!closure.states.contains(it->to)) {
+                closure.states.add(it->to);
+                stack.push(it->to);
             }
         }
     }
 }
 
 // `action` here cannot be epsilon.
-auto Automaton::transit(DFAState const &dfaState, ActionID action) const
-    -> ::std::optional<DFAState> {
+auto Automaton::transit(StateClosure const &closure, ActionID action) const
+    -> ::std::optional<StateClosure> {
     assert(action != epsilonAction);
 
     bool found = false;
-    DFAState res{states.size()};
+    StateClosure res{util::BitSet{states.size()}, closure.actionConstraints};
 
     // Copy bitset
-    DFAState receivers = actionReceivers[action];
-    receivers &= dfaState;
+    util::BitSet receivers = actionReceivers[action];
+    receivers &= closure.states;
     for (auto state : receivers) {
         // This state can receive current action
-        auto range = states[state].trans.equal_range(action);
-        for (auto it = range.first; it != range.second; ++it) {
-            res.add(it->second);
+        auto it = states[state].tranSet.lowerBound(action);
+        auto end = states[state].tranSet.end();
+        for (; it != end && it->action == action; ++it) {
+            res.states.add(it->to);
             found = true;
         }
     }
@@ -224,59 +205,73 @@ auto Automaton::transit(DFAState const &dfaState, ActionID action) const
     if (!found) return {};
 
     closurify(res);
-    return std::make_optional<DFAState>(std::move(res));
+    return std::make_optional<StateClosure>(std::move(res));
 }
 
-void Automaton::buildActionReceivers() {
+String Automaton::dumpStateClosure(StateClosure const &closure) const {
+    String s = closure.states.dump();
+    if (closure.actionConstraints.has_value()) {
+        auto const &constraints = closure.actionConstraints.value();
+        bool commaFlag = false;
+        s += ", {";
+        for (auto i : constraints) {
+            if (commaFlag) s += ',';
+            s += actions[i];
+            commaFlag = true;
+        }
+        s += "}";
+    }
+    return s;
+}
+
+Automaton Automaton::toDFA() {
+    Automaton dfa;
+
+    // Make a copy if this is already a DFA
+    if (isDFA()) {
+        dfa = *this;
+        dfa.transformedDFAFlag = true;
+        return dfa;
+    }
+
+    // Copy all actions to this new automaton.
+    // NOTE: Epsilon action is no longer useful but is still copyed,
+    // so the index of other actions can stay the same.
+    dfa.actions = this->actions;
+    dfa.actIDMap = this->actIDMap;
+
+    // The result is used by transit()
     actionReceivers.clear();
     actionReceivers.reserve(actions.size());
     for (size_t i = 0; i < actions.size(); ++i) {
         actionReceivers.emplace_back(states.size());
     }
     for (auto &state : states) {
-        for (auto &tran : state.trans)
-            actionReceivers[tran.first].add(state.id);
+        for (auto &tran : state.tranSet)
+            actionReceivers[tran.action].add(state.id);
     }
-}
-
-Automaton Automaton::toDFA() {
-    Automaton dfa;
-
-    if (isDFA()) {
-        dfa = *this; // Make a copy
-        dfa.transformedDFAFlag = true;
-        return dfa;
-    }
-
-    // Copy all actions to this new automaton.
-    // Epsilon action is no longer useful but is still copyed,
-    // so the index of other actions can stay the same.
-    dfa.actions = this->actions;
-    dfa.actIDMap = this->actIDMap;  // Maybe unnecessary
-
-    // The result is used by transit()
-    buildActionReceivers();
 
     // States that need to be processed.
-    // We need to ensure that for S in `stack`, eps_closure(S) == S.
+    // We need to ensure that for S in `stack`, closurify(S) == S.
     std::stack<StateID> stack;
-    std::unordered_map<DFAState, StateID> DFAStateIDMap;
-    std::vector<DFAState> DFAStateVec;
+    std::unordered_map<StateClosure, StateID> closureIDMap;
+    std::vector<StateClosure> closureVec;
 
-    auto addNewState = [&DFAStateIDMap, &DFAStateVec, &dfa,
-                        &stack](DFAState &&s) {
-        auto stateIndex = static_cast<StateID>(DFAStateVec.size());
-        DFAStateVec.push_back(std::move(s));
-        DFAStateIDMap.emplace(DFAStateVec.back(), stateIndex);
-        dfa.states.emplace_back(stateIndex, DFAStateVec.back().dump(), false);
+    auto addNewState = [&closureIDMap, &closureVec, &dfa,
+                        &stack](StateClosure &&s) {
+        auto stateIndex = static_cast<StateID>(closureVec.size());
+        closureVec.push_back(std::move(s));
+        closureIDMap.emplace(closureVec.back(), stateIndex);
+        dfa.states.emplace_back(stateIndex,
+                                dfa.dumpStateClosure(closureVec.back()), false);
         stack.push(stateIndex);
         return stateIndex;
     };
 
     // Add start state
     {
-        DFAState start{states.size()};
-        start.add(startState);
+        StateClosure start{util::BitSet{states.size()}, std::nullopt};
+        start.states.add(startState);
         closurify(start);
 
         auto stateIndex = addNewState(std::move(start));
@@ -295,12 +290,12 @@ Automaton Automaton::toDFA() {
 
             // If this action is not acceptable, the entire test will
             // be skipped.
-            auto result = transit(DFAStateVec[stateID], action);
+            auto result = transit(closureVec[stateID], action);
             if (result.has_value()) {
                 auto &value = result.value();
-                auto existingIter = DFAStateIDMap.find(value);
+                auto existingIter = closureIDMap.find(value);
 
-                if (existingIter == DFAStateIDMap.end()) {
+                if (existingIter == closureIDMap.end()) {
                     auto nextStateID = addNewState(std::move(value));
                     // Add edge to this new state
                     dfa.addTransition(stateID, nextStateID, action);
@@ -314,19 +309,19 @@ Automaton Automaton::toDFA() {
 
     // Mark final states
     // Step 1: Get a bitset of final NFA states
-    DFAState nfaFinalStates{states.size()};
+    util::BitSet nfaFinalStates{states.size()};
     for (auto const &state : states) {
         if (state.acceptable) nfaFinalStates.add(state.id);
     }
-    // Step 2: Use final NFA states to find NFA final states
-    for (auto &entry : DFAStateIDMap) {
-        if (entry.first.hasIntersection(nfaFinalStates))
+    // Step 2: Use bitset to find DFA final states
+    for (auto &entry : closureIDMap) {
+        if (entry.first.states.hasIntersection(nfaFinalStates))
             dfa.markFinalState(entry.second);
     }
 
     // Copy former NFA states to DFA, so we can trace original states.
-    dfa.statesBitmap = std::move(DFAStateVec);  // Move bitmaps
-    dfa.formerStates = this->states;            // Copy vec
+    dfa.closures = std::move(closureVec);  // Move closures
+    dfa.formerStates = this->states;       // Copy states
     // Can I use a moved vector again?
     // https://stackoverflow.com/a/9168917/13785815
     // Yes, but after calling clear()
@@ -336,12 +331,19 @@ Automaton Automaton::toDFA() {
 }
 
 void Automaton::move(ActionID action) {
-    if (currentState < 0) throw AutomatonIllegalStateError();
-    auto const &trans = states[currentState].trans;
-    auto it = trans.find(action);
-    if (it == trans.end()) throw AutomatonUnacceptedActionError();
+    if (currentState < 0) throw IllegalStateError();
+    auto const &trans = states[currentState].tranSet;
+    auto it = trans.lowerBound(action);
+    auto end = trans.end();
+    if (it == end || it->action != action) {
+        throw UnacceptedActionError();
+    }
+    StateID dest = it->to;
+    if (++it != end && it->action == action) {
+        throw AmbiguousDestinationError();
+    }
     // Action is okay
-    setState(it->second);
+    setState(dest);
 }
 
 }  // namespace gram

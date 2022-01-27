@@ -247,14 +247,14 @@ void BitSet::add(BitSet::size_type N) { set(N, true); }
 void BitSet::remove(BitSet::size_type N) { set(N, false); }
 
 String BitSet::dump() const {
-    String s = "[";
+    String s = "{";
     bool flag = false;
     for (auto i : *this) {
         if (flag) s += ", ";
         s += std::to_string(i);
         flag = true;
     }
-    s += ']';
+    s += '}';
     return s;
 }
 

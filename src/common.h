@@ -10,17 +10,15 @@ using String = ::std::string;
 using StringView = ::std::string_view;
 
 // 2. Display
-
-// Only define types associated with the last void * argument.
-// How to display those types are not specified.
 enum DisplayType {
-    LOG = 0,  // So nullptr can be LOG
+    LOG,
     AUTOMATON,
     SYMBOL_TABLE,
     PARSE_TABLE,
     GRAMMAR_RULES,
-    LR_STATE_STACK,
-    LR_SYMBOL_STACK
+    // LR_STATE_STACK,
+    // LR_SYMBOL_STACK
+    PARSE_STATES
 };
 
 // INFO:    Provide important text information for users
@@ -29,19 +27,12 @@ enum DisplayType {
 // ERR:     Error happened. Maybe it's caused by some illegal input.
 enum DisplayLogLevel { INFO = 0, ERR, VERBOSE, DEBUG, LOG_LEVELS_COUNT };
 
-// struct DisplayData {
-//     void *pointer;
-//     const char *outputFilePrefix;
-//     DisplayLogLevel logLevel;
-//     DisplayData(DisplayLogLevel level = DisplayLogLevel::INFO,
-//                 void *p = nullptr, const char *prefix = nullptr)
-//         : pointer(p), outputFilePrefix(prefix), logLevel(level) {}
-// };
-
 void display(DisplayType type, DisplayLogLevel level, const char *description,
              void const *pointer = nullptr, void const *auxPointer = nullptr);
 void lrInit();
 void lrCleanUp();
+double upTimeInMilli();
+void reportTime(const char *tag = nullptr);
 
 // 3. Errors
 struct UnimplementedError : public ::std::runtime_error {
@@ -56,11 +47,16 @@ struct UnreachableCodeError : public ::std::logic_error {
     UnreachableCodeError() : ::std::logic_error("Unreachable code") {}
 };
 
-// 4. Arguments
+// 4. Parsers
+enum ParserType { LR0, SLR, LALR, LR1 };
+
+// 5. Arguments
 struct LaunchArguments {
     bool launchSuccess = true;
     bool nodot = false;
     bool strict = false;
+    bool exhaustInput = true;
+    ParserType parserType = SLR;
     DisplayLogLevel logLevel = VERBOSE;
     String grammarFileName = "grammar.txt";
     String resultsDir = "results";
