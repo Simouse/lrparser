@@ -7,6 +7,7 @@
 #include "src/parser/LR0Parser.h"
 #include "src/parser/LRParser.h"
 #include "src/parser/SLRParser.h"
+#include "src/parser/LR1Parser.h"
 #include "src/util/Formatter.h"
 
 using namespace gram;
@@ -74,8 +75,9 @@ void lrMain() {
 
     // Choose a parser
     LRParser *parser;
-    LR0Parser lr0(g);
-    SLRParser slr(g);
+    LR0Parser lr0{g};
+    SLRParser slr{g};
+    LR1Parser lr1{g};
     switch (launchArgs.parserType) {
         case LR0:
             parser = &lr0;
@@ -83,6 +85,8 @@ void lrMain() {
         case SLR:
             parser = &slr;
             break;
+        case LR1:
+            parser = &lr1;
         default:
             fprintf(stderr, "Unknown parser type. Check your code\n");
             exit(1);

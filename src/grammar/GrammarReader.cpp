@@ -91,7 +91,7 @@ void GrammarReader::parse(Grammar &g) try {
 
     g.checkViolations();
 
-} catch (UnsolvedSymbolError const &e) {
+} catch (Grammar::UnsolvedSymbolError const &e) {
     String s = "Parsing error at line " +
                std::to_string(tokenLineNo[e.symInQuestion.name]) + ": " +
                e.what();

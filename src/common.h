@@ -16,8 +16,6 @@ enum DisplayType {
     SYMBOL_TABLE,
     PARSE_TABLE,
     GRAMMAR_RULES,
-    // LR_STATE_STACK,
-    // LR_SYMBOL_STACK
     PARSE_STATES
 };
 

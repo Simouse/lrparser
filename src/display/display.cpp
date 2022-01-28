@@ -210,6 +210,7 @@ static void handleParseTable(const char *description, DisplayLogLevel logLevel,
     printf("%s", outputString.c_str());
 }
 
+// This function is slow
 static void handleAutomaton(const char *description, DisplayLogLevel logLevel,
                             const char *prefix, Automaton const *automaton) {
     util::Formatter f;

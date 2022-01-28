@@ -2,6 +2,7 @@
 #define LRPARSER_AUTOMATA_H
 
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -50,7 +51,7 @@ struct TransitionSet {
     [[nodiscard]] auto end() const { return set.end(); }
 
     // Returns an iterator (possibly) pointering to the first element that has
-    // the same action as the argument. You need to check yourself if the
+    // the same action as the argument. We need to check by ourselves if the
     // iterator is valid (is still accessible and has the same action).
     [[nodiscard]] auto lowerBound(ActionID action) const {
         return set.lower_bound({StateID{-1}, action});
@@ -65,34 +66,38 @@ struct TransitionSet {
     std::set<Transition> set;
 };
 
-struct State {
+struct StateKernel {
+    String label;
+    TransitionSet transitionSet;
+    explicit StateKernel(String lbl) : label(std::move(lbl)) {}
+};
+
+// TODO: acceptable: actionConstraints ? actionConstraints->contains("$") : ...
+class State {
+   public:
     bool acceptable;
     mutable bool colored;
     StateID id;
-    String label;
-    TransitionSet tranSet{};
-    ::std::optional<util::BitSet> actionConstraints{std::nullopt};
+    std::shared_ptr<StateKernel> kernel;
+    ::std::optional<util::BitSet<ActionID>> actionConstraints;
 
-    // Pass string by value so literals will not cause a twice-copying situation
-    State(StateID id, String label, bool acceptable)
+   public:
+    friend class Automaton;
+    State(StateID id, bool acceptable, String label)
         : acceptable(acceptable),
           colored(true),
           id(id),
-          label(std::move(label)) {}
-};
+          kernel(std::make_shared<StateKernel>(std::move(label))),
+          actionConstraints({std::nullopt}) {}
 
-struct StateClosure {
-    util::BitSet states;
-    ::std::optional<util::BitSet> actionConstraints;
+    [[nodiscard]] String &getLabel() const { return kernel->label; }
 
-    StateClosure(util::BitSet s, ::std::optional<util::BitSet> constraints)
-        : states(std::move(s)), actionConstraints(std::move(constraints)) {}
-
-    [[nodiscard]] bool operator==(StateClosure const &other) const noexcept {
-        return this->states == other.states &&
-               this->actionConstraints == other.actionConstraints;
+    [[nodiscard]] TransitionSet &getTransitionSet() const {
+        return kernel->transitionSet;
     }
 };
+
+using StateClosure = util::BitSet<StateID>;
 
 }  // namespace gram
 
@@ -105,27 +110,16 @@ struct hash<gram::StateID> {
         return hash<int>()(k);
     }
 };
-
-template <>
-struct hash<gram::StateClosure> {
-    std::size_t operator()(gram::StateClosure const &k) const {
-        size_t res = 17;
-        res = res * 31 + std::hash<util::BitSet>()(k.states) * 17;
-        res = res * 31 +
-              std::hash<::std::optional<util::BitSet>>()(k.actionConstraints) *
-                  17;
-        return res;
-    }
-};
 }  // namespace std
 
 namespace gram {
 
+// To clone the entire automaton, use deepClone() instead.
 class Automaton {
    public:
     Automaton();
 
-    // Building
+    // Add a new state. ID is ensured to grow continuously.
     StateID addState(String desc, bool acceptable = false);
     ActionID addAction(StringView desc);
     void addTransition(StateID from, StateID to, ActionID action);
@@ -133,23 +127,27 @@ class Automaton {
     void markStartState(StateID state);
     void markFinalState(StateID state);
     void setState(StateID state);
-    // Highlight a state in dumped string
     void highlightState(StateID state) const;
 
     // Accessors
     [[nodiscard]] auto getAllStates() const -> std::vector<State> const &;
-    [[nodiscard]] StateID getState() const;
+    [[nodiscard]] StateID getState() const;  // Current state
     [[nodiscard]] StateID getStartState() const;
     [[nodiscard]] auto getAllActions() const -> std::vector<String> const &;
     [[nodiscard]] auto getClosures() const -> std::vector<StateClosure> const &;
     [[nodiscard]] auto getFormerStates() const -> std::vector<State> const &;
     [[nodiscard]] bool isEpsilonAction(ActionID action) const;
     [[nodiscard]] bool isDFA() const;
+    [[nodiscard]] auto getStatesMutable() -> std::vector<State> &;
 
     // DFA generation
-    void closurify(StateClosure &closure) const;
+    void makeClosure(StateClosure &closure) const;
+
     [[nodiscard]] ::std::optional<StateClosure> transit(
         StateClosure const &closure, ActionID action) const;
+
+    // Returns a new DFA which is transformed from this automaton.
+    // Since the DFA is new, there is no need to call separateKernels().
     Automaton toDFA();
 
     // Dump in graphviz format.
@@ -166,6 +164,12 @@ class Automaton {
     // acceptable.
     // Up to 2022.1.25: Not used.
     void move(ActionID action);
+
+    // Separate kernels of two automatons after copy assignment.
+    void separateKernels();
+
+    // Clone entire automaton
+    Automaton deepClone() const;
 
     // This error is thrown when current state is illegal. This may
     // be caused by not setting start state.
@@ -192,15 +196,14 @@ class Automaton {
     // this flag is set. So if multiDestFlag is true, this automaton
     // is not a DFA.
     bool multiDestFlag = false;
+    // To differentiate normal DFAs and transformed DFAs
+    bool transformedDFAFlag = false;
     StateID startState{-1};
     StateID currentState{-1};
     ActionID epsilonAction{-1};
     std::vector<State> states;
     std::vector<String> actions;
     std::unordered_map<StringView, ActionID> actIDMap;
-
-    // To differentiate normal DFAs and transformed DFAs
-    bool transformedDFAFlag = false;
 
     // Following fields are for transformed DFA.
     // Any attempts to access those methods from an automaton not created
@@ -209,7 +212,7 @@ class Automaton {
     // For given action, determine which states can accept it.
     // This is used only in transformation to DFA and a transformed DFA.
     // And we won't calculate it until we know size of bitset.
-    std::vector<util::BitSet> actionReceivers;
+    std::vector<util::BitSet<StateID>> actionReceivers;
 
     // Not empty only when this automaton is a DFA transformed from
     // a previous NFA. The bitmap is used to help trace original

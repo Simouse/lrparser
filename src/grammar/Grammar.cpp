@@ -124,12 +124,12 @@ auto Grammar::fromFile(const char *fileName) -> Grammar {
     }
     auto g = GrammarReader::parse(stream);
     display(GRAMMAR_RULES, INFO, "Grammar rules has been parsed", &g);
-    g.fillSymbolAttrs();
+    g.resolveSymbolAttributes();
     return g;
 }
 
 auto Grammar::fromStdin() -> Grammar {
-    return GrammarReader::parse(::std::cin).fillSymbolAttrs();
+    return GrammarReader::parse(::std::cin).resolveSymbolAttributes();
 }
 
 void Grammar::checkViolations() {
@@ -210,7 +210,7 @@ void Grammar::resolveFirstSet(vector<int> &visit, Symbol &curSymbol) {
             if (!visit[rid]) {
                 resolveFirstSet(visit, rightSymbol);
             }
-            for (SymbolID sid : rightSymbol.firstSet) {
+            for (auto sid : rightSymbol.firstSet) {
                 if (sid != epsilon) curSymbol.firstSet.insert(sid);
             }
             if (!rightSymbol.nullable.value()) {
@@ -243,12 +243,13 @@ void Grammar::resolveFollowSet(
         // Add follow set items from parent
         auto const &parentFollowSet = symbolVector[parent].followSet;
         auto &followSet = symbolVector[dependency.first].followSet;
-        followSet.insert(parentFollowSet.begin(), parentFollowSet.end());
+        // followSet.insert(parentFollowSet.begin(), parentFollowSet.end());
+        followSet |= parentFollowSet;
     }
     parentSet.clear();
 };
 
-Grammar &Grammar::fillSymbolAttrs() {
+Grammar &Grammar::resolveSymbolAttributes() {
     //--------------- Nullable ---------------
     // Epsilon is nullable
     symbolVector[epsilon].nullable.emplace(true);
@@ -320,7 +321,7 @@ Grammar &Grammar::fillSymbolAttrs() {
                     continue;
                 }
 
-                for (SymbolID first : nextSymbol.firstSet) {
+                for (auto first : nextSymbol.firstSet) {
                     if (first != epsilon) thisSymbol.followSet.insert(first);
                 }
                 if (nextSymbol.nullable.value())
@@ -343,7 +344,7 @@ Grammar &Grammar::fillSymbolAttrs() {
 static String dumpSymbolSet(Grammar const &g, Symbol::symset_t const &symset) {
     String s = "{";
     auto const &symvec = g.getAllSymbols();
-    for (int symid : symset) {
+    for (auto symid : symset) {
         s += ' ';
         s += symvec[symid].name;
     }

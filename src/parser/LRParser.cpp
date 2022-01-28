@@ -51,15 +51,15 @@ void LRParser::buildNFA() {
     // transitions from each state which wants N to all states
     // that generates N eventually.
     // { stateid => nid }
-    std::unordered_map<StateID, int> epsilonLinks;
+    std::unordered_map<StateID, SymbolID> epsilonLinks;
 
     // Store states which begin the given symbol's productions.
     // { nid => vector<stateid> }
-    std::unordered_map<int, std::vector<StateID>> prodStartStates;
+    std::unordered_map<SymbolID, std::vector<StateID>> prodStartStates;
 
     // Store states which finish the given symbol's productions.
     // { nid => vector<stateid> }
-    std::unordered_map<int, std::vector<StateID>> prodFinishStates;
+    std::unordered_map<SymbolID, std::vector<StateID>> prodFinishStates;
 
     // First we need to copy all actions by order, so symbols and
     // actions are paired.
@@ -75,6 +75,8 @@ void LRParser::buildNFA() {
         ProductionID productionId{i};
         auto const &production = productionTable[i];
         auto const &rightSymbols = production.rightSymbols;
+
+        // TODO: remove stateIds, since state id grows continuously
         std::vector<StateID> stateIds(rightSymbols.size() + 1);
         for (int dotPos = 0; dotPos <= static_cast<int>(rightSymbols.size());
              ++dotPos) {
@@ -83,6 +85,10 @@ void LRParser::buildNFA() {
             StateID stateId = M.addState(name);
             stateIds[dotPos] = stateId;
         }
+
+        // TODO: only add new states by production A -> B when A is required by other parts
+        // Add constraints to these states (This method is virtual)
+
         // Link states
         for (int dotPos = 0; dotPos < static_cast<int>(rightSymbols.size());
              ++dotPos) {
@@ -137,8 +143,7 @@ void LRParser::buildNFA() {
     // If a non-terminal has a `$` in its follow set,
     // all productions which generate this symbol will be marked final.
     for (auto const &symbol : symbols) {
-        if (symbol.followSet.find(G.getEndOfInputSymbol().id) ==
-            symbol.followSet.end()) {
+        if (!symbol.followSet.contains(G.getEndOfInputSymbol().id)) {
             continue;
         }
         // So this symbol can be accepted.
@@ -186,8 +191,8 @@ void LRParser::buildParseTables() {
 
     // Shift and Goto items
     for (const auto &state : states) {
-        auto const &tranSet = state.tranSet;
-        for (auto const &tran : tranSet) {
+        auto const &trans = state.getTransitionSet();
+        for (auto const &tran : trans) {
             ParseAction item{(symbols[tran.action].type == SymbolType::NON_TERM)
                                  ? ParseAction::GOTO
                                  : ParseAction::SHIFT,
@@ -199,16 +204,16 @@ void LRParser::buildParseTables() {
     // Process "reduce"
     // Bitset for reducible NFA states (so we can know if a DFA state is
     // reducible)
-    util::BitSet mask{formerStates.size()};
+    util::BitSet<StateID> mask{formerStates.size()};
 
     for (auto const &entry : reduceMap) {
-        mask.add(entry.first);
+        mask.insert(entry.first);
     }
 
     for (StateID state{0}; state < nDFAStates; state = StateID{state + 1}) {
-        auto dfaStateBitmap = closures[state].states;  // Copy a bitmap
-        dfaStateBitmap &= mask;
-        for (auto s : dfaStateBitmap) {
+        auto closure = closures[state];  // Copy a bitmap
+        closure &= mask;
+        for (auto s : closure) {
             auto nfaState = static_cast<StateID>(s);
             for (ActionID action{0}; action < nActions;
                  action = ActionID{action + 1}) {
@@ -224,7 +229,7 @@ void LRParser::buildParseTables() {
     // Process end of input
     auto endOfInput = static_cast<ActionID>(gram.getEndOfInputSymbol().id);
     for (int i = 0; i < nDFAStates; ++i) {
-        if (closures[i].states.contains(this->extendedEnd)) {
+        if (closures[i].contains(this->extendedEnd)) {
             addParseTableEntry(StateID{i}, endOfInput,
                                ParseAction{ParseAction::SUCCESS, -1});
         }

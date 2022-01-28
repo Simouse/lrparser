@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "src/common.h"
+#include "src/util/BitSet.h"
 
 namespace gram {
 class Automaton;
@@ -37,7 +38,8 @@ class Grammar;
 
 struct Symbol {
     // We want symbol set to be sorted (better for display)
-    using symset_t = ::std::set<SymbolID>;
+    // using symset_t = ::std::set<SymbolID>;
+    using symset_t = util::BitSet<SymbolID>;
     std::optional<bool> nullable;
     SymbolType type;
     SymbolID id;
@@ -49,22 +51,6 @@ struct Symbol {
 
     Symbol(SymbolType type, SymbolID id, String name)
         : type(type), id(id), name(std::move(name)) {}
-};
-
-class UnsolvedSymbolError : public std::runtime_error {
-   public:
-    explicit UnsolvedSymbolError(const Symbol &sym)
-        : std::runtime_error("Unsolved symbol: " + sym.name),
-          symInQuestion(sym) {}
-    const Symbol &symInQuestion;
-};
-
-// This error is thrown if we try to look up a symbol which does not exist after
-// grammar is built.
-class NoSuchSymbolError : public std::runtime_error {
-   public:
-    explicit NoSuchSymbolError(String const &name)
-        : std::runtime_error("No such symbol: " + name) {}
 };
 
 class Grammar {
@@ -86,7 +72,8 @@ class Grammar {
     // only want GrammarReader to access its methods.
     Grammar();
 
-    ProductionID addProduction(SymbolID leftSymbol, std::vector<SymbolID> rightSymbols);
+    ProductionID addProduction(SymbolID leftSymbol,
+                               std::vector<SymbolID> rightSymbols);
 
     // This method can detect duplicates. All symbol-putting methods should
     // eventually call this one.
@@ -108,7 +95,8 @@ class Grammar {
     // built first.
     void resolveFollowSet(
         std::vector<int> &visit,
-        std::unordered_map<SymbolID, std::unordered_set<SymbolID>> &dependencyTable,
+        std::unordered_map<SymbolID, std::unordered_set<SymbolID>>
+            &dependencyTable,
         std::pair<const SymbolID, std::unordered_set<SymbolID>> &dependency);
 
     // Recursively resolve First set dependency
@@ -135,7 +123,7 @@ class Grammar {
     [[nodiscard]] Symbol const &findSymbol(String const &s) const;
 
     // Fill symbol attributes: nullable, firstSet, followSet
-    Grammar &fillSymbolAttrs();
+    Grammar &resolveSymbolAttributes();
 
     // Factories
     static auto fromFile(const char *fileName) -> Grammar;
@@ -145,6 +133,22 @@ class Grammar {
         static constexpr const char *dot = "\xE2\x97\x8F";  // "●" in UTF-8
         static constexpr const char *epsilon = "\xCE\xB5";  // "ε" in UTF-8
         static constexpr const char *endOfInput = "$";
+    };
+
+    class UnsolvedSymbolError : public std::runtime_error {
+       public:
+        explicit UnsolvedSymbolError(const Symbol &sym)
+            : std::runtime_error("Unsolved symbol: " + sym.name),
+              symInQuestion(sym) {}
+        const Symbol &symInQuestion;
+    };
+
+    // This error is thrown if we try to look up a symbol which does not exist
+    // after grammar is built.
+    class NoSuchSymbolError : public std::runtime_error {
+       public:
+        explicit NoSuchSymbolError(String const &name)
+            : std::runtime_error("No such symbol: " + name) {}
     };
 };
 }  // namespace gram

@@ -25,18 +25,18 @@ Automaton::Automaton() = default;
 
 StateID Automaton::addState(String desc, bool acceptable) {
     auto id = static_cast<StateID>(states.size());
-    states.emplace_back(id, std::move(desc), acceptable);
+    states.emplace_back(id, acceptable, std::move(desc));
     return id;
 }
 
 void Automaton::addTransition(StateID from, StateID to, ActionID action) {
-    auto &tranSet = states[from].tranSet;
+    auto &trans = states[from].getTransitionSet();
 
-    if (tranSet.containsAction(action)) {
+    if (trans.containsAction(action)) {
         this->multiDestFlag = true;
     }
 
-    tranSet.insert(Transition{to, action});
+    trans.insert(Transition{to, action});
 }
 
 void Automaton::addEpsilonTransition(StateID from, StateID to) {
@@ -66,6 +66,8 @@ void Automaton::markFinalState(StateID state) {
 }
 
 std::vector<State> const &Automaton::getAllStates() const { return states; }
+
+auto Automaton::getStatesMutable() -> std::vector<State> & { return states; }
 
 std::vector<String> const &Automaton::getAllActions() const { return actions; }
 
@@ -121,7 +123,7 @@ auto Automaton::dump(const StateID *posMap) const -> String {
     for (auto const &state : states) {
         StateID mappedStateID = posMap ? posMap[state.id] : state.id;
 
-        String label = f.reverseEscaped(state.label);
+        String label = f.reverseEscaped(state.getLabel());
         s += f.formatView("  %d [label=\"%d: %s\"", mappedStateID,
                           mappedStateID, label.c_str());
 
@@ -141,7 +143,7 @@ auto Automaton::dump(const StateID *posMap) const -> String {
         if (mappedStateID == getStartState()) {
             s += f.formatView("  start -> %d\n", mappedStateID);
         }
-        for (auto &tran : state.tranSet) {
+        for (auto &tran : state.getTransitionSet()) {
             StateID mappedDestID = posMap ? posMap[tran.to] : tran.to;
             label = f.reverseEscaped(actions[tran.action]);
             s += f.formatView("  %d -> %d [label=\"%s\"", mappedStateID,
@@ -162,19 +164,20 @@ auto Automaton::dump(const StateID *posMap) const -> String {
 
 // This function calculate closure and store information in place;
 // Must be used inside toDFA(), because only then transitions are sorted.
-void Automaton::closurify(StateClosure &closure) const {
+void Automaton::makeClosure(StateClosure &closure) const {
     std::stack<StateID> stack;
-    for (auto s : closure.states) stack.push(static_cast<StateID>(s));
+    for (auto s : closure) stack.push(static_cast<StateID>(s));
 
     while (!stack.empty()) {
         auto s = stack.top();
         stack.pop();
-        auto it = states[s].tranSet.lowerBound(epsilonAction);
-        auto end = states[s].tranSet.end();
+        auto const &trans = states[s].getTransitionSet();
+        auto it = trans.lowerBound(epsilonAction);
+        auto end = trans.end();
         for (; it != end && it->action == epsilonAction; ++it) {
             // Can reach this state by epsilon
-            if (!closure.states.contains(it->to)) {
-                closure.states.add(it->to);
+            if (!closure.contains(it->to)) {
+                closure.insert(it->to);
                 stack.push(it->to);
             }
         }
@@ -187,40 +190,31 @@ auto Automaton::transit(StateClosure const &closure, ActionID action) const
     assert(action != epsilonAction);
 
     bool found = false;
-    StateClosure res{util::BitSet{states.size()}, closure.actionConstraints};
+    StateClosure res{states.size()};
 
     // Copy bitset
     util::BitSet receivers = actionReceivers[action];
-    receivers &= closure.states;
+    receivers &= closure;
     for (auto state : receivers) {
         // This state can receive current action
-        auto it = states[state].tranSet.lowerBound(action);
-        auto end = states[state].tranSet.end();
+        auto const &trans = states[state].getTransitionSet();
+        auto it = trans.lowerBound(action);
+        auto end = trans.end();
         for (; it != end && it->action == action; ++it) {
-            res.states.add(it->to);
+            res.insert(it->to);
             found = true;
         }
     }
 
     if (!found) return {};
 
-    closurify(res);
+    makeClosure(res);
     return std::make_optional<StateClosure>(std::move(res));
 }
 
 String Automaton::dumpStateClosure(StateClosure const &closure) const {
-    String s = closure.states.dump();
-    if (closure.actionConstraints.has_value()) {
-        auto const &constraints = closure.actionConstraints.value();
-        bool commaFlag = false;
-        s += ", {";
-        for (auto i : constraints) {
-            if (commaFlag) s += ',';
-            s += actions[i];
-            commaFlag = true;
-        }
-        s += "}";
-    }
+    String s = closure.dump();
+    // TODO: show follow set
     return s;
 }
 
@@ -230,6 +224,7 @@ Automaton Automaton::toDFA() {
     // Make a copy if this is already a DFA
     if (isDFA()) {
         dfa = *this;
+        dfa.separateKernels();
         dfa.transformedDFAFlag = true;
         return dfa;
     }
@@ -247,12 +242,12 @@ Automaton Automaton::toDFA() {
         actionReceivers.emplace_back(states.size());
     }
     for (auto &state : states) {
-        for (auto &tran : state.tranSet)
-            actionReceivers[tran.action].add(state.id);
+        for (auto &tran : state.getTransitionSet())
+            actionReceivers[tran.action].insert(state.id);
     }
 
     // States that need to be processed.
-    // We need to ensure that for S in `stack`, closurify(S) == S.
+    // We need to ensure that for S in `stack`, makeClosure(S) == S.
     std::stack<StateID> stack;
     std::unordered_map<StateClosure, StateID> closureIDMap;
     std::vector<StateClosure> closureVec;
@@ -262,17 +257,16 @@ Automaton Automaton::toDFA() {
         auto stateIndex = static_cast<StateID>(closureVec.size());
         closureVec.push_back(std::move(s));
         closureIDMap.emplace(closureVec.back(), stateIndex);
-        dfa.states.emplace_back(stateIndex,
-                                dfa.dumpStateClosure(closureVec.back()), false);
+        dfa.addState(dfa.dumpStateClosure(closureVec.back()), false);
         stack.push(stateIndex);
         return stateIndex;
     };
 
     // Add start state
     {
-        StateClosure start{util::BitSet{states.size()}, std::nullopt};
-        start.states.add(startState);
-        closurify(start);
+        StateClosure start{states.size()};
+        start.insert(startState);
+        makeClosure(start);
 
         auto stateIndex = addNewState(std::move(start));
         dfa.markStartState(stateIndex);
@@ -309,13 +303,13 @@ Automaton Automaton::toDFA() {
 
     // Mark final states
     // Step 1: Get a bitset of final NFA states
-    util::BitSet nfaFinalStates{states.size()};
+    util::BitSet<StateID> nfaFinalStates{states.size()};
     for (auto const &state : states) {
-        if (state.acceptable) nfaFinalStates.add(state.id);
+        if (state.acceptable) nfaFinalStates.insert(state.id);
     }
     // Step 2: Use bitset to find DFA final states
     for (auto &entry : closureIDMap) {
-        if (entry.first.states.hasIntersection(nfaFinalStates))
+        if (entry.first.hasIntersection(nfaFinalStates))
             dfa.markFinalState(entry.second);
     }
 
@@ -332,7 +326,7 @@ Automaton Automaton::toDFA() {
 
 void Automaton::move(ActionID action) {
     if (currentState < 0) throw IllegalStateError();
-    auto const &trans = states[currentState].tranSet;
+    auto const &trans = states[currentState].getTransitionSet();
     auto it = trans.lowerBound(action);
     auto end = trans.end();
     if (it == end || it->action != action) {
@@ -344,6 +338,23 @@ void Automaton::move(ActionID action) {
     }
     // Action is okay
     setState(dest);
+}
+
+void Automaton::separateKernels() {
+    for (auto &state : this->states) {
+        if (state.kernel)
+            state.kernel = std::make_shared<StateKernel>(*state.kernel);
+    }
+    for (auto &state : this->formerStates) {
+        if (state.kernel)
+            state.kernel = std::make_shared<StateKernel>(*state.kernel);
+    }
+}
+
+Automaton Automaton::deepClone() const {
+    Automaton res = *this;
+    res.separateKernels();
+    return res;
 }
 
 }  // namespace gram

@@ -14,12 +14,12 @@ class SLRParser : public LRParser {
             auto const &production =
                 gram.getProductionTable()[pact.productionID];
             auto const symbol = gram.getAllSymbols()[production.leftSymbol];
-            return symbol.followSet.find(static_cast<SymbolID>(act)) !=
-                   symbol.followSet.end();
+            return symbol.followSet.contains(static_cast<SymbolID>(act));
         }
 
         return true;
     }
+    
 };
 }  // namespace gram
 
