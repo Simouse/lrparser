@@ -1,5 +1,6 @@
 #include <cstring>
 #include <iostream>
+#include <cstring>
 #include <string>
 
 #include "src/common.h"
@@ -25,17 +26,17 @@ void printUsageAndExit(bool printErrorLine = true) {
         "test sequence from standard input stream, and stores analysis results "
         "into <Result Dir>.\n"
         "\n"
-        "Usage: lrparser -t<Type> -g<Grammar file> [-o<Result Dir>] [--nodot] "
-        "[--strict] [--debug] [-h|--help] [--step] [--disable-auto-define]\n"
+        "Usage: lrparser [[-h|--help]|[-t<Type>] [-g<Grammar file>] [-o<Result "
+        "Dir>]] <FLAGS>\n"
         "\n"
         "Possible command: lrparser -tslr -g grammar.txt -o results\n"
+        "\n"
         "Grammar file:\n"
         "    1) Use `!` or `#` to start a line comment.\n"
         "    2) Token naming is based on C-style variable naming. Besides, "
-        "`\\` can appear at the first character of token, and quoted symbols "
-        "are supported so you can use some operators directly. (See the next "
-        "rule)\n"
-        "    2) `\"` or `'` can be used to quote a symbol, e.g. '+'. \"'\" and "
+        "`\\` can appear at the first character of token, and "
+        "quoted symbols are supported. (See the next rule)\n"
+        "    3) `\"` or `'` can be used to quote a symbol, e.g. '+'. \"'\" and "
         "'\"' are okay, but there's no way to use them both in one symbol. "
         "Spaces in a quoted string are not allowed.\n"
         "    4) \\e, _e, and \\epsilon are reserved for epsilon. \n"
@@ -55,22 +56,29 @@ void printUsageAndExit(bool printErrorLine = true) {
         "    exp   -> exp '+' term  | term\n"
         "    term  -> term '*' fac  | fac\n"
         "    fac   -> ID            | \"(\" exp ')'\n"
-        "-t        option: Choose a parser type. Available: lr0, slr, lalr, "
+        "\n"
+        "Options:\n"
+        "-t        : Choose a parser type. Available: lr0, slr, lalr, "
         "lr1. (Default: slr)\n"
-        "-o        option: Specify output directory. (Default: \"results\").\n"
-        "-g        option: Specify grammar file path. (Default: "
-        "\"grammar.txt\")\n"
-        "--nodot   option: Disable svg automaton output. Use this when you "
-        "don't have `dot` in your `PATH`.\n"
-        "--strict  option: Input token names must conform to rules of grammar "
-        "file. Without this option, they are simply space-splitted.\n"
-        "--debug   option: Set output level to DEBUG.\n"
-        "-h|--help option: Output help message.\n"
-        "--step    option: Read <stdin> step by step. If you have to process a "
-        "very large input file, you may need this option. But without this "
-        "option the parser can provide better display for input queue.\n"
-        "--disable-auto-define option: All terminals must be defined before "
-        "being used.\n");
+        "-o        : Specify output directory. (Default: \"results\").\n"
+        "-g        : Specify grammar file path. (Default: \"grammar.txt\")\n"
+        "-h|--help : Output help message and exit.\n"
+        "\n"
+        "Flags:\n"
+        "--nodot   : Disable svg automaton output. Use this when you don't "
+        "have `dot` in your `PATH`.\n"
+        "--strict  : Input token names must conform to rules of grammar "
+        "file. Without this flag, they are simply space-splitted.\n"
+        "--debug   : Set output level to DEBUG.\n"
+        "--step    : Read <stdin> step by step. If you have to process a very "
+        "large input file, you may "
+        "need this flag. But without this flag the parser can provide better "
+        "display for input queue.\n"
+        "--disable-auto-define: All terminals must be defined before "
+        "being used.\n"
+        "--allow-non-terminals: Allow non-terminal symbols as inputs. Usually "
+        "this option is not used, because the parser only receives data from "
+        "the lexer, which only generates terminals.\n");
     exit(0);
 }
 
@@ -159,6 +167,8 @@ void lrParseArgs(int argc, char **argv) {
             launchArgs.exhaustInput = false;
         } else if (strcmp("--disable-auto-define", argv[i]) == 0) {
             launchArgs.autoDefineTerminals = false;
+        } else if (strcmp("--allow-non-terminals", argv[i]) == 0) {
+            launchArgs.allowNonterminalAsInputs = true;
         } else {
             printUsageAndExit();
         }

@@ -6,7 +6,6 @@
 #include "src/grammar/Grammar.h"
 #include "src/parser/LRParser.h"
 #include "src/util/BitSet.h"
-#include <vcruntime.h>
 
 namespace gram {
 class LR1Parser : public LRParser {

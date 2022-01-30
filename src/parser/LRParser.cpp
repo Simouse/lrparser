@@ -6,7 +6,6 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
-#include <vcruntime.h>
 #include <vector>
 
 #include "src/automata/Automaton.h"
@@ -320,13 +319,15 @@ void LRParser::readSymbol(util::TokenReader &reader) {
     String s;
     if (reader.getToken(s)) {
         auto const &symbol = gram.findSymbol(s);
+        if (!launchArgs.allowNonterminalAsInputs &&
+            symbol.type == SymbolType::NON_TERM) {
+            throw std::runtime_error("Nonterminals as inputs are not allowed");
+        }
         if (symbol.id == gram.getEpsilonSymbol().id) {
             throw std::runtime_error("Epsilon cannot be used in input");
         } else if (symbol.id == gram.getEndOfInputSymbol().id) {
             inputFlag = false;
         }
-        // push_back() should be equivalent to push_front(), since queue
-        // is empty
         InputQueue.push_back(symbol.id);
     } else {
         inputFlag = false;

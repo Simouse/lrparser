@@ -5,7 +5,6 @@
 #include <functional>
 #include <istream>
 #include <unordered_map>
-#include <vcruntime.h>
 #include <vector>
 
 #include "src/automata/Automaton.h"

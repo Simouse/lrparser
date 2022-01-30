@@ -55,6 +55,7 @@ struct LaunchArguments {
     bool strict = false;
     bool exhaustInput = true;
     bool autoDefineTerminals = true;
+    bool allowNonterminalAsInputs = false;
     ParserType parserType = SLR;
     DisplayLogLevel logLevel = VERBOSE;
     String grammarFileName = "grammar.txt";
