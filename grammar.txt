@@ -33,7 +33,7 @@
 # term  -> term '*' fac  | fac
 # fac   -> ID            | "(" exp ')'
 
-TERM: {num, id, assign}
+# TERM: {num, id, assign}
 S ->	id
 |	    V assign E
 V ->	id

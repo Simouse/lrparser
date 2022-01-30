@@ -30,29 +30,22 @@ Grammar GrammarReader::parse(istream &stream) {
 void GrammarReader::parse(Grammar &g) try {
     String s;
 
-    expectOrThrow("TERM");
-    expectOrThrow(":");
-    expectOrThrow("{");
-
     // Start T definition
-    while (getToken(s)) {
-        g.putSymbol(s.c_str(), true);
-        if (!expect(','))
-            break;
+    if (!launchArgs.autoDefineTerminals) {
+        expectOrThrow("TERM");
+        expectOrThrow(":");
+        expectOrThrow("{");
+
+        while (getToken(s)) {
+            g.putSymbol(s.c_str(), true);
+            if (!expect(','))
+                break;
+        }
+
+        expectOrThrow("}");
     }
 
-    expectOrThrow("}");
-
     // Start N definition
-    // expectOrThrow("START:");
-    // if (!getToken(s, false)) {
-    //     throw std::runtime_error("Please provide a start symbol");
-    // }
-    // g.setStart(s.c_str());
-    // if (getToken(s, false)) {
-    //     throw std::runtime_error("Cannot define more than one start symbol");
-    // }
-
     bool startFound = false;
 
     while (getToken(s)) { // Has more rules
@@ -67,8 +60,10 @@ void GrammarReader::parse(Grammar &g) try {
             std::vector<SymbolID> productionBody;
             bool hasEpsilon = false;
             while (getToken(s, false)) {
-                // put symbol and delay checking
-                auto symid = g.putSymbolUnchecked(s.c_str());
+                // put symbol and delay checking if auto-define is not enabled
+                auto symid = launchArgs.autoDefineTerminals
+                                 ? g.putSymbol(s.c_str(), true)
+                                 : g.putSymbolUnchecked(s.c_str());
                 productionBody.push_back(symid);
                 if (symid == g.getEpsilonSymbol().id) {
                     hasEpsilon = true;

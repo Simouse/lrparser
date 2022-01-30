@@ -351,7 +351,6 @@ Automaton Automaton::toDFA() {
     // Mark final states
     // Step 1: Get a bitset of final NFA states
     util::BitSet<StateID> finalStateMask{states.size()};
-    // TODO: endable is not reliable!
     for (auto const &state : states) {
         if (state.endable) // This property should be handled when building NFA
             finalStateMask.insert(state.id);

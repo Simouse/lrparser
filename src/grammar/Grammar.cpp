@@ -37,10 +37,19 @@ auto Grammar::putSymbolNoDuplicate(Symbol &&sym) -> SymbolID {
             storedSym.type = sym.type;
             return storedSym.id;
         }
-        if (storedSym.type != sym.type && sym.type != SymbolType::UNCHECKED) {
-            throw std::runtime_error(
-                "Redefinition of previous symbol with different types");
+        // This item attempts to overwrite symbol type
+        if (sym.type != SymbolType::UNCHECKED) {
+            if (!launchArgs.autoDefineTerminals && storedSym.type != sym.type) {
+                throw std::runtime_error(
+                    "Redefinition of previous symbol with different types");
+            } else if (launchArgs.autoDefineTerminals &&
+                       sym.type == SymbolType::NON_TERM) {
+                // If auto-define is enabled, a symbol can upgrade to
+                // non-terminal.
+                storedSym.type = SymbolType::NON_TERM;
+            }
         }
+
         return storedSym.id;
     }
     // Not found
@@ -196,7 +205,8 @@ bool Grammar::resolveNullable(Symbol &sym) {
 // This function needs to get a Symbol & from symVec,
 // so symVec must be a mutable reference
 void Grammar::resolveFirstSet(vector<int> &visit, Symbol &curSymbol) {
-    if (visit[curSymbol.id]) return;
+    if (visit[curSymbol.id])
+        return;
 
     // Mark the flag to prevent circular recursive call
     visit[curSymbol.id] = 1;
@@ -211,7 +221,8 @@ void Grammar::resolveFirstSet(vector<int> &visit, Symbol &curSymbol) {
                 resolveFirstSet(visit, rightSymbol);
             }
             for (auto sid : rightSymbol.firstSet) {
-                if (sid != epsilon) curSymbol.firstSet.insert(sid);
+                if (sid != epsilon)
+                    curSymbol.firstSet.insert(sid);
             }
             if (!rightSymbol.nullable.value()) {
                 allNullable = false;
@@ -303,7 +314,8 @@ Grammar &Grammar::resolveSymbolAttributes() {
             auto const &prod = productionTable[prodID];
             auto const &productionBody = prod.rightSymbols;
             // Skip epsilon productions
-            if (productionBody.empty()) continue;
+            if (productionBody.empty())
+                continue;
 
             auto const &last = symbolVector[productionBody.back()];
 
@@ -322,7 +334,8 @@ Grammar &Grammar::resolveSymbolAttributes() {
                 }
 
                 for (auto first : nextSymbol.firstSet) {
-                    if (first != epsilon) thisSymbol.followSet.insert(first);
+                    if (first != epsilon)
+                        thisSymbol.followSet.insert(first);
                 }
                 if (nextSymbol.nullable.value())
                     dependencyTable[thisSymbol.id].insert(nextSymbol.id);
@@ -393,8 +406,9 @@ const Grammar::symvec_t &Grammar::getAllSymbols() const { return symbolVector; }
 
 Symbol const &Grammar::findSymbol(String const &s) const {
     auto it = idTable.find(s);
-    if (it != idTable.end()) return symbolVector[it->second];
+    if (it != idTable.end())
+        return symbolVector[it->second];
     throw NoSuchSymbolError(s);
 }
 
-}  // namespace gram
+} // namespace gram

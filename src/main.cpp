@@ -10,7 +10,6 @@
 #include "src/parser/SLRParser.h"
 #include "src/util/Formatter.h"
 
-
 using namespace gram;
 
 LaunchArguments launchArgs;
@@ -27,7 +26,7 @@ void printUsageAndExit(bool printErrorLine = true) {
         "into <Result Dir>.\n"
         "\n"
         "Usage: lrparser -t<Type> -g<Grammar file> [-o<Result Dir>] [--nodot] "
-        "[--strict] [--debug] [-h|--help] [-s]\n"
+        "[--strict] [--debug] [-h|--help] [--step] [--disable-auto-define]\n"
         "\n"
         "Possible command: lrparser -tslr -g grammar.txt -o results\n"
         "Grammar file:\n"
@@ -44,9 +43,13 @@ void printUsageAndExit(bool printErrorLine = true) {
         "    6) Define terminals, the start symbol, and productions as the "
         "following example shows. All symbols at the left hand side of "
         "productions are automatically defined as non-terminals. The first "
-        "non-terminal symbol is defined as the start symbol.\n"
+        "non-terminal symbol is defined as the start symbol. If you choose to "
+        "define terminals before using them, argument `--disable-auto-define` "
+        "must be passed.\n"
         "    e.g.\n"
         "    # Define terminals\n"
+        "    # If you don't want to define terminals, you should remove this "
+        "line and not pass `--disable-auto-define` argument\n"
         "    TERM :{ID, '(', ')', '+', '*'}\n\n"
         "    # Define productions\n"
         "    exp   -> exp '+' term  | term\n"
@@ -63,9 +66,11 @@ void printUsageAndExit(bool printErrorLine = true) {
         "file. Without this option, they are simply space-splitted.\n"
         "--debug   option: Set output level to DEBUG.\n"
         "-h|--help option: Output help message.\n"
-        "-s        option: Read <stdin> step by step. If you have to process a "
+        "--step    option: Read <stdin> step by step. If you have to process a "
         "very large input file, you may need this option. But without this "
-        "option the parser can provide better display for input queue.\n");
+        "option the parser can provide better display for input queue.\n"
+        "--disable-auto-define option: All terminals must be defined before "
+        "being used.\n");
     exit(0);
 }
 
@@ -150,8 +155,10 @@ void lrParseArgs(int argc, char **argv) {
         } else if (strcmp("--help", argv[i]) == 0 ||
                    strcmp("-h", argv[i]) == 0) {
             printUsageAndExit(false);
-        } else if (strcmp("-s", argv[i]) == 0) {
+        } else if (strcmp("--step", argv[i]) == 0) {
             launchArgs.exhaustInput = false;
+        } else if (strcmp("--disable-auto-define", argv[i]) == 0) {
+            launchArgs.autoDefineTerminals = false;
         } else {
             printUsageAndExit();
         }
