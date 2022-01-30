@@ -1,6 +1,7 @@
 #ifndef LRPARSER_AUTOMATA_H
 #define LRPARSER_AUTOMATA_H
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -44,57 +45,45 @@ class Automaton;
 
 struct TransitionSet {
     auto insert(const Transition &t) { return set.insert(t); }
-
     [[nodiscard]] auto size() const noexcept { return set.size(); }
     [[nodiscard]] auto begin() { return set.begin(); }
     [[nodiscard]] auto end() { return set.end(); }
     [[nodiscard]] auto begin() const { return set.begin(); }
     [[nodiscard]] auto end() const { return set.end(); }
-
     // Returns an iterator (possibly) pointering to the first element that has
     // the same action as the argument. We need to check by ourselves if the
     // iterator is valid (is still accessible and has the same action).
     [[nodiscard]] auto lowerBound(ActionID action) const {
         return set.lower_bound({StateID{-1}, action});
     }
-
     [[nodiscard]] bool containsAction(ActionID action) const {
         auto it = lowerBound(action);
         return it != set.end() && it->action == action;
     }
+    TransitionSet() = default;
 
   private:
     std::set<Transition> set;
 };
 
-struct StateKernel {
-    String label;
-    TransitionSet transitionSet;
-    explicit StateKernel(String lbl) : label(std::move(lbl)) {}
-};
-
+// Owns: nothing.
+// For transformed DFA, state is actually a pseudo state.
 class State {
   public:
     // This flag will be marked in Automaton::markFinalState().
-    bool endable;
-    mutable bool colored;
+    bool finalFlag = false;
+    mutable bool colored = true;
     StateID id;
-    std::shared_ptr<StateKernel> kernel;
-    std::shared_ptr<util::BitSet<ActionID>> actionConstraints;
+    const char *label = nullptr;
+    TransitionSet *transitions = nullptr;
+    util::BitSet<ActionID> *actionConstraints = nullptr;
 
   public:
     friend class Automaton;
-    State(StateID id, String label,
-          std::shared_ptr<util::BitSet<ActionID>> constraints)
-        : endable(false), colored(true), id(id),
-          kernel(std::make_shared<StateKernel>(std::move(label))),
-          actionConstraints(std::move(constraints)) {}
-
-    [[nodiscard]] String &getLabel() const { return kernel->label; }
-
-    [[nodiscard]] TransitionSet &getTransitionSet() const {
-        return kernel->transitionSet;
-    }
+    State(StateID id, const char *label, TransitionSet *trans,
+          util::BitSet<ActionID> *constraints)
+        : id(id), label(label), transitions(trans),
+          actionConstraints(constraints) {}
 };
 
 using StateClosure = util::BitSet<StateID>;
@@ -113,15 +102,19 @@ template <> struct hash<gram::StateID> {
 
 namespace gram {
 
-// To clone the entire automaton, use deepClone() instead.
+// Owns: transitions of states.
+// Does not own: actions, label of states, constraints of states.
 class Automaton {
   public:
     Automaton();
+    Automaton(Automaton const &other) = delete;
+    Automaton &operator=(Automaton const &other) = delete;
+    Automaton(Automaton &&other) = default;
+    Automaton &operator=(Automaton &&other) = default;
 
     // Add a new state. ID is ensured to grow continuously.
-    StateID addState(String desc,
-                     std::shared_ptr<util::BitSet<ActionID>> constraints);
-    ActionID addAction(StringView desc);
+    StateID addState(const char *label, util::BitSet<ActionID> *constraints);
+    ActionID addAction(const char *s);
     void addTransition(StateID from, StateID to, ActionID action);
     void addEpsilonTransition(StateID from, StateID to);
     void markStartState(StateID state);
@@ -129,17 +122,33 @@ class Automaton {
     void setState(StateID state);
     void highlightState(StateID state) const;
     void setDumpFlag(bool flag);
+    void setEpsilonAction(ActionID actionID);
+
+    using ClosureEqualFuncType =
+        std::function<bool(const StateClosure &, const StateClosure &)>;
+    using DuplicateClosureHandlerType =
+        std::function<void(StateClosure const &existingClosure,
+                           StateClosure const &duplicateClosure)>;
+    void setClosureEqualFunc(ClosureEqualFuncType const &func);
+    void setDuplicateClosureHandler(DuplicateClosureHandlerType const &func);
 
     // Accessors
-    [[nodiscard]] auto getAllStates() const -> std::vector<State> const &;
-    [[nodiscard]] StateID getState() const; // Current state
-    [[nodiscard]] StateID getStartState() const;
-    [[nodiscard]] auto getAllActions() const -> std::vector<String> const &;
-    [[nodiscard]] auto getClosures() const -> std::vector<StateClosure> const &;
-    [[nodiscard]] auto getFormerStates() const -> std::vector<State> const &;
-    [[nodiscard]] bool isEpsilonAction(ActionID action) const;
-    [[nodiscard]] bool isDFA() const;
-    [[nodiscard]] auto getStatesMutable() -> std::vector<State> &;
+    [[nodiscard]] auto const &getAllStates() const { return states; }
+    [[nodiscard]] StateID getState() const { return currentState; }
+    [[nodiscard]] StateID getStartState() const { return startState; }
+    [[nodiscard]] auto const &getAllActions() const { return actions; }
+    [[nodiscard]] auto const &getClosures() const {
+        assert(transformedDFAFlag);
+        return closures;
+    }
+    [[nodiscard]] auto getFormerStates() const {
+        assert(transformedDFAFlag);
+        return formerStates;
+    }
+    [[nodiscard]] bool isEpsilonAction(ActionID action) const {
+        return action == epsilonAction;
+    }
+    [[nodiscard]] bool isDFA() const { return !multiDestFlag; }
 
     // DFA generation
     void makeClosure(StateClosure &closure) const;
@@ -155,26 +164,23 @@ class Automaton {
     // `posMap` is used to switch state indexes so the result can be easier to
     // observe. It stores: {realState => stateAlias(label)}
     [[nodiscard]] String dump(const StateID *posMap = nullptr) const;
-
     // Dump State in human-readable string.
-    // TODO:
     [[nodiscard]] String dumpState(StateID stateID) const;
-
     // Dump StateClosure in human-readable string.
     // (StateClosure does not have essential information itself.)
     [[nodiscard]] String dumpStateClosure(StateClosure const &closure) const;
 
     // Try to accept a new action. Compared to unconditional setState(), move()
-    // simulates step-by-step moving, and throws exception when action is not
-    // endable.
+    // simulates step-by-step moving, and throws exception when action cannot
+    // be final.
     // Up to 2022.1.25: Not used.
     void move(ActionID action);
 
     // Separate kernels of two automatons after copy assignment.
-    void separateKernels();
+    // void separateKernels();
 
     // Clone entire automaton
-    [[nodiscard]] Automaton deepClone() const;
+    // [[nodiscard]] Automaton deepClone() const;
 
     // This error is thrown when current state is illegal. This may
     // be caused by not setting start state.
@@ -208,8 +214,15 @@ class Automaton {
     StateID currentState{-1};
     ActionID epsilonAction{-1};
     std::vector<State> states;
-    std::vector<String> actions;
-    std::unordered_map<StringView, ActionID> actIDMap;
+    std::vector<const char *> actions;
+//    std::unordered_map<StringView, ActionID> actIDMap;
+    std::vector<std::unique_ptr<TransitionSet>> transitionPool;
+
+    TransitionSet *newTransitionSet();
+
+    // Passed down by parser
+    ClosureEqualFuncType closureEqualFunc;
+    DuplicateClosureHandlerType duplicateClosureHandler;
 
     // Following fields are for transformed DFA.
     // Any attempts to access those methods from an automaton not created

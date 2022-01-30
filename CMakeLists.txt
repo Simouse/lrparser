@@ -14,7 +14,7 @@ include_directories(${PROJECT_SOURCE_DIR})
 
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 
-add_executable(lrparser ${SOURCES} test/SizeMonitor.cpp)
+add_executable(lrparser ${SOURCES})
 
 if (UNIX)
     target_link_libraries(lrparser libpthread.so)

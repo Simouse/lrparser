@@ -10,14 +10,13 @@
 namespace gram {
 class LR1Parser : public LRParser {
   public:
-    LR1Parser(Grammar const &g) : LRParser(g) {}
+    explicit LR1Parser(Grammar const &g) : LRParser(g) {}
 
     [[nodiscard]] bool canAddParserTableEntry(StateID state, ActionID act,
                                              ParseAction pact,
                                              StateID substate) const override {
         // We need to check specific reduction rule
         if (pact.type == ParseAction::REDUCE) {
-            // auto const &states = dfa.getAllStates();
             auto const &formerStates = dfa.getFormerStates();
             auto const &reducibleState = formerStates[substate];
             return reducibleState.actionConstraints->contains(act);

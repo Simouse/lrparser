@@ -9,7 +9,7 @@
 namespace gram {
 class LR0Parser : public LRParser {
   public:
-    LR0Parser(Grammar const &g) : LRParser(g) {}
+    explicit LR0Parser(Grammar const &g) : LRParser(g) {}
 
     // No restriction
     [[nodiscard]] bool canAddParserTableEntry(StateID state, ActionID act,

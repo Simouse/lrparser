@@ -29,16 +29,16 @@
 
 # TERM :{ID, "(", ')', '+', '*'}
 # START: exp
-# exp   -> exp '+' term  | term
-# term  -> term '*' fac  | fac
-# fac   -> ID            | "(" exp ')'
+exp   -> exp '+' term  | term
+term  -> term '*' fac  | fac
+fac   -> ID            | "(" exp ')'
 
 # TERM: {num, id, assign}
-S ->	id
-|	    V assign E
-V ->	id
-E ->	V
-|	    num
+# S ->	id
+# |	    V assign E
+# V ->	id
+# E ->	V
+# |	    num
 
 # TERM: {a}
 # START: S

@@ -1,21 +1,22 @@
-#ifndef LRPARSER_SLR_H
-#define LRPARSER_SLR_H
+#ifndef LRPARSER_LALR_H
+#define LRPARSER_LALR_H
 
+#include "src/common.h"
 #include "src/grammar/Grammar.h"
 #include "src/parser/LRParser.h"
 namespace gram {
-class SLRParser : public LRParser {
+class LALRParser : public LRParser {
   public:
-    explicit SLRParser(Grammar const &g) : LRParser(g) {}
+    explicit LALRParser(Grammar const &g) : LRParser(g) {}
 
     [[nodiscard]] bool canAddParserTableEntry(StateID state, ActionID act,
-                                             ParseAction pact,
-                                             StateID substate) const override {
+                                              ParseAction pact,
+                                              StateID substate) const override {
+        // We need to check specific reduction rule
         if (pact.type == ParseAction::REDUCE) {
-            auto const &production =
-                gram.getProductionTable()[pact.productionID];
-            auto const symbol = gram.getAllSymbols()[production.leftSymbol];
-            return symbol.followSet.contains(static_cast<SymbolID>(act));
+            auto const &formerStates = dfa.getFormerStates();
+            auto const &reducibleState = formerStates[substate];
+            return reducibleState.actionConstraints->contains(act);
         }
 
         return true;
@@ -25,8 +26,8 @@ class SLRParser : public LRParser {
     canMarkFinal(const StateSeed &seed,
                  Production const &production) const override {
         auto endActionID = static_cast<ActionID>(gram.getEndOfInputSymbol().id);
-        auto const &symbols = gram.getAllSymbols();
-        return symbols[production.leftSymbol].followSet.contains(endActionID);
+        assert(seed.second);
+        return seed.second->contains(endActionID);
     }
 
     [[nodiscard]] bool shouldIncludeConstraintsInDump() const override {
@@ -45,6 +46,18 @@ class SLRParser : public LRParser {
         return [](StateSeed const &s1, StateSeed const &s2) -> bool {
             return s1.first == s2.first;
         };
+    }
+
+    // Only consider kernel
+    [[nodiscard]] Automaton::ClosureEqualFuncType
+    getClosureEqualFunc() const override {
+        throw UnimplementedError();
+    }
+
+    // Handler: void(first arg: existingClosure, second arg: duplicateClosure)
+    [[nodiscard]] Automaton::DuplicateClosureHandlerType
+    getDuplicateClosureHandler() const override {
+        throw UnimplementedError();
     }
 };
 } // namespace gram
