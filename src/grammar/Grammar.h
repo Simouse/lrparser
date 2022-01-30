@@ -8,22 +8,27 @@
 #include <unordered_set>
 #include <vector>
 
+#include "src/automata/Automaton.h"
 #include "src/common.h"
 #include "src/util/BitSet.h"
 
 namespace gram {
 class Automaton;
-}  // namespace gram
+} // namespace gram
 
 namespace gram {
 enum SymbolType {
     NON_TERM = 0,
-    TERM = 1,  // For bool comparison
+    TERM = 1, // For bool comparison
     UNCHECKED
 };
 
 enum ProductionID : int;
-enum SymbolID : int;
+// enum SymbolID : int;
+// We may use static_cast when an element needs it, but a container
+// containing those elements cannot be cast. And allowing BitSet<T1> and
+// BitSet<T2> to be calculated together sounds wired.
+using SymbolID = ActionID;
 
 struct Production {
     SymbolID leftSymbol;
@@ -37,28 +42,27 @@ using ProductionTable = std::vector<Production>;
 class Grammar;
 
 struct Symbol {
-    // We want symbol set to be sorted (better for display)
-    // using symset_t = ::std::set<SymbolID>;
-    using symset_t = util::BitSet<SymbolID>;
+    using SymbolSet = util::BitSet<SymbolID>;
     std::optional<bool> nullable;
     SymbolType type;
     SymbolID id;
     String name;
     // Productions that can generate this symbol
     std::vector<ProductionID> productions;
-    symset_t firstSet;
-    symset_t followSet;
+    std::vector<StateID> startStates;
+    SymbolSet firstSet;
+    SymbolSet followSet;
 
     Symbol(SymbolType type, SymbolID id, String name)
         : type(type), id(id), name(std::move(name)) {}
 };
 
 class Grammar {
-   public:
+  public:
     using symvec_t = std::vector<Symbol>;
     using idtbl_t = std::unordered_map<String, SymbolID>;
 
-   private:
+  private:
     friend class GrammarReader;
     SymbolID start{-1};
     SymbolID epsilon{-1};
@@ -105,7 +109,7 @@ class Grammar {
     // Recursively resolve nullable dependency
     bool resolveNullable(Symbol &sym);
 
-   public:
+  public:
     [[nodiscard]] symvec_t const &getAllSymbols() const;
     [[nodiscard]] const Symbol &getStartSymbol() const;
     [[nodiscard]] const Symbol &getEpsilonSymbol() const;
@@ -130,13 +134,13 @@ class Grammar {
     static auto fromStdin() -> Grammar;
 
     struct SignStrings {
-        static constexpr const char *dot = "\xE2\x97\x8F";  // "●" in UTF-8
-        static constexpr const char *epsilon = "\xCE\xB5";  // "ε" in UTF-8
+        static constexpr const char *dot = "\xE2\x97\x8F"; // "●" in UTF-8
+        static constexpr const char *epsilon = "\xCE\xB5"; // "ε" in UTF-8
         static constexpr const char *endOfInput = "$";
     };
 
     class UnsolvedSymbolError : public std::runtime_error {
-       public:
+      public:
         explicit UnsolvedSymbolError(const Symbol &sym)
             : std::runtime_error("Unsolved symbol: " + sym.name),
               symInQuestion(sym) {}
@@ -146,11 +150,11 @@ class Grammar {
     // This error is thrown if we try to look up a symbol which does not exist
     // after grammar is built.
     class NoSuchSymbolError : public std::runtime_error {
-       public:
+      public:
         explicit NoSuchSymbolError(String const &name)
             : std::runtime_error("No such symbol: " + name) {}
     };
 };
-}  // namespace gram
+} // namespace gram
 
 #endif

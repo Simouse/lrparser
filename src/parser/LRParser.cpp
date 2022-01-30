@@ -1,9 +1,12 @@
 #include "src/parser/LRParser.h"
 
 #include <cassert>
+#include <memory>
 #include <stack>
 #include <stdexcept>
 #include <string>
+#include <utility>
+#include <vcruntime.h>
 #include <vector>
 
 #include "src/automata/Automaton.h"
@@ -21,162 +24,189 @@ namespace gram {
 // S -> aB : S0 = {S -> .aB, S -> a.B, S -> aB.}
 static String createStateName(const gram::Grammar &G, const gram::Symbol &N,
                               const std::vector<SymbolID> &productionBody,
-                              int dotPos) {
-    assert(static_cast<size_t>(dotPos) <= productionBody.size());
+                              size_t dotPos) {
+    assert(dotPos <= productionBody.size());
 
     const auto &symbols = G.getAllSymbols();
     String s = N.name;
     s += " ->";
 
-    int i = 0;
+    size_t i = 0;
     for (; i < dotPos; ++i) {
         s += ' ';
         s += symbols[productionBody[i]].name;
     }
     s += ' ';
     s += Grammar::SignStrings::dot;
-    for (; i < static_cast<int>(productionBody.size()); ++i) {
+    for (; i < productionBody.size(); ++i) {
         s += ' ';
         s += symbols[productionBody[i]].name;
     }
     return s;
 }
 
+// `rhsIndex`: points to the index of non-terminal symbol which we want to
+// resolve local follow constraints
+static auto
+resolveLocalConstraints(Grammar const &gram,
+                        util::BitSet<gram::ActionID> const &parentConstraints,
+                        Production const &production, size_t rhsIndex)
+    -> util::BitSet<gram::ActionID> {
+
+    auto const &symbols = gram.getAllSymbols();
+    auto const &rhs = production.rightSymbols;
+    util::BitSet<gram::ActionID> constraints(symbols.size());
+
+    bool allNullable = true;
+    for (size_t i = rhsIndex + 1; allNullable && i < rhs.size(); ++i) {
+        if (!symbols[rhs[i]].nullable.value())
+            allNullable = false;
+        constraints |= symbols[rhs[i]].firstSet;
+    }
+    if (allNullable)
+        constraints |= parentConstraints;
+
+    return constraints;
+}
+
 void LRParser::buildNFA() {
     Automaton &M = this->nfa;
     const Grammar &G = this->gram;
     const auto &symbols = G.getAllSymbols();
+    auto const &productionTable = G.getProductionTable();
+    util::Formatter f;
+    constexpr const char *outFilePrefix = "build_nfa";
 
-    // Store links here, so we can demonstrate how to add epsilon
-    // transitions from each state which wants N to all states
-    // that generates N eventually.
-    // { stateid => nid }
-    std::unordered_map<StateID, SymbolID> epsilonLinks;
+    nfa.setDumpFlag(shouldIncludeConstraintsInDump());
 
-    // Store states which begin the given symbol's productions.
-    // { nid => vector<stateid> }
-    std::unordered_map<SymbolID, std::vector<StateID>> prodStartStates;
+    auto estimatedStateCount = symbols.size() + productionTable.size() * 4;
 
-    // Store states which finish the given symbol's productions.
-    // { nid => vector<stateid> }
-    std::unordered_map<SymbolID, std::vector<StateID>> prodFinishStates;
+    // Store seeds and check if a seed exists. See definition of StateSeed.
+    std::unordered_map<StateSeed, std::vector<StateID>,
+                       decltype(getSeedHashFunc()),
+                       decltype(getSeedEqualFunc())>
+        seeds(estimatedStateCount, getSeedHashFunc(), getSeedEqualFunc());
 
-    // First we need to copy all actions by order, so symbols and
-    // actions are paired.
+    // One state can only link to one seed, because if constraints are
+    // different, LR1 should already mark sources as different states, and LR0
+    // will merge them so no new state was generated.
+    // { State ID => iterator to `seeds` }
+    std::unordered_map<StateID, decltype(seeds.begin())> epsilonLinks;
+
+    // Mark symbols that have their productions visited
+    std::stack<decltype(seeds.begin())> unvisitedSeeds;
+
+    auto addNewDependency =
+        [&epsilonLinks, &unvisitedSeeds,
+         &seeds](StateID state, SymbolID symbolID,
+                 const std::shared_ptr<util::BitSet<ActionID>> &constraints) {
+            auto seed = std::make_pair(symbolID, constraints);
+            // Find iterator
+            auto result = seeds.try_emplace(seed, std::vector<StateID>());
+            // Add a dependency link
+            epsilonLinks.try_emplace(state, result.first);
+            // Add the seed to stack if it's new
+            if (result.second) {
+                unvisitedSeeds.emplace(result.first);
+            }
+        };
+
+    // First we need to copy all actions by order, so symbols and actions are
+    // paired.
     for (auto const &symbol : symbols) {
         M.addAction(symbol.name);
     }
 
-    constexpr const char *outFilePrefix = "build_nfa";
-
-    // States from grammar
-    auto const &productionTable = G.getProductionTable();
-    for (int i = 0; i < static_cast<int>(productionTable.size()); ++i) {
-        ProductionID productionId{i};
-        auto const &production = productionTable[i];
-        auto const &rightSymbols = production.rightSymbols;
-
-        // TODO: remove stateIds, since state id grows continuously
-        std::vector<StateID> stateIds(rightSymbols.size() + 1);
-        for (int dotPos = 0; dotPos <= static_cast<int>(rightSymbols.size());
-             ++dotPos) {
-            String name = createStateName(G, symbols[production.leftSymbol],
-                                          rightSymbols, dotPos);
-            StateID stateId = M.addState(name);
-            stateIds[dotPos] = stateId;
-        }
-
-        // TODO: only add new states by production A -> B when A is required by other parts
-        // Add constraints to these states (This method is virtual)
-
-        // Link states
-        for (int dotPos = 0; dotPos < static_cast<int>(rightSymbols.size());
-             ++dotPos) {
-            StateID thisState{stateIds[dotPos]};
-            StateID nextState{stateIds[dotPos + 1]};
-            auto &nextSymbol = symbols[rightSymbols[dotPos]];
-            M.addTransition(thisState, nextState,
-                            static_cast<ActionID>(nextSymbol.id));
-
-            // Which non-terminal symbol do I want to link to?
-            if (nextSymbol.type == gram::SymbolType::NON_TERM) {
-                epsilonLinks.emplace(thisState, nextSymbol.id);
-            }
-        }
-
-        // Which states can provide my desired symbol?
-        prodStartStates[production.leftSymbol].push_back(stateIds.front());
-        prodFinishStates[production.leftSymbol].push_back(stateIds.back());
-
-        // Record states with their reducible productions
-        reduceMap[stateIds.back()] = productionId;
-
-        String displayInfo =
-            "Add states by production: " + gram.dumpProduction(productionId);
-        display(AUTOMATON, INFO, displayInfo.c_str(), &M,
-                (void *)outFilePrefix);
-    }
-
-    // Start state: Create S' for S
-    // Since name cannot contain a `'` in it, `S'` is legit
+    // Create S' (start symbol in augmented grammar) for S
     {
-        auto dotSign = Grammar::SignStrings::dot;
+        auto constraints =
+            std::make_shared<util::BitSet<ActionID>>(symbols.size());
+        constraints->insert(static_cast<ActionID>(G.getEndOfInputSymbol().id));
+
+        auto const &dotSign = Grammar::SignStrings::dot;
         auto &start = G.getStartSymbol();
         String name = start.name + '\'';
-        StateID s0 = M.addState(name + " -> " + dotSign + " " + start.name);
-        M.markStartState(s0);
-        StateID s1 = M.addState(name + " -> " + start.name + " " + dotSign);
+        StateID s0 =
+            M.addState(name + " -> " + dotSign + " " + start.name, constraints);
+        StateID s1 =
+            M.addState(name + " -> " + start.name + " " + dotSign, constraints);
         M.addTransition(s0, s1, static_cast<ActionID>(start.id));
         M.markStartState(s0);
-        epsilonLinks.emplace(s0, start.id);
+        M.markFinalState(s1);
         this->extendedStart = s0;
         this->extendedEnd = s1;
+
+        addNewDependency(s0, start.id, constraints);
     }
 
-    display(AUTOMATON, INFO, "Create new start and end for augmented grammar",
-            &M, (void *)outFilePrefix);
+    // Process all seeds
+    while (!unvisitedSeeds.empty()) {
+        auto seedIter = unvisitedSeeds.top();
+        unvisitedSeeds.pop();
+        for (auto prodID : symbols[seedIter->first.first].productions) {
+            auto const &prod = productionTable[prodID];
+            auto const &rhs = prod.rightSymbols;
+            StateID firstStateID;
+            // Add states
+            for (size_t i = 0; i <= rhs.size(); ++i) {
+                String name =
+                    createStateName(G, symbols[prod.leftSymbol], rhs, i);
+                StateID stateID =
+                    M.addState(std::move(name), seedIter->first.second);
+                if (i == 0)
+                    firstStateID = stateID;
+            }
+            // Link these states
+            for (size_t i = 0; i < rhs.size(); ++i) {
+                auto s1 = static_cast<StateID>(firstStateID + i);
+                auto s2 = static_cast<StateID>(firstStateID + i + 1);
+                auto const &curSymbol = symbols[rhs[i]];
+                M.addTransition(s1, s2, static_cast<ActionID>(curSymbol.id));
+                // Add new dependency
+                if (curSymbol.type == SymbolType::NON_TERM) {
+                    assert(seedIter->first.second);
+                    auto constraints = resolveLocalConstraints(
+                        gram, *seedIter->first.second, prod, i);
+                    addNewDependency(s1, curSymbol.id,
+                                     std::make_shared<util::BitSet<ActionID>>(
+                                         std::move(constraints)));
+                }
+            }
 
-    // Mark final states
-    // The last state of augmented start symbol production is a final state.
-    M.markFinalState(this->extendedEnd);
-
-    // If a non-terminal has a `$` in its follow set,
-    // all productions which generate this symbol will be marked final.
-    for (auto const &symbol : symbols) {
-        if (!symbol.followSet.contains(G.getEndOfInputSymbol().id)) {
-            continue;
-        }
-        // So this symbol can be accepted.
-        // Mark all states that can already generate this symbol.
-        for (auto state : prodFinishStates[symbol.id]) {
-            M.markFinalState(state);
+            auto lastStateID = static_cast<StateID>(firstStateID + rhs.size());
+            // Mark possible final state
+            if (canMarkFinal(seedIter->first, prod)) {
+                M.markFinalState(lastStateID);
+            }
+            // Record last state of a production
+            // (Production ID is needed in parser table)
+            reduceMap[lastStateID] = prodID;
+            // We are in a loop. So if a symbol has multiple productions,
+            // `seed->second` will store multiple start states.
+            seedIter->second.push_back(firstStateID);
         }
     }
 
-    display(AUTOMATON, INFO, "Mark final states", &M, (void *)outFilePrefix);
+    // display(AUTOMATON, INFO, "Mark final states", &M, (void *)outFilePrefix);
 
-    // Creating epsilon edge for each symbol
+    // Creating epsilon edges for each symbol
     for (const auto &link : epsilonLinks) {
         StateID from = link.first;
-        for (StateID to : prodStartStates.at(link.second)) {
+        for (StateID to : link.second->second) {
             M.addEpsilonTransition(from, to);
         }
-
-        String description =
-            "Create epsilon edges for state " + std::to_string(from);
-        display(AUTOMATON, INFO, description.c_str(), &M,
-                (void *)outFilePrefix);
     }
 
     display(AUTOMATON, INFO, "NFA is built", &M, (void *)outFilePrefix);
 }
 
 void LRParser::buildDFA() {
+    // Dump flag is inherited, no need to calculate again
     dfa = nfa.toDFA();
     display(AUTOMATON, INFO, "DFA is built", &dfa, (void *)"build_dfa");
 }
 
-void LRParser::buildParseTables() {
+void LRParser::buildParserTable() {
     // Now DFA has complete information
     // 1. DFA has epsilon action in its action vector, so we need to skip it.
     // 2. DFA doesn't have a '$' action, and we need to process it specially.
@@ -197,31 +227,30 @@ void LRParser::buildParseTables() {
                                  ? ParseAction::GOTO
                                  : ParseAction::SHIFT,
                              tran.to};
-            addParseTableEntry(state.id, tran.action, item);
+            addParserTableEntry(state.id, tran.action, item);
         }
     }
 
-    // Process "reduce"
-    // Bitset for reducible NFA states (so we can know if a DFA state is
-    // reducible)
-    util::BitSet<StateID> mask{formerStates.size()};
-
+    // Process Reduce items
+    util::BitSet<StateID> reducibleStateMask{formerStates.size()};
     for (auto const &entry : reduceMap) {
-        mask.insert(entry.first);
+        reducibleStateMask.insert(entry.first);
     }
 
-    for (StateID state{0}; state < nDFAStates; state = StateID{state + 1}) {
-        auto closure = closures[state];  // Copy a bitmap
-        closure &= mask;
-        for (auto s : closure) {
-            auto nfaState = static_cast<StateID>(s);
-            for (ActionID action{0}; action < nActions;
-                 action = ActionID{action + 1}) {
-                // Check if the action is allowed by followSet
-                ProductionID prodID = reduceMap.at(nfaState);
-
-                addParseTableEntry(state, action,
-                                   ParseAction{ParseAction::REDUCE, prodID});
+    for (int i = 0; i < nDFAStates; ++i) {
+        auto state = static_cast<StateID>(i);
+        auto closure = closures[state]; // Copy a bitmap
+        closure &= reducibleStateMask;
+        for (auto substate : closure) {
+            for (int j = 0; j < nActions; ++j) {
+                auto action = static_cast<ActionID>(j);
+                if (symbols[action].type == SymbolType::NON_TERM) {
+                    continue;
+                }
+                ProductionID prodID = reduceMap.at(substate);
+                addParserTableEntry(state, action,
+                                    ParseAction{ParseAction::REDUCE, prodID},
+                                    substate);
             }
         }
     }
@@ -230,55 +259,58 @@ void LRParser::buildParseTables() {
     auto endOfInput = static_cast<ActionID>(gram.getEndOfInputSymbol().id);
     for (int i = 0; i < nDFAStates; ++i) {
         if (closures[i].contains(this->extendedEnd)) {
-            addParseTableEntry(StateID{i}, endOfInput,
-                               ParseAction{ParseAction::SUCCESS, -1});
+            addParserTableEntry(StateID{i}, endOfInput,
+                                ParseAction{ParseAction::SUCCESS, -1});
         }
     }
 
     display(PARSE_TABLE, INFO, "Parse table", this);
 }
 
-void LRParser::addParseTableEntry(StateID state, ActionID act,
-                                  ParseAction pact) {
+void LRParser::addParserTableEntry(StateID state, ActionID act,
+                                   ParseAction pact, StateID substate) {
+    using std::set;
     using std::vector;
-    if (!canAddParseTableEntry(state, act, pact)) {
+    if (!canAddParserTableEntry(state, act, pact, substate)) {
         return;
     }
 
-    if (parseTable.empty()) {
-        parseTable = vector<vector<vector<ParseAction>>>(
+    if (parserTable.empty()) {
+        parserTable = vector<vector<set<ParseAction>>>(
             dfa.getAllStates().size(),
-            vector<vector<ParseAction>>(gram.getAllSymbols().size()));
+            vector<set<ParseAction>>(gram.getAllSymbols().size()));
     }
-    parseTable[state][act].push_back(pact);
+
+    parserTable[state][act].insert(pact);
 }
 
-String LRParser::dumpParseTableEntry(StateID state, ActionID action) const {
-    auto const &items = parseTable.at(state).at(action);
+String LRParser::dumpParserTableEntry(StateID state, ActionID action) const {
+    auto const &items = parserTable.at(state).at(action);
     String s;
     bool commaFlag = false;
     for (auto const &item : items) {
-        if (commaFlag) s += ',';
+        if (commaFlag)
+            s += ',';
         commaFlag = true;
         using Type = ParseAction::Type;
         switch (item.type) {
-            case Type::SUCCESS:
-                s += "acc";
-                break;
-            case Type::GOTO:
-                s += std::to_string(item.dest);
-                break;
-            case Type::SHIFT:
-                s += 's';
-                s += std::to_string(item.dest);
-                break;
-            case Type::REDUCE:
-                s += 'r';
-                s += std::to_string(item.productionID);
-                break;
-            default:
-                throw std::runtime_error(
-                    "dumpParseTableEntry(): Unknown parse action type");
+        case Type::SUCCESS:
+            s += "acc";
+            break;
+        case Type::GOTO:
+            s += std::to_string(item.dest);
+            break;
+        case Type::SHIFT:
+            s += 's';
+            s += std::to_string(item.dest);
+            break;
+        case Type::REDUCE:
+            s += 'r';
+            s += std::to_string(item.productionID);
+            break;
+        default:
+            throw std::runtime_error(
+                "dumpParserTableEntry(): Unknown parse action type");
         }
     }
     return s;
@@ -342,7 +374,7 @@ bool LRParser::test(std::istream &stream) try {
                 "No next symbol to use, this shouldn't be possible");
 
         auto const &tableEntry =
-            parseTable[stateStack.back()][InputQueue.front()];
+            parserTable[stateStack.back()][InputQueue.front()];
 
         auto choices = tableEntry.size();
         if (choices <= 0)
@@ -355,28 +387,27 @@ bool LRParser::test(std::istream &stream) try {
         }
 
         // Take action
-        auto const &decision = tableEntry.front();
+        auto const &decision = *tableEntry.begin();
         switch (decision.type) {
-            case ParseAction::GOTO:
-            case ParseAction::SHIFT:
-                stateStack.push_back(decision.dest);
-                symbolStack.push_back(InputQueue.front());
-                InputQueue.pop_front();
-                display(LOG, VERBOSE,
-                        decision.type == ParseAction::GOTO
-                            ? "Apply GOTO rule"
-                            : "Apply SHIFT rule");
-                break;
-            case ParseAction::REDUCE:
-                reduce(decision.productionID);
-                display(LOG, VERBOSE,
-                        f.formatView("Apply REDUCE by production: %d",
-                                     decision.productionID)
-                            .data());
-                break;
-            case ParseAction::SUCCESS:
-                display(LOG, INFO, "Success");
-                return true;
+        case ParseAction::GOTO:
+        case ParseAction::SHIFT:
+            stateStack.push_back(decision.dest);
+            symbolStack.push_back(InputQueue.front());
+            InputQueue.pop_front();
+            display(LOG, VERBOSE,
+                    decision.type == ParseAction::GOTO ? "Apply GOTO rule"
+                                                       : "Apply SHIFT rule");
+            break;
+        case ParseAction::REDUCE:
+            reduce(decision.productionID);
+            display(LOG, VERBOSE,
+                    f.formatView("Apply REDUCE by production: %d",
+                                 decision.productionID)
+                        .data());
+            break;
+        case ParseAction::SUCCESS:
+            display(LOG, INFO, "Success");
+            return true;
         }
 
         display(PARSE_STATES, INFO, "Parse states", this);
@@ -413,4 +444,4 @@ void LRParser::reduce(ProductionID prodID) {
     InputQueue.push_front(prod.leftSymbol);
 }
 
-}  // namespace gram
+} // namespace gram

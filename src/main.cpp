@@ -5,10 +5,11 @@
 #include "src/common.h"
 #include "src/grammar/Grammar.h"
 #include "src/parser/LR0Parser.h"
+#include "src/parser/LR1Parser.h"
 #include "src/parser/LRParser.h"
 #include "src/parser/SLRParser.h"
-#include "src/parser/LR1Parser.h"
 #include "src/util/Formatter.h"
+
 
 using namespace gram;
 
@@ -42,12 +43,11 @@ void printUsageAndExit(bool printErrorLine = true) {
         "    5) You shouldn't use `$` in grammar file.\n"
         "    6) Define terminals, the start symbol, and productions as the "
         "following example shows. All symbols at the left hand side of "
-        "productions are automatically defined as non-terminals.\n"
+        "productions are automatically defined as non-terminals. The first "
+        "non-terminal symbol is defined as the start symbol.\n"
         "    e.g.\n"
         "    # Define terminals\n"
         "    TERM :{ID, '(', ')', '+', '*'}\n\n"
-        "    # Define start symbol\n"
-        "    START: exp\n\n"
         "    # Define productions\n"
         "    exp   -> exp '+' term  | term\n"
         "    term  -> term '*' fac  | fac\n"
@@ -79,24 +79,25 @@ void lrMain() {
     SLRParser slr{g};
     LR1Parser lr1{g};
     switch (launchArgs.parserType) {
-        case LR0:
-            parser = &lr0;
-            break;
-        case SLR:
-            parser = &slr;
-            break;
-        case LR1:
-            parser = &lr1;
-        default:
-            fprintf(stderr, "Unknown parser type. Check your code\n");
-            exit(1);
+    case LR0:
+        parser = &lr0;
+        break;
+    case SLR:
+        parser = &slr;
+        break;
+    case LR1:
+        parser = &lr1;
+        break;
+    default:
+        fprintf(stderr, "Unknown parser type. Check your code\n");
+        exit(1);
     }
 
     parser->buildNFA();
     reportTime("NFA built");
     parser->buildDFA();
     reportTime("DFA built");
-    parser->buildParseTables();
+    parser->buildParserTable();
     reportTime("Parse table built");
     parser->test(std::cin);
     reportTime("Test finished");
@@ -122,20 +123,23 @@ void lrParseArgs(int argc, char **argv) {
     for (int i = 1; i < argc; ++i) {
         if (strncmp("-g", argv[i], 2) == 0) {
             if ((launchArgs.grammarFileName = argv[i] + 2).empty()) {
-                if (++i >= argc) printUsageAndExit();
+                if (++i >= argc)
+                    printUsageAndExit();
                 launchArgs.grammarFileName = argv[i];
             }
         } else if (strncmp("-o", argv[i], 2) == 0) {
             if ((launchArgs.resultsDir = argv[i] + 2).empty()) {
-                if (++i >= argc) printUsageAndExit();
+                if (++i >= argc)
+                    printUsageAndExit();
                 launchArgs.resultsDir = argv[i];
             }
         } else if (strncmp("-t", argv[i], 2) == 0) {
             if (*(argv[i] + 2)) {
                 chooseParserType(argv[i] + 2);
             } else {
-                if (++i >= argc) printUsageAndExit();
-                chooseParserType(argv[i] + 2);
+                if (++i >= argc)
+                    printUsageAndExit();
+                chooseParserType(argv[i]);
             }
         } else if (strcmp("--nodot", argv[i]) == 0) {
             launchArgs.nodot = true;

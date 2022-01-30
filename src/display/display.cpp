@@ -136,7 +136,7 @@ static void handleParseStates(const char *description, DisplayLogLevel logLevel,
     printf("%s\n", s.c_str());
 }
 
-static void handleParseTable(const char *description, DisplayLogLevel logLevel,
+static void handleParserTable(const char *description, DisplayLogLevel logLevel,
                              gram::LRParser const *lr) {
     constexpr const int indexWidth = 8;
     constexpr const int actionWidth = 8;
@@ -145,7 +145,7 @@ static void handleParseTable(const char *description, DisplayLogLevel logLevel,
 
     auto const &grammar = lr->getGrammar();
     auto const &symbols = grammar.getAllSymbols();
-    auto parseTableRowNumber = lr->getParseTable().size();
+    auto parserTableRowNumber = lr->getParserTable().size();
     auto epsilonID = grammar.getEpsilonSymbol().id;
 
     util::Formatter f;
@@ -191,15 +191,15 @@ static void handleParseTable(const char *description, DisplayLogLevel logLevel,
     outputString += f.formatView("\n");
 
     // Print table entries
-    for (int i = 0; static_cast<size_t>(i) < parseTableRowNumber; ++i) {
+    for (int i = 0; static_cast<size_t>(i) < parserTableRowNumber; ++i) {
         outputString += f.formatView("%*d ", indexWidth, i);
         for (int terminal : termVec) {
-            String s = lr->dumpParseTableEntry(gram::StateID{i},
+            String s = lr->dumpParserTableEntry(gram::StateID{i},
                                                gram::ActionID{terminal});
             outputString += f.formatView("|%*s ", actionWidth, s.c_str());
         }
         for (int nonterm : nontermVec) {
-            String s = lr->dumpParseTableEntry(gram::StateID{i},
+            String s = lr->dumpParserTableEntry(gram::StateID{i},
                                                gram::ActionID{nonterm});
             outputString += f.formatView("|%*s ", gotoWidth, s.c_str());
         }
@@ -335,7 +335,7 @@ void display(DisplayType type, DisplayLogLevel level, const char *description,
             handleLog(description, level);
             break;
         case DisplayType::PARSE_TABLE:
-            handleParseTable(description, level, (LRParser const *)pointer);
+            handleParserTable(description, level, (LRParser const *)pointer);
             break;
         case DisplayType::GRAMMAR_RULES:
             handleGrammarRules(description, level, (Grammar const *)pointer);

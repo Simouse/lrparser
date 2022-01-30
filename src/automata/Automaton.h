@@ -17,7 +17,7 @@
 namespace gram {
 class Display;
 class Grammar;
-}  // namespace gram
+} // namespace gram
 
 namespace gram {
 
@@ -28,13 +28,14 @@ enum TransitionID : int;
 struct Transition {
     mutable bool colored;
     ActionID action;
-    StateID to;  // Next state
+    StateID to; // Next state
 
     Transition(StateID _to, ActionID _action)
         : colored(true), action(_action), to(_to) {}
 
     bool operator<(Transition const &other) const noexcept {
-        if (this->action != other.action) return this->action < other.action;
+        if (this->action != other.action)
+            return this->action < other.action;
         return this->to < other.to;
     }
 };
@@ -62,7 +63,7 @@ struct TransitionSet {
         return it != set.end() && it->action == action;
     }
 
-   private:
+  private:
     std::set<Transition> set;
 };
 
@@ -72,23 +73,22 @@ struct StateKernel {
     explicit StateKernel(String lbl) : label(std::move(lbl)) {}
 };
 
-// TODO: acceptable: actionConstraints ? actionConstraints->contains("$") : ...
 class State {
-   public:
-    bool acceptable;
+  public:
+    // This flag will be marked in Automaton::markFinalState().
+    bool endable;
     mutable bool colored;
     StateID id;
     std::shared_ptr<StateKernel> kernel;
-    ::std::optional<util::BitSet<ActionID>> actionConstraints;
+    std::shared_ptr<util::BitSet<ActionID>> actionConstraints;
 
-   public:
+  public:
     friend class Automaton;
-    State(StateID id, bool acceptable, String label)
-        : acceptable(acceptable),
-          colored(true),
-          id(id),
+    State(StateID id, String label,
+          std::shared_ptr<util::BitSet<ActionID>> constraints)
+        : endable(false), colored(true), id(id),
           kernel(std::make_shared<StateKernel>(std::move(label))),
-          actionConstraints({std::nullopt}) {}
+          actionConstraints(std::move(constraints)) {}
 
     [[nodiscard]] String &getLabel() const { return kernel->label; }
 
@@ -99,28 +99,28 @@ class State {
 
 using StateClosure = util::BitSet<StateID>;
 
-}  // namespace gram
+} // namespace gram
 
 namespace std {
-template <>
-struct hash<gram::StateID> {
+template <> struct hash<gram::StateID> {
     static_assert(sizeof(gram::StateID) == sizeof(int),
                   "hash<int> is not suitable for StateID");
     std::size_t operator()(gram::StateID const &k) const {
         return hash<int>()(k);
     }
 };
-}  // namespace std
+} // namespace std
 
 namespace gram {
 
 // To clone the entire automaton, use deepClone() instead.
 class Automaton {
-   public:
+  public:
     Automaton();
 
     // Add a new state. ID is ensured to grow continuously.
-    StateID addState(String desc, bool acceptable = false);
+    StateID addState(String desc,
+                     std::shared_ptr<util::BitSet<ActionID>> constraints);
     ActionID addAction(StringView desc);
     void addTransition(StateID from, StateID to, ActionID action);
     void addEpsilonTransition(StateID from, StateID to);
@@ -128,10 +128,11 @@ class Automaton {
     void markFinalState(StateID state);
     void setState(StateID state);
     void highlightState(StateID state) const;
+    void setDumpFlag(bool flag);
 
     // Accessors
     [[nodiscard]] auto getAllStates() const -> std::vector<State> const &;
-    [[nodiscard]] StateID getState() const;  // Current state
+    [[nodiscard]] StateID getState() const; // Current state
     [[nodiscard]] StateID getStartState() const;
     [[nodiscard]] auto getAllActions() const -> std::vector<String> const &;
     [[nodiscard]] auto getClosures() const -> std::vector<StateClosure> const &;
@@ -143,8 +144,8 @@ class Automaton {
     // DFA generation
     void makeClosure(StateClosure &closure) const;
 
-    [[nodiscard]] ::std::optional<StateClosure> transit(
-        StateClosure const &closure, ActionID action) const;
+    [[nodiscard]] ::std::optional<StateClosure>
+    transit(StateClosure const &closure, ActionID action) const;
 
     // Returns a new DFA which is transformed from this automaton.
     // Since the DFA is new, there is no need to call separateKernels().
@@ -155,13 +156,17 @@ class Automaton {
     // observe. It stores: {realState => stateAlias(label)}
     [[nodiscard]] String dump(const StateID *posMap = nullptr) const;
 
+    // Dump State in human-readable string.
+    // TODO:
+    [[nodiscard]] String dumpState(StateID stateID) const;
+
     // Dump StateClosure in human-readable string.
     // (StateClosure does not have essential information itself.)
     [[nodiscard]] String dumpStateClosure(StateClosure const &closure) const;
 
     // Try to accept a new action. Compared to unconditional setState(), move()
     // simulates step-by-step moving, and throws exception when action is not
-    // acceptable.
+    // endable.
     // Up to 2022.1.25: Not used.
     void move(ActionID action);
 
@@ -169,35 +174,36 @@ class Automaton {
     void separateKernels();
 
     // Clone entire automaton
-    Automaton deepClone() const;
+    [[nodiscard]] Automaton deepClone() const;
 
     // This error is thrown when current state is illegal. This may
     // be caused by not setting start state.
     class IllegalStateError : public std::runtime_error {
-       public:
+      public:
         IllegalStateError()
             : std::runtime_error("Automaton state is illegal") {}
     };
 
     class UnacceptedActionError : public std::runtime_error {
-       public:
+      public:
         UnacceptedActionError()
             : std::runtime_error("Action is not accepted by automaton") {}
     };
 
     class AmbiguousDestinationError : public std::runtime_error {
-       public:
+      public:
         AmbiguousDestinationError()
             : std::runtime_error("Action is not accepted by automaton") {}
     };
 
-   private:
+  private:
     // Whenever a state has multiple transitions with the same action,
     // this flag is set. So if multiDestFlag is true, this automaton
     // is not a DFA.
     bool multiDestFlag = false;
     // To differentiate normal DFAs and transformed DFAs
     bool transformedDFAFlag = false;
+    bool includeConstraints = false;
     StateID startState{-1};
     StateID currentState{-1};
     ActionID epsilonAction{-1};
@@ -224,6 +230,6 @@ class Automaton {
     // former NFA states.
     std::vector<State> formerStates;
 };
-}  // namespace gram
+} // namespace gram
 
 #endif

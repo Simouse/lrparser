@@ -37,23 +37,30 @@ void GrammarReader::parse(Grammar &g) try {
     // Start T definition
     while (getToken(s)) {
         g.putSymbol(s.c_str(), true);
-        if (!expect(',')) break;
+        if (!expect(','))
+            break;
     }
 
     expectOrThrow("}");
 
     // Start N definition
-    expectOrThrow("START:");
-    if (!getToken(s, false)) {
-        throw std::runtime_error("Please provide a start symbol");
-    }
-    g.setStart(s.c_str());
-    if (getToken(s, false)) {
-        throw std::runtime_error("Cannot define more than one start symbol");
-    }
+    // expectOrThrow("START:");
+    // if (!getToken(s, false)) {
+    //     throw std::runtime_error("Please provide a start symbol");
+    // }
+    // g.setStart(s.c_str());
+    // if (getToken(s, false)) {
+    //     throw std::runtime_error("Cannot define more than one start symbol");
+    // }
 
-    while (getToken(s)) {  // Has more rules
+    bool startFound = false;
+
+    while (getToken(s)) { // Has more rules
         auto nid = g.putSymbol(s.c_str(), false);
+        if (!startFound) {
+            g.setStart(s.c_str());
+            startFound = true;
+        }
 
         expectOrThrow("->");
         do {
@@ -72,12 +79,11 @@ void GrammarReader::parse(Grammar &g) try {
                     "No token found in right side of the rule");
             }
             if (hasEpsilon && productionBody.size() > 1) {
-                throw std::runtime_error(
-                    "Epsilon cannot be used along with "
-                    "other symbols in the same rule");
+                throw std::runtime_error("Epsilon cannot be used along with "
+                                         "other symbols in the same rule");
             }
             if (hasEpsilon) {
-                productionBody.clear();  // Epsilon rule
+                productionBody.clear(); // Epsilon rule
             }
             g.addProduction(nid, std::move(productionBody));
         } while (expect('|'));
@@ -85,9 +91,12 @@ void GrammarReader::parse(Grammar &g) try {
 
     // Check redundant input (which normally means invalid syntax)
     const char *e = nullptr;
-    if (!token.empty()) e = token.c_str();
-    if (skipSpaces(pos)) e = pos;
-    if (e) throw std::runtime_error(String("Redunant input: ") + e);
+    if (!token.empty())
+        e = token.c_str();
+    if (skipSpaces(pos))
+        e = pos;
+    if (e)
+        throw std::runtime_error(String("Redunant input: ") + e);
 
     g.checkViolations();
 
@@ -128,13 +137,17 @@ static bool isCommentStart(char ch) { return ch == '!' || ch == '#'; }
 // This is the only method to use `stream` directly, expect for
 // getLineAndCount
 auto GrammarReader::skipSpaces(const char *p) -> const char * {
-    if (!p) return nullptr;
+    if (!p)
+        return nullptr;
     while (true) {
-        while (*p && isspace(*p)) ++p;
-        if (*p && !isCommentStart(*p)) return p;
+        while (*p && isspace(*p))
+            ++p;
+        if (*p && !isCommentStart(*p))
+            return p;
         // A comment start ('!') mark is equal to end of line
         // End of line: we should refetch string
-        if (!getLineAndCount(stream, line)) return nullptr;
+        if (!getLineAndCount(stream, line))
+            return nullptr;
         p = line.c_str();
     }
 }
@@ -143,21 +156,26 @@ auto GrammarReader::skipSpaces(const char *p) -> const char * {
 // This is the only method to use `stream` directly, expect for
 // getLineAndCount
 auto GrammarReader::skipBlanks(const char *p) -> const char * {
-    if (!p) return nullptr;
+    if (!p)
+        return nullptr;
     // Do not fetch new line
-    while (*p && isblank(*p)) ++p;
+    while (*p && isblank(*p))
+        ++p;
     if (isCommentStart(*p)) {
-        while (*p) ++p;
+        while (*p)
+            ++p;
     }
     return p;
 }
 
 // Compare next non-space char with `ch`
 auto GrammarReader::nextEquals(char ch) -> bool {
-    if (!token.empty()) return token[0] == ch;
+    if (!token.empty())
+        return token[0] == ch;
     // No exceptions happen here, so we do not need to preserve pos
     pos = skipSpaces(pos);
-    if (!pos) return false;
+    if (!pos)
+        return false;
     return *pos == ch;
 }
 
@@ -171,7 +189,8 @@ auto GrammarReader::expect(char ch) -> bool {
         return false;
     }
     pos = skipSpaces(pos);
-    if (!pos || *pos != ch) return false;
+    if (!pos || *pos != ch)
+        return false;
     ++pos;
     return true;
 }
@@ -192,7 +211,7 @@ auto GrammarReader::expectOrThrow(const char *expected) -> void {
         ++check;
         ++expected;
     }
-    if (*expected) {  // expected string should be exhausted but is not
+    if (*expected) { // expected string should be exhausted but is not
         String s = "Characters do not match: Expecting \"";
         s += expectedStart;
         s += "\"";
@@ -237,7 +256,7 @@ auto GrammarReader::getToken(String &s, bool newlineAutoFetch) -> bool {
     s.clear();
 
     if (*p == '\'' || *p == '\"') {
-        char quoteChar = *p;  // Quote
+        char quoteChar = *p; // Quote
         const char *cur = p + 1;
         for (; *cur && *cur != quoteChar; ++cur) {
             continue;
@@ -268,7 +287,8 @@ auto GrammarReader::getToken(String &s, bool newlineAutoFetch) -> bool {
     }
 
     // Allow `\` at the beginning so escaping sequences can work
-    if (*p == '\\') s += *p++;
+    if (*p == '\\')
+        s += *p++;
 
     for (; *p && (std::isalnum(*p) || *p == '_'); ++p) {
         s += *p;
@@ -298,4 +318,4 @@ auto GrammarReader::ungetToken(const String &s) -> void {
 //   getTokenVerboseFlag = flag;
 // }
 
-}  // namespace gram
+} // namespace gram

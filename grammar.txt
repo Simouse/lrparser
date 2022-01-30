@@ -1,5 +1,5 @@
-! This is a comment
-! You can use '!' just like "//" in C99 and C++.
+# This is a comment
+# You can use '!' just like "//" in C99 and C++.
 
 # '#' style comment is also supported. (Doing so will allow
 # you to use the comment function provided by your editor when
@@ -18,20 +18,45 @@
 
 # "$" is reserved for end-of-input, so do not use it in your productions.
 
+
 # TERM :{ID, PLUS, TIMES, "(", ')', '+', '*'}
-
-TERM :{ID, "(", ')', '+', '*'}
-
-!
-
-START: exp
-
+# START: exp
 # exp   -> term exp1
 # exp1  -> '+' term exp1 | \epsilon     # Yet another comment
 # term  -> fac term1
 # term1 -> '*' fac term1 | \epsilon
 # fac   -> '(' exp ')'   | ID
 
-exp   -> exp '+' term  | term
-term  -> term '*' fac  | fac
-fac   -> ID            | "(" exp ')'
+# TERM :{ID, "(", ')', '+', '*'}
+# START: exp
+# exp   -> exp '+' term  | term
+# term  -> term '*' fac  | fac
+# fac   -> ID            | "(" exp ')'
+
+TERM: {num, id, assign}
+S ->	id
+|	    V assign E
+V ->	id
+E ->	V
+|	    num
+
+# TERM: {a}
+# START: S
+# S -> a S | \e
+
+# TERM: {c, d}
+# START: S
+# S -> C C
+# C -> c C
+# C -> d
+
+# This is LR(1) but not SLR
+# TERM: {a, b, c, d}
+# START: S
+# S -> A a | b A c | d c | b d a
+# A -> d
+
+# TERM: {c, d}
+# START: S
+# S -> C C
+# C -> c C | d

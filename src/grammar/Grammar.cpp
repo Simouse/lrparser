@@ -341,7 +341,7 @@ Grammar &Grammar::resolveSymbolAttributes() {
     return *this;
 }
 
-static String dumpSymbolSet(Grammar const &g, Symbol::symset_t const &symset) {
+static String dumpSymbolSet(Grammar const &g, Symbol::SymbolSet const &symset) {
     String s = "{";
     auto const &symvec = g.getAllSymbols();
     for (auto symid : symset) {
