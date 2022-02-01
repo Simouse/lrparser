@@ -14,6 +14,7 @@
 #include "src/common.h"
 #include "src/util/BitSet.h"
 #include "src/util/Process.h"
+#include "src/util/ResourceProvider.h"
 
 namespace gram {
 class Display;
@@ -34,11 +35,11 @@ struct Transition {
     Transition(StateID _to, ActionID _action)
         : colored(true), action(_action), to(_to) {}
 
-    bool operator<(Transition const &other) const noexcept {
-        if (this->action != other.action)
-            return this->action < other.action;
-        return this->to < other.to;
-    }
+    // bool operator<(Transition const &other) const noexcept {
+    //     if (this->action != other.action)
+    //         return this->action < other.action;
+    //     return this->to < other.to;
+    // }
 };
 
 class Automaton;
@@ -53,40 +54,46 @@ struct TransitionSet {
     // Returns an iterator (possibly) pointering to the first element that has
     // the same action as the argument. We need to check by ourselves if the
     // iterator is valid (is still accessible and has the same action).
-    [[nodiscard]] auto lowerBound(ActionID action) const {
-        return set.lower_bound({StateID{-1}, action});
+    [[nodiscard]] auto rangeOf(ActionID actionID) const {
+        return set.equal_range(Transition{StateID{-1}, actionID});
     }
-    [[nodiscard]] bool containsAction(ActionID action) const {
-        auto it = lowerBound(action);
-        return it != set.end() && it->action == action;
+    [[nodiscard]] bool contains(ActionID action) const {
+        auto range = rangeOf(action);
+        return range.first != range.second;
     }
     TransitionSet() = default;
 
   private:
-    std::set<Transition> set;
+    struct TransitionComparator {
+        bool operator()(const Transition &a, const Transition &b) const {
+            return a.action < b.action;
+        }
+    };
+    std::multiset<Transition, TransitionComparator> set;
 };
 
-// Owns: nothing.
+// All pointer-form data does not belong to State, and State will not
+// manage its storage.
 // For transformed DFA, state is actually a pseudo state.
 class State {
   public:
+    using Constraint = util::BitSet<ActionID>;
     // This flag will be marked in Automaton::markFinalState().
     bool finalFlag = false;
     mutable bool colored = true;
     StateID id;
     const char *label = nullptr;
     TransitionSet *transitions = nullptr;
-    util::BitSet<ActionID> *actionConstraints = nullptr;
+    Constraint *constraint = nullptr;
 
   public:
     friend class Automaton;
     State(StateID id, const char *label, TransitionSet *trans,
-          util::BitSet<ActionID> *constraints)
-        : id(id), label(label), transitions(trans),
-          actionConstraints(constraints) {}
+          util::BitSet<ActionID> *constraint)
+        : id(id), label(label), transitions(trans), constraint(constraint) {}
 };
 
-using StateClosure = util::BitSet<StateID>;
+using Closure = util::BitSet<StateID>;
 
 } // namespace gram
 
@@ -102,11 +109,13 @@ template <> struct hash<gram::StateID> {
 
 namespace gram {
 
-// Owns: transitions of states.
-// Does not own: actions, label of states, constraints of states.
+// All pointer-form data does not belong to Automaton, and Automaton will not
+// manage its storage.
 class Automaton {
   public:
-    Automaton();
+    Automaton(util::ResourceProvider<TransitionSet> *provider) {
+        this->transitionSetProvider = provider;
+    }
     Automaton(Automaton const &other) = delete;
     Automaton &operator=(Automaton const &other) = delete;
     Automaton(Automaton &&other) = default;
@@ -125,10 +134,9 @@ class Automaton {
     void setEpsilonAction(ActionID actionID);
 
     using ClosureEqualFuncType =
-        std::function<bool(const StateClosure &, const StateClosure &)>;
-    using DuplicateClosureHandlerType =
-        std::function<void(StateClosure const &existingClosure,
-                           StateClosure const &duplicateClosure)>;
+        std::function<bool(const Closure &, const Closure &)>;
+    using DuplicateClosureHandlerType = std::function<void(
+        Closure const &existingClosure, Closure const &duplicateClosure)>;
     void setClosureEqualFunc(ClosureEqualFuncType const &func);
     void setDuplicateClosureHandler(DuplicateClosureHandlerType const &func);
 
@@ -151,10 +159,11 @@ class Automaton {
     [[nodiscard]] bool isDFA() const { return !multiDestFlag; }
 
     // DFA generation
-    void makeClosure(StateClosure &closure) const;
+    void makeClosure(Closure &closure) const;
 
-    [[nodiscard]] ::std::optional<StateClosure>
-    transit(StateClosure const &closure, ActionID action) const;
+    [[nodiscard]] ::std::optional<Closure>
+    transit(Closure const &closure, ActionID action,
+            std::vector<util::BitSet<StateID>> const &receiverVec) const;
 
     // Returns a new DFA which is transformed from this automaton.
     // Since the DFA is new, there is no need to call separateKernels().
@@ -168,19 +177,13 @@ class Automaton {
     [[nodiscard]] String dumpState(StateID stateID) const;
     // Dump StateClosure in human-readable string.
     // (StateClosure does not have essential information itself.)
-    [[nodiscard]] String dumpStateClosure(StateClosure const &closure) const;
+    [[nodiscard]] String dumpClosure(Closure const &closure) const;
 
     // Try to accept a new action. Compared to unconditional setState(), move()
     // simulates step-by-step moving, and throws exception when action cannot
     // be final.
     // Up to 2022.1.25: Not used.
     void move(ActionID action);
-
-    // Separate kernels of two automatons after copy assignment.
-    // void separateKernels();
-
-    // Clone entire automaton
-    // [[nodiscard]] Automaton deepClone() const;
 
     // This error is thrown when current state is illegal. This may
     // be caused by not setting start state.
@@ -213,12 +216,13 @@ class Automaton {
     StateID startState{-1};
     StateID currentState{-1};
     ActionID epsilonAction{-1};
+    util::ResourceProvider<TransitionSet> *transitionSetProvider;
     std::vector<State> states;
     std::vector<const char *> actions;
-//    std::unordered_map<StringView, ActionID> actIDMap;
-    std::vector<std::unique_ptr<TransitionSet>> transitionPool;
+    //    std::unordered_map<StringView, ActionID> actIDMap;
+    // std::vector<std::unique_ptr<TransitionSet>> transitionPool;
 
-    TransitionSet *newTransitionSet();
+    // TransitionSet *newTransitionSet();
 
     // Passed down by parser
     ClosureEqualFuncType closureEqualFunc;
@@ -228,15 +232,10 @@ class Automaton {
     // Any attempts to access those methods from an automaton not created
     // by toDFA() method will cause undefined behaviors.
 
-    // For given action, determine which states can accept it.
-    // This is used only in transformation to DFA and a transformed DFA.
-    // And we won't calculate it until we know size of bitset.
-    std::vector<util::BitSet<StateID>> actionReceivers;
-
     // Not empty only when this automaton is a DFA transformed from
     // a previous NFA. The bitmap is used to help trace original
     // states.
-    std::vector<StateClosure> closures;
+    std::vector<Closure> closures;
 
     // Not empty only when this automaton is a DFA transformed from
     // a previous DFA. The vector provides complete information about

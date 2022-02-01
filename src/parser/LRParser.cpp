@@ -298,13 +298,13 @@ void LRParser::buildParserTable() {
 }
 
 auto LRParser::getClosureEqualFunc() const -> Automaton::ClosureEqualFuncType {
-    return [](StateClosure const &a, StateClosure const &b) { return a == b; };
+    return [](Closure const &a, Closure const &b) { return a == b; };
 }
 
 auto LRParser::getDuplicateClosureHandler() const
     -> Automaton::DuplicateClosureHandlerType {
-    return [](StateClosure const &a,
-              StateClosure const &b) { /* Default: do nothing */ };
+    return [](Closure const &a,
+              Closure const &b) { /* Default: do nothing */ };
 }
 
 void LRParser::addParserTableEntry(StateID state, ActionID act,

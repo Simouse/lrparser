@@ -16,7 +16,7 @@ class LALRParser : public LRParser {
         if (pact.type == ParseAction::REDUCE) {
             auto const &formerStates = dfa.getFormerStates();
             auto const &reducibleState = formerStates[substate];
-            return reducibleState.actionConstraints->contains(act);
+            return reducibleState.constraint->contains(act);
         }
 
         return true;

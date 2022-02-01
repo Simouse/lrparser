@@ -1,25 +1,26 @@
 #ifndef LRPARSER_LR_H
 #define LRPARSER_LR_H
 
+#include <cstdlib>
+#include <cstring>
 #include <deque>
 #include <functional>
 #include <istream>
 #include <memory>
 #include <unordered_map>
 #include <vector>
-#include <cstdlib>
-#include <cstring>
 
 #include "src/automata/Automaton.h"
 #include "src/grammar/Grammar.h"
 #include "src/util/BitSet.h"
+#include "src/util/ResourceProvider.h"
 #include "src/util/TokenReader.h"
 
 namespace gram {
 
 class Grammar;
 
-class LRParser {
+class LRParser : public util::ResourceProvider<TransitionSet> {
   public:
     struct ParseAction {
         enum Type { GOTO, SHIFT, REDUCE, SUCCESS };
@@ -52,7 +53,7 @@ class LRParser {
     // Stores data to generate states from a symbol's productions
     using StateSeed = std::pair<SymbolID, util::BitSet<ActionID> *>;
 
-    explicit LRParser(const gram::Grammar &g) : gram(g) {}
+    explicit LRParser(const gram::Grammar &g) : gram(g), nfa(this), dfa(this) {}
 
     void buildNFA();
     void buildDFA();
@@ -74,6 +75,13 @@ class LRParser {
     [[nodiscard]] String dumpParserTableEntry(StateID state,
                                               ActionID action) const;
 
+    // With this interface automatons can get transition resources whose
+    // lifetime can be longer than itself
+    TransitionSet *requestResource() override {
+        transitionSetPool.push_back(std::make_unique<TransitionSet>());
+        return transitionSetPool.back().get();
+    }
+
   protected:
     bool inputFlag = true;
     StateID extendedEnd{-1};
@@ -91,6 +99,7 @@ class LRParser {
     std::vector<std::vector<const char *>> labelMap;
     std::vector<std::unique_ptr<util::BitSet<ActionID>>> constraintPool;
     std::vector<std::unique_ptr<char[]>> stringPool;
+    std::vector<std::unique_ptr<TransitionSet>> transitionSetPool;
 
     // Virtual functions.
     // These functions change behaviors of the parser, and must be overridden.
@@ -142,18 +151,11 @@ class LRParser {
         return constraintPool.back().get();
     }
 
-    util::BitSet<ActionID> *
-    newConstraint(util::BitSet<ActionID> &&constraints) {
+    util::BitSet<ActionID> *newConstraint(util::BitSet<ActionID> constraints) {
         constraintPool.push_back(
             std::make_unique<util::BitSet<ActionID>>(std::move(constraints)));
         return constraintPool.back().get();
     }
-
-    struct StrdupDeleter {
-        void operator() (char **arg) {
-            free(arg);
-        }
-    };
 
     // Copy a string, and stores it internally
     const char *newString(String const &s) {
