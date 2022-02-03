@@ -23,21 +23,21 @@ class GrammarReader: public util::TokenReader {
     const char *pos = "";
     // Only valid if pos != NULL and stream is read at least once
     const char *lineStart = nullptr;
-    String line;
+    std::string line;
     // `token` is used by ungetToken()
-    String token;
-    std::unordered_map<String, int> tokenLineNo;
+    std::string token;
+    std::unordered_map<std::string, int> tokenLineNo;
 
-    auto getLineAndCount(std::istream &is, String &s) -> bool;
+    auto getLineAndCount(std::istream &is, std::string &s) -> bool;
     auto skipSpaces(const char *p) -> const char *;
     static auto skipBlanks(const char *p) -> const char *;
 
   public:
     static Grammar parse(std::istream &stream);
     explicit GrammarReader(std::istream &is) : util::TokenReader(is) {}
-    bool getToken(String &s, bool newlineAutoFetch);
-    bool getToken(String &s) override;
-    void ungetToken(const String &s);
+    bool getToken(std::string &s, bool newlineAutoFetch);
+    bool getToken(std::string &s) override;
+    void ungetToken(const std::string &s);
     void parse(Grammar &g);
     auto nextEquals(char ch) -> bool;
     auto expect(char ch) -> bool;

@@ -2,14 +2,12 @@
 #define LRPARSER_COMMON_H
 
 #include <stdexcept>
-#include <string>
-#include <string_view>
 
-// 1. Strings
-using String = ::std::string;
-using StringView = ::std::string_view;
+// This file does not contain a namespace.
+// Typing "namespace::" before some common definitions is what I want to
+// avoid.🤔
 
-// 2. Display
+// 1. enums
 enum DisplayType {
     LOG,
     AUTOMATON,
@@ -18,13 +16,37 @@ enum DisplayType {
     GRAMMAR_RULES,
     PARSE_STATES
 };
-
 // INFO:    Provide important text information for users
 // VERBOSE: Users may want to have a look because it shows more details
 // DEBUG:   For debugging purposes.
 // ERR:     Error happened. Maybe it's caused by some illegal input.
 enum DisplayLogLevel { INFO = 0, ERR, VERBOSE, DEBUG, LOG_LEVELS_COUNT };
+enum SymbolType {
+    NON_TERM = 0,
+    TERM = 1, // For bool comparison
+    UNCHECKED
+};
+enum ParserType { LR0, SLR, LALR, LR1 };
+enum ActionID : int;
+enum StateID : int;
+enum TransitionID : int;
+enum ProductionID : int;
+// enum SymbolID : int;
+// We may use static_cast when an element needs it, but a container
+// containing those elements cannot be cast. And allowing BitSet<T1> and
+// BitSet<T2> to be calculated together sounds wired.
+using SymbolID = ActionID;
 
+// Enum can compare with each other.
+// template <class Enum> struct IntEnumLess {
+//     static_assert(sizeof(int) == sizeof(Enum) && std::is_enum_v<Enum>,
+//                   "Template argument type must be a int-based enum");
+//     bool operator()(Enum a, Enum b) const {
+//         return static_cast<int>(a) < static_cast<int>(b);
+//     }
+// };
+
+// 2. global accessible functions
 void display(DisplayType type, DisplayLogLevel level, const char *description,
              void const *pointer = nullptr, void const *auxPointer = nullptr);
 void lrInit();
@@ -45,10 +67,7 @@ struct UnreachableCodeError : public ::std::logic_error {
     UnreachableCodeError() : ::std::logic_error("Unreachable code") {}
 };
 
-// 4. Parsers
-enum ParserType { LR0, SLR, LALR, LR1 };
-
-// 5. Arguments
+// 4. Arguments
 struct LaunchArguments {
     bool launchSuccess = true;
     bool nodot = false;
@@ -58,8 +77,8 @@ struct LaunchArguments {
     bool allowNonterminalAsInputs = false;
     ParserType parserType = SLR;
     DisplayLogLevel logLevel = VERBOSE;
-    String grammarFileName = "grammar.txt";
-    String resultsDir = "results";
+    std::string grammarFileName = "grammar.txt";
+    std::string resultsDir = "results";
 };
 
 extern LaunchArguments launchArgs;

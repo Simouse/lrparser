@@ -24,7 +24,7 @@ struct Process {
     template <class... Ts>
     static int writeStream(Stream stream, const char *fmt, Ts &&...ts) {
         Formatter f;
-        StringView sv = f.formatView(fmt, ts...);
+        std::string_view sv = f.formatView(fmt, ts...);
         DWORD n;
         (void)WriteFile(stream, sv.data(), (DWORD)sv.size(), &n, nullptr);
         return static_cast<int>(n);
@@ -34,7 +34,7 @@ struct Process {
     // `args` should be ended with a NULL.
     static void exec(const char *file, char **args) {
         Formatter f;
-        String cmd = f.concatArgs(file, args);
+        std::string cmd = f.concatArgs(file, args);
 
         PROCESS_INFORMATION piProcInfo;
         STARTUPINFO siStartInfo;
@@ -65,7 +65,7 @@ struct Process {
     // `args` should be ended with a NULL.
     static Stream execw(const char *file, char **args) {
         Formatter f;
-        String cmd = f.concatArgs(file, args);
+        std::string cmd = f.concatArgs(file, args);
 
         SECURITY_ATTRIBUTES saAttr;
         saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);
@@ -114,7 +114,7 @@ struct Process {
     // `args` should be ended with a NULL.
     static Stream execr(const char *file, char **args) {
         Formatter f;
-        String cmd = f.concatArgs(file, args);
+        std::string cmd = f.concatArgs(file, args);
 
         SECURITY_ATTRIBUTES saAttr;
         saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);

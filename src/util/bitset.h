@@ -12,6 +12,7 @@
 #include <iterator>
 #include <stdexcept>
 #include <type_traits>
+#include <cstring>
 
 #include "src/common.h"
 
@@ -20,9 +21,8 @@ namespace util {
 // A bitset whose size can only grow. The index is started from 0, and capacity
 // is rounded to multiple of `block_bits` bits.
 // Template argument T is used for type check.
-template <class T>
-class BitSet {
-   public:
+template <class T> class BitSet {
+  public:
     using block_type = unsigned int;
     using block_signed_type = int;
     using size_type = ::size_t;
@@ -33,10 +33,10 @@ class BitSet {
     friend struct std::hash<util::BitSet<T>>;
 
     static_assert(std::is_integral_v<T> || std::is_enum_v<T>,
-                  "Bitset can only hold integral types");
+                  "BitSet can only hold integral types");
 
-   private:
-    // **Initializing all data here is much much safer**
+  private:
+    // **Initializing all data here is much safer**
 
     // Inner blocks (for small bitset)
     std::array<block_type, n_inner_blocks> inner_blocks = {0};
@@ -52,7 +52,8 @@ class BitSet {
         m_data =
             (size > n_inner_blocks) ? new block_type[size] : &inner_blocks[0];
         m_size = size;
-        if (!setBitsToZeros) return;
+        if (!setBitsToZeros)
+            return;
         fillZeros(m_data, 0, size);
     }
 
@@ -65,15 +66,30 @@ class BitSet {
         }
     }
 
+    static size_type roundToNextPowerOf2(size_type i) {
+        if (i <= 2)
+            return i;
+        --i;
+        i |= i >> 1;
+        i |= i >> 2;
+        i |= i >> 4;
+        i |= i >> 8;
+        i |= i >> 16;
+        i |= i >> 32;
+        return 1 + i;
+    }
+
     // Fill data to 0 in range [from, to).
     static inline void fillZeros(block_type *data, size_type from,
                                  size_type to) {
-        for (size_type i = from; i < to; ++i) data[i] = 0;
+        for (size_type i = from; i < to; ++i)
+            data[i] = 0;
     }
 
-    static inline void copyRange(block_type *dest, block_type *src,
+    static inline void copyRange(block_type *dest, const block_type *src,
                                  size_type from, size_type to) {
-        for (size_type i = from; i < to; ++i) dest[i] = src[i];
+        for (size_type i = from; i < to; ++i)
+            dest[i] = src[i];
     }
 
     // Copy every data member (treat them as trivial values) from `other`.
@@ -89,9 +105,10 @@ class BitSet {
         }
     }
 
-   public:
+  public:
     explicit BitSet(size_type N)
-        : inner_blocks({0}), m_size((N + block_bits - 1) / block_bits) {
+        : inner_blocks({0}),
+          m_size(roundToNextPowerOf2((N + block_bits - 1) / block_bits)) {
         // Make sure m_size is at least n_inner_blocks
         if (m_size < n_inner_blocks) {
             m_size = n_inner_blocks;
@@ -100,7 +117,7 @@ class BitSet {
         allocMemory(m_size, true);
     }
 
-    BitSet() = default;  // All data is initialized in definition
+    BitSet() = default; // All data is initialized in definition
 
     BitSet(BitSet const &other) {
         copyContent(other);
@@ -117,7 +134,8 @@ class BitSet {
 
     BitSet &operator=(BitSet const &other) {
         // Self-assignment check
-        if (this == &other) return *this;
+        if (this == &other)
+            return *this;
 
         freeMemory();
         copyContent(other);
@@ -127,7 +145,8 @@ class BitSet {
     }
 
     BitSet &operator=(BitSet &&other) noexcept {
-        if (this == &other) return *this;
+        if (this == &other)
+            return *this;
 
         freeMemory();
         copyContent(other);
@@ -169,18 +188,20 @@ class BitSet {
     // Test if N-th bit exists and is set to true. See remove().
     [[nodiscard]] bool contains(T N_) const {
         auto N = static_cast<size_type>(N_);
-        if (N >= m_size * block_bits) return false;
+        if (N >= m_size * block_bits)
+            return false;
         return m_data[N / block_bits] & (1LLU << (N % block_bits));
     }
 
     // Clear all bits and make bitset usable again (even if it was moved).
     void clear() {
-        // If bitset data is corrupted (moved), allocate new mmeory for it
+        // If bitset data is corrupted (moved), allocate new memory for it
         if (!m_data) {
             allocMemory(m_size, false);
         }
         // Clear memory
-        for (size_type i = 0; i < m_size; ++i) m_data[i] = 0;
+        for (size_type i = 0; i < m_size; ++i)
+            m_data[i] = 0;
     }
 
     // Ensure bitset can hold at least N bits.
@@ -191,7 +212,7 @@ class BitSet {
         }
         auto prevData = m_data;
         auto prevSize = m_size;
-        size_type capacity = leastBlocksNeeded | (m_size << 1);
+        size_type capacity = roundToNextPowerOf2(leastBlocksNeeded);
         // Because m_size is always larger than or equal to n_inner_blocks, and
         // leastBlocksNeeded > m_size now, we know that inner blocks cannot be
         // used. allocMemory() will definitely request a dynamically allocated
@@ -212,17 +233,19 @@ class BitSet {
         }
         size_type sz = smaller->m_size;
         for (size_type i = 0; i < sz; ++i) {
-            if (m_data[i] != other.m_data[i]) return false;
+            if (m_data[i] != other.m_data[i])
+                return false;
         }
         for (size_type i = sz; i < larger->m_size; ++i) {
-            if (larger->m_data[i]) return false;
+            if (larger->m_data[i])
+                return false;
         }
         return true;
     }
 
     BitSet &operator&=(BitSet const &other) {
         ensure(other.m_size * block_bits);
-        for (size_type i = 0; i < m_size; ++i) {
+        for (size_type i = 0; i < other.m_size; ++i) {
             m_data[i] &= other.m_data[i];
         }
         return *this;
@@ -230,7 +253,7 @@ class BitSet {
 
     BitSet &operator|=(BitSet const &other) {
         ensure(other.m_size * block_bits);
-        for (size_type i = 0; i < m_size; ++i) {
+        for (size_type i = 0; i < other.m_size; ++i) {
             m_data[i] |= other.m_data[i];
         }
         return *this;
@@ -238,7 +261,7 @@ class BitSet {
 
     BitSet &operator^=(BitSet const &other) {
         ensure(other.m_size * block_bits);
-        for (size_type i = 0; i < m_size; ++i) {
+        for (size_type i = 0; i < other.m_size; ++i) {
             m_data[i] ^= other.m_data[i];
         }
         return *this;
@@ -248,17 +271,19 @@ class BitSet {
     [[nodiscard]] bool hasIntersection(BitSet const &other) const {
         auto min_size = m_size < other.m_size ? m_size : other.m_size;
         for (size_type i = 0; i < min_size; ++i) {
-            if (m_data[i] & other.m_data[i]) return true;
+            if (m_data[i] & other.m_data[i])
+                return true;
         }
         return false;
     }
 
     // Dump this bitset in human-readable format.
-    [[nodiscard]] String dump() const {
-        String s = "{";
+    [[nodiscard]] std::string dump() const {
+        std::string s = "{";
         bool flag = false;
         for (auto i : *this) {
-            if (flag) s += ", ";
+            if (flag)
+                s += ", ";
             s += std::to_string(i);
             flag = true;
         }
@@ -267,14 +292,15 @@ class BitSet {
     }
 
     struct Iterator {
-       private:
+      private:
         BitSet const &bitset;
         block_type mask;
-        size_type index;  // Needs to work with mask
+        size_type index; // Needs to work with mask
         size_type availablePos;
 
         bool advance() {
-            if (index == npos) return false;
+            if (index == npos)
+                return false;
 
             block_type x = 0;
             while (index < bitset.m_size &&
@@ -290,15 +316,20 @@ class BitSet {
                 return false;
             }
 
-            x = x & (block_type)(-(block_signed_type)x);  // Get right most bit
-            mask &= ~x;  // Set mask for further use
+            x = x & (block_type)(-(block_signed_type)x); // Get right most bit
+            mask &= ~x; // Set mask for further use
 
             size_type pos = block_bits - 1;
-            if (x & 0x0000'ffff) pos -= 16;
-            if (x & 0x00ff'00ff) pos -= 8;
-            if (x & 0x0f0f'0f0f) pos -= 4;
-            if (x & 0x3333'3333) pos -= 2;
-            if (x & 0x5555'5555) --pos;
+            if (x & 0x0000'ffff)
+                pos -= 16;
+            if (x & 0x00ff'00ff)
+                pos -= 8;
+            if (x & 0x0f0f'0f0f)
+                pos -= 4;
+            if (x & 0x3333'3333)
+                pos -= 2;
+            if (x & 0x5555'5555)
+                --pos;
 
             // Add offset to global position
             pos = index * block_bits + pos;
@@ -307,16 +338,15 @@ class BitSet {
             return true;
         }
 
-       public:
+      public:
         using iterator_category = std::input_iterator_tag;
         using value_type = T;
 
         explicit Iterator(BitSet const &_bitset, bool end = false)
-            : bitset(_bitset),
-              mask(mask_all_ones),
-              index(end ? npos : 0),
+            : bitset(_bitset), mask(mask_all_ones), index(end ? npos : 0),
               availablePos(npos) {
-            if (!end) advance();
+            if (!end)
+                advance();
         }
 
         Iterator &operator++() {
@@ -336,11 +366,10 @@ class BitSet {
     [[nodiscard]] Iterator end() const { return Iterator(*this, true); }
 };
 
-}  // namespace util
+} // namespace util
 
 namespace std {
-template <class T>
-struct hash<util::BitSet<T>> {
+template <class T> struct hash<util::BitSet<T>> {
     std::size_t operator()(util::BitSet<T> const &bitset) const {
         using std::hash;
         std::size_t res = 17;
@@ -352,6 +381,6 @@ struct hash<util::BitSet<T>> {
         return res;
     }
 };
-}  // namespace std
+} // namespace std
 
-#endif  // LRPARSER_BITSET_H
+#endif // LRPARSER_BITSET_H

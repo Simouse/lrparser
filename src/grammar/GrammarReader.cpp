@@ -28,7 +28,7 @@ Grammar GrammarReader::parse(istream &stream) {
 }
 
 void GrammarReader::parse(Grammar &g) try {
-    String s;
+    std::string s;
 
     // Start T definition
     if (!launchArgs.autoDefineTerminals) {
@@ -71,7 +71,8 @@ void GrammarReader::parse(Grammar &g) try {
             }
             if (productionBody.empty()) {
                 throw std::runtime_error(
-                    "No token found in right side of the rule");
+                    "No token found in right side of the rule. If you want to "
+                    "use epsilon, use it explicitly");
             }
             if (hasEpsilon && productionBody.size() > 1) {
                 throw std::runtime_error("Epsilon cannot be used along with "
@@ -91,18 +92,18 @@ void GrammarReader::parse(Grammar &g) try {
     if (skipSpaces(pos))
         e = pos;
     if (e)
-        throw std::runtime_error(String("Redunant input: ") + e);
+        throw std::runtime_error(std::string("Redunant input: ") + e);
 
     g.checkViolations();
 
 } catch (Grammar::UnsolvedSymbolError const &e) {
-    String s = "Parsing error at line " +
-               std::to_string(tokenLineNo[e.symInQuestion.name]) + ": " +
-               e.what();
+    std::string s = "Parsing error at line " +
+                    std::to_string(tokenLineNo[e.symInQuestion.name]) + ": " +
+                    e.what();
     fprintf(stderr, "%s\n", s.c_str());
     exit(1);
 } catch (std::exception const &e) {
-    String s = "Parsing error at line ";
+    std::string s = "Parsing error at line ";
     s += std::to_string(linenum);
     s += ", char ";
     auto offset = pos - lineStart + 1;
@@ -117,7 +118,7 @@ void GrammarReader::parse(Grammar &g) try {
 }
 
 // Wrapper of getline
-auto GrammarReader::getLineAndCount(istream &is, String &s) -> bool {
+auto GrammarReader::getLineAndCount(istream &is, std::string &s) -> bool {
     if (std::getline(is, s)) {
         lineStart = s.c_str();
         ++linenum;
@@ -197,7 +198,7 @@ auto GrammarReader::expectOrThrow(const char *expected) -> void {
     const char *check = skipSpaces(pos);
 
     if (!check) {
-        String s = "Rules are incomplete: Expecting \"";
+        std::string s = "Rules are incomplete: Expecting \"";
         s += expectedStart;
         s += "\"";
         throw std::runtime_error(s);
@@ -207,7 +208,7 @@ auto GrammarReader::expectOrThrow(const char *expected) -> void {
         ++expected;
     }
     if (*expected) { // expected string should be exhausted but is not
-        String s = "Characters do not match: Expecting \"";
+        std::string s = "Characters do not match: Expecting \"";
         s += expectedStart;
         s += "\"";
         throw std::runtime_error(s);
@@ -216,7 +217,7 @@ auto GrammarReader::expectOrThrow(const char *expected) -> void {
     pos = check;
 }
 
-bool GrammarReader::getToken(String &s) try {
+bool GrammarReader::getToken(std::string &s) try {
     return getToken(s, true);
 } catch (std::runtime_error const &e) {
     display(LOG, ERR, e.what());
@@ -226,7 +227,7 @@ bool GrammarReader::getToken(String &s) try {
 // Try to get a token. This process may fail, so flag is returned in bool)
 // This process is difficult because C++ does not have a Scanner
 // like Java, and buffer needs to be managed by ourselves.
-auto GrammarReader::getToken(String &s, bool newlineAutoFetch) -> bool {
+auto GrammarReader::getToken(std::string &s, bool newlineAutoFetch) -> bool {
     if (!token.empty()) {
         s = token;
         token.clear();
@@ -303,7 +304,7 @@ auto GrammarReader::getToken(String &s, bool newlineAutoFetch) -> bool {
     return false;
 }
 
-auto GrammarReader::ungetToken(const String &s) -> void {
+auto GrammarReader::ungetToken(const std::string &s) -> void {
     if (!token.empty()) {
         throw std::logic_error("Number of ungot tokens > 1");
     }

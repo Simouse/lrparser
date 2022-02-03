@@ -23,23 +23,13 @@ class Grammar;
 
 namespace gram {
 
-enum ActionID : int;
-enum StateID : int;
-enum TransitionID : int;
-
 struct Transition {
     mutable bool colored;
     ActionID action;
-    StateID to; // Next state
+    StateID destination; // Next state
 
-    Transition(StateID _to, ActionID _action)
-        : colored(true), action(_action), to(_to) {}
-
-    // bool operator<(Transition const &other) const noexcept {
-    //     if (this->action != other.action)
-    //         return this->action < other.action;
-    //     return this->to < other.to;
-    // }
+    Transition(StateID to, ActionID action)
+        : colored(true), action(action), destination(to) {}
 };
 
 class Automaton;
@@ -51,9 +41,6 @@ struct TransitionSet {
     [[nodiscard]] auto end() { return set.end(); }
     [[nodiscard]] auto begin() const { return set.begin(); }
     [[nodiscard]] auto end() const { return set.end(); }
-    // Returns an iterator (possibly) pointering to the first element that has
-    // the same action as the argument. We need to check by ourselves if the
-    // iterator is valid (is still accessible and has the same action).
     [[nodiscard]] auto rangeOf(ActionID actionID) const {
         return set.equal_range(Transition{StateID{-1}, actionID});
     }
@@ -76,21 +63,28 @@ struct TransitionSet {
 // manage its storage.
 // For transformed DFA, state is actually a pseudo state.
 class State {
-  public:
+  private:
     using Constraint = util::BitSet<ActionID>;
+
+  public:
     // This flag will be marked in Automaton::markFinalState().
     bool finalFlag = false;
     mutable bool colored = true;
     StateID id;
+    // These two fields can be used to identity kernel.
+    // `label` and `transitions` are not needed now.
+    ProductionID productionID;
+    int rhsIndex;
     const char *label = nullptr;
     TransitionSet *transitions = nullptr;
     Constraint *constraint = nullptr;
 
   public:
     friend class Automaton;
-    State(StateID id, const char *label, TransitionSet *trans,
-          util::BitSet<ActionID> *constraint)
-        : id(id), label(label), transitions(trans), constraint(constraint) {}
+    State(StateID id, ProductionID prodID, int rhsIndex, const char *label,
+          TransitionSet *trans, Constraint *constraint)
+        : id(id), productionID(prodID), rhsIndex(rhsIndex), label(label),
+          transitions(trans), constraint(constraint) {}
 };
 
 using Closure = util::BitSet<StateID>;
@@ -98,12 +92,10 @@ using Closure = util::BitSet<StateID>;
 } // namespace gram
 
 namespace std {
-template <> struct hash<gram::StateID> {
-    static_assert(sizeof(gram::StateID) == sizeof(int),
+template <> struct hash<StateID> {
+    static_assert(sizeof(StateID) == sizeof(int),
                   "hash<int> is not suitable for StateID");
-    std::size_t operator()(gram::StateID const &k) const {
-        return hash<int>()(k);
-    }
+    std::size_t operator()(StateID const &k) const { return hash<int>()(k); }
 };
 } // namespace std
 
@@ -113,6 +105,8 @@ namespace gram {
 // manage its storage.
 class Automaton {
   public:
+    friend class LALRParser;
+
     Automaton(util::ResourceProvider<TransitionSet> *provider) {
         this->transitionSetProvider = provider;
     }
@@ -122,7 +116,9 @@ class Automaton {
     Automaton &operator=(Automaton &&other) = default;
 
     // Add a new state. ID is ensured to grow continuously.
-    StateID addState(const char *label, util::BitSet<ActionID> *constraints);
+    StateID addState(ProductionID prodID, int rhsIndex, const char *label,
+                     util::BitSet<ActionID> *constraints);
+    StateID addPseudoState();
     ActionID addAction(const char *s);
     void addTransition(StateID from, StateID to, ActionID action);
     void addEpsilonTransition(StateID from, StateID to);
@@ -133,12 +129,12 @@ class Automaton {
     void setDumpFlag(bool flag);
     void setEpsilonAction(ActionID actionID);
 
-    using ClosureEqualFuncType =
-        std::function<bool(const Closure &, const Closure &)>;
-    using DuplicateClosureHandlerType = std::function<void(
-        Closure const &existingClosure, Closure const &duplicateClosure)>;
-    void setClosureEqualFunc(ClosureEqualFuncType const &func);
-    void setDuplicateClosureHandler(DuplicateClosureHandlerType const &func);
+    // using ClosureEqualFuncType =
+    //     std::function<bool(const Closure &, const Closure &)>;
+    // using DuplicateClosureHandlerType = std::function<void(
+    //     Closure const &existingClosure, Closure const &duplicateClosure)>;
+    // void setClosureEqualFunc(ClosureEqualFuncType const &func);
+    // void setDuplicateClosureHandler(DuplicateClosureHandlerType const &func);
 
     // Accessors
     [[nodiscard]] auto const &getAllStates() const { return states; }
@@ -149,9 +145,9 @@ class Automaton {
         assert(transformedDFAFlag);
         return closures;
     }
-    [[nodiscard]] auto getFormerStates() const {
+    [[nodiscard]] auto getAuxStates() const {
         assert(transformedDFAFlag);
-        return formerStates;
+        return auxStates;
     }
     [[nodiscard]] bool isEpsilonAction(ActionID action) const {
         return action == epsilonAction;
@@ -172,12 +168,12 @@ class Automaton {
     // Dump in graphviz format.
     // `posMap` is used to switch state indexes so the result can be easier to
     // observe. It stores: {realState => stateAlias(label)}
-    [[nodiscard]] String dump(const StateID *posMap = nullptr) const;
+    [[nodiscard]] std::string dump(const StateID *posMap = nullptr) const;
     // Dump State in human-readable string.
-    [[nodiscard]] String dumpState(StateID stateID) const;
+    [[nodiscard]] std::string dumpState(StateID stateID) const;
     // Dump StateClosure in human-readable string.
     // (StateClosure does not have essential information itself.)
-    [[nodiscard]] String dumpClosure(Closure const &closure) const;
+    [[nodiscard]] std::string dumpClosure(Closure const &closure) const;
 
     // Try to accept a new action. Compared to unconditional setState(), move()
     // simulates step-by-step moving, and throws exception when action cannot
@@ -219,14 +215,14 @@ class Automaton {
     util::ResourceProvider<TransitionSet> *transitionSetProvider;
     std::vector<State> states;
     std::vector<const char *> actions;
-    //    std::unordered_map<StringView, ActionID> actIDMap;
+    // std::unordered_map<StringView, ActionID> actIDMap;
     // std::vector<std::unique_ptr<TransitionSet>> transitionPool;
 
     // TransitionSet *newTransitionSet();
 
     // Passed down by parser
-    ClosureEqualFuncType closureEqualFunc;
-    DuplicateClosureHandlerType duplicateClosureHandler;
+    // ClosureEqualFuncType closureEqualFunc;
+    // DuplicateClosureHandlerType duplicateClosureHandler;
 
     // Following fields are for transformed DFA.
     // Any attempts to access those methods from an automaton not created
@@ -240,7 +236,7 @@ class Automaton {
     // Not empty only when this automaton is a DFA transformed from
     // a previous DFA. The vector provides complete information about
     // former NFA states.
-    std::vector<State> formerStates;
+    std::vector<State> auxStates;
 };
 } // namespace gram
 

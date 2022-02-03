@@ -8,7 +8,7 @@ class SLRParser : public LRParser {
   public:
     explicit SLRParser(Grammar const &g) : LRParser(g) {}
 
-    [[nodiscard]] bool canAddParserTableEntry(StateID state, ActionID act,
+    [[nodiscard]] bool canAddParseTableEntry(StateID state, ActionID act,
                                              ParseAction pact,
                                              StateID substate) const override {
         if (pact.type == ParseAction::REDUCE) {
@@ -33,18 +33,15 @@ class SLRParser : public LRParser {
         return false;
     }
 
-    [[nodiscard]] std::function<size_t(const StateSeed &)>
-    getSeedHashFunc() const override {
-        return [](StateSeed const &seed) -> std::size_t {
-            return std::hash<int>()(seed.first);
-        };
-    }
-
-    [[nodiscard]] std::function<bool(const StateSeed &, const StateSeed &)>
-    getSeedEqualFunc() const override {
-        return [](StateSeed const &s1, StateSeed const &s2) -> bool {
-            return s1.first == s2.first;
-        };
+    [[nodiscard]] util::BitSet<ActionID> *
+    resolveLocalConstraints(const util::BitSet<ActionID> *parentConstraint,
+                            const Production &production,
+                            int rhsIndex) override {
+        auto symbolID = production.rightSymbols[rhsIndex];
+        auto const &symbols = gram.getAllSymbols();
+        auto res = newConstraint(symbols[symbolID].followSet);
+        // Ignore parentConstraint
+        return res;
     }
 };
 } // namespace gram

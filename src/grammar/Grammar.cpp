@@ -94,8 +94,8 @@ ProductionTable const &Grammar::getProductionTable() const {
     return productionTable;
 }
 
-String Grammar::dump() const {
-    String s;
+std::string Grammar::dump() const {
+    std::string s;
     util::Formatter f;
 
     s += "Symbols:\n";
@@ -129,7 +129,7 @@ String Grammar::dump() const {
 auto Grammar::fromFile(const char *fileName) -> Grammar {
     std::fstream stream(fileName, std::ios::in);
     if (!stream.is_open()) {
-        throw std::runtime_error(String("File not found: ") + fileName);
+        throw std::runtime_error(std::string("File not found: ") + fileName);
     }
     auto g = GrammarReader::parse(stream);
     display(GRAMMAR_RULES, INFO, "Grammar rules has been parsed", &g);
@@ -151,10 +151,13 @@ void Grammar::checkViolations() {
     // TODO: check if there's a A -> A
 }
 
+// setStart() should only be called once.
 void Grammar::setStart(const char *name) {
     // Although we know start symbol must not be a terminal,
     // we cannot define it here, we need to check symbol later.
     start = putSymbolUnchecked(name);
+
+    // Since this is the start, there are no productions yet.
 }
 
 // This function needs to get a Symbol & from symVec,
@@ -261,7 +264,8 @@ void Grammar::resolveFollowSet(
 };
 
 Grammar &Grammar::resolveSymbolAttributes() {
-    //--------------- Nullable ---------------
+    // Nullable
+
     // Epsilon is nullable
     symbolVector[epsilon].nullable.emplace(true);
 
@@ -274,7 +278,8 @@ Grammar &Grammar::resolveSymbolAttributes() {
 
     display(SYMBOL_TABLE, INFO, "Calculate nullables", this);
 
-    //--------------- First Set ---------------
+    // First Set
+    
     vector<int> visit(symbolVector.size(), 0);
     // For t in T, First(t) = {t}
     for (auto &symbol : symbolVector) {
@@ -298,7 +303,8 @@ Grammar &Grammar::resolveSymbolAttributes() {
 
     display(SYMBOL_TABLE, INFO, "Calculate first set", this);
 
-    //--------------- Follow Set ---------------
+    // Follow Set
+
     // Add $ to Follow set of the start symbol
     symbolVector[start].followSet.insert(endOfInput);
 
@@ -354,8 +360,8 @@ Grammar &Grammar::resolveSymbolAttributes() {
     return *this;
 }
 
-static String dumpSymbolSet(Grammar const &g, Symbol::SymbolSet const &symset) {
-    String s = "{";
+static std::string dumpSymbolSet(Grammar const &g, Symbol::SymbolSet const &symset) {
+    std::string s = "{";
     auto const &symvec = g.getAllSymbols();
     for (auto symid : symset) {
         s += ' ';
@@ -365,23 +371,23 @@ static String dumpSymbolSet(Grammar const &g, Symbol::SymbolSet const &symset) {
     return s;
 }
 
-String Grammar::dumpNullable(const Symbol &symbol) {
+std::string Grammar::dumpNullable(const Symbol &symbol) {
     if (!symbol.nullable.has_value()) {
         return "?";
     }
     return symbol.nullable.value() ? "true" : "false";
 }
 
-String Grammar::dumpFirstSet(const Symbol &symbol) const {
+std::string Grammar::dumpFirstSet(const Symbol &symbol) const {
     return dumpSymbolSet(*this, symbol.firstSet);
 }
 
-String Grammar::dumpFollowSet(const Symbol &symbol) const {
+std::string Grammar::dumpFollowSet(const Symbol &symbol) const {
     return dumpSymbolSet(*this, symbol.followSet);
 }
 
-String Grammar::dumpProduction(ProductionID prodID) const {
-    String s;
+std::string Grammar::dumpProduction(ProductionID prodID) const {
+    std::string s;
     auto const &production = productionTable[prodID];
     s += symbolVector[production.leftSymbol].name;
     s += " ->";
@@ -404,7 +410,7 @@ const Symbol &Grammar::getStartSymbol() const { return symbolVector[start]; }
 
 const Grammar::symvec_t &Grammar::getAllSymbols() const { return symbolVector; }
 
-Symbol const &Grammar::findSymbol(String const &s) const {
+Symbol const &Grammar::findSymbol(std::string const &s) const {
     auto it = idTable.find(s);
     if (it != idTable.end())
         return symbolVector[it->second];

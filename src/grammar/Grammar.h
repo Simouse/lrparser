@@ -17,18 +17,6 @@ class Automaton;
 } // namespace gram
 
 namespace gram {
-enum SymbolType {
-    NON_TERM = 0,
-    TERM = 1, // For bool comparison
-    UNCHECKED
-};
-
-enum ProductionID : int;
-// enum SymbolID : int;
-// We may use static_cast when an element needs it, but a container
-// containing those elements cannot be cast. And allowing BitSet<T1> and
-// BitSet<T2> to be calculated together sounds wired.
-using SymbolID = ActionID;
 
 struct Production {
     SymbolID leftSymbol;
@@ -46,21 +34,23 @@ struct Symbol {
     std::optional<bool> nullable;
     SymbolType type;
     SymbolID id;
-    String name;
+    std::string name;
     // Productions that can generate this symbol
     std::vector<ProductionID> productions;
     std::vector<StateID> startStates;
     SymbolSet firstSet;
     SymbolSet followSet;
 
-    Symbol(SymbolType type, SymbolID id, String name)
+    Symbol(SymbolType type, SymbolID id, std::string name)
         : type(type), id(id), name(std::move(name)) {}
 };
 
+// Once grammar is built, the first production will be an augmented production.
+// For "S -> a A; A -> a A;", the first production will be "S' -> S".
 class Grammar {
   public:
     using symvec_t = std::vector<Symbol>;
-    using idtbl_t = std::unordered_map<String, SymbolID>;
+    using idtbl_t = std::unordered_map<std::string, SymbolID>;
 
   private:
     friend class GrammarReader;
@@ -115,16 +105,16 @@ class Grammar {
     [[nodiscard]] const Symbol &getEpsilonSymbol() const;
     [[nodiscard]] const Symbol &getEndOfInputSymbol() const;
     [[nodiscard]] ProductionTable const &getProductionTable() const;
-    [[nodiscard]] String dump() const;
-    [[nodiscard]] static String dumpNullable(const Symbol &symbol);
-    [[nodiscard]] String dumpFirstSet(const Symbol &symbol) const;
-    [[nodiscard]] String dumpFollowSet(const Symbol &symbol) const;
-    [[nodiscard]] String dumpProduction(ProductionID prodID) const;
+    [[nodiscard]] std::string dump() const;
+    [[nodiscard]] static std::string dumpNullable(const Symbol &symbol);
+    [[nodiscard]] std::string dumpFirstSet(const Symbol &symbol) const;
+    [[nodiscard]] std::string dumpFollowSet(const Symbol &symbol) const;
+    [[nodiscard]] std::string dumpProduction(ProductionID prodID) const;
 
     // std::unordered_map doesn't support heterogeneous lookup, so when
     // we pass a const char *, the string is copied. So we just use a string
     // const & to avoid copy when we already have a string...
-    [[nodiscard]] Symbol const &findSymbol(String const &s) const;
+    [[nodiscard]] Symbol const &findSymbol(std::string const &s) const;
 
     // Fill symbol attributes: nullable, firstSet, followSet
     Grammar &resolveSymbolAttributes();
@@ -151,7 +141,7 @@ class Grammar {
     // after grammar is built.
     class NoSuchSymbolError : public std::runtime_error {
       public:
-        explicit NoSuchSymbolError(String const &name)
+        explicit NoSuchSymbolError(std::string const &name)
             : std::runtime_error("No such symbol: " + name) {}
     };
 };

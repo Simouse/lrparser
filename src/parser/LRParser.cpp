@@ -1,6 +1,7 @@
 #include "src/parser/LRParser.h"
 
 #include <cassert>
+#include <cstddef>
 #include <memory>
 #include <stack>
 #include <stdexcept>
@@ -18,43 +19,26 @@
 
 namespace gram {
 
-// Helper of automaton creation from LR0 grammar,
-// which generates a description for the state. e.g.
-// S -> aB : S0 = {S -> .aB, S -> a.B, S -> aB.}
-// static String createStateName(const gram::Grammar &gram, const gram::Symbol
-// &N,
-//                               const std::vector<SymbolID> &productionBody,
-//                               size_t dotPos) {
-//     assert(dotPos <= productionBody.size());
-
-//     const auto &symbols = gram.getAllSymbols();
-//     String s = N.name;
-//     s += " ->";
-
-//     size_t j = 0;
-//     for (; j < dotPos; ++j) {
-//         s += ' ';
-//         s += symbols[productionBody[j]].name;
-//     }
-//     s += ' ';
-//     s += Grammar::SignStrings::dot;
-//     for (; j < productionBody.size(); ++j) {
-//         s += ' ';
-//         s += symbols[productionBody[j]].name;
-//     }
-//     return s;
-// }
-
-// S -> aB : S0 = {S -> .aB, S -> a.B, S -> aB.}
-void LRParser::buildNFAStateLabels() {
+void LRParser::buildKernel() {
     const auto &productionTable = gram.getProductionTable();
     const auto &symbols = gram.getAllSymbols();
-    for (auto const &production : productionTable) {
-        std::vector<const char *> vec;
+
+    // Initialize outer dimension.
+    // We want to put "S' -> S" in the last position.
+    kernelLabelMap = decltype(kernelLabelMap)(productionTable.size() + 1);
+
+    // For normal productions.
+    for (size_t prodID = 0; prodID < productionTable.size(); ++prodID) {
+        auto const &production = productionTable[prodID];
         const auto &rhs = production.rightSymbols;
+        auto maxIndex = rhs.size();
+        std::vector<const char *> labelVec(maxIndex + 1);
+        // std::vector<util::BitSet<ActionID> *> constraintVec(maxIndex + 1);
         // i: position of dot
-        for (size_t i = 0; i <= rhs.size(); ++i) {
-            String s = symbols[production.leftSymbol].name;
+        for (size_t i = 0; i <= maxIndex; ++i) {
+            // Build label
+            // Labels of "S -> aB": "S -> .aB", "S -> a.B", "S -> aB."
+            std::string s = symbols[production.leftSymbol].name;
             s += " ->";
             size_t j = 0;
             for (; j < i; ++j) {
@@ -67,47 +51,42 @@ void LRParser::buildNFAStateLabels() {
                 s += ' ';
                 s += symbols[rhs[j]].name;
             }
-            vec.push_back(newString(s));
+            labelVec[i] = newString(s);
         }
-        labelMap.push_back(std::move(vec));
+        kernelLabelMap[prodID] = std::move(labelVec);
     }
-}
 
-// `rhsIndex`: points to the index of non-terminal symbol which we want to
-// resolve local follow constraints
-static auto
-resolveLocalConstraints(Grammar const &gram,
-                        util::BitSet<gram::ActionID> const &parentConstraints,
-                        Production const &production, size_t rhsIndex)
-    -> util::BitSet<gram::ActionID> {
+    // For "S' -> S".
+    std::vector<const char *> augLabelVec(2);
+    const auto &startName = gram.getStartSymbol().name;
+    augLabelVec[0] = newString(startName + "' -> " + Grammar::SignStrings::dot +
+                               " " + startName);
+    augLabelVec[1] = newString(startName + "' -> " + startName + " " +
+                               Grammar::SignStrings::dot);
+    kernelLabelMap[productionTable.size()] = std::move(augLabelVec);
 
-    auto const &symbols = gram.getAllSymbols();
-    auto const &rhs = production.rightSymbols;
-    util::BitSet<gram::ActionID> constraints(symbols.size());
-
-    bool allNullable = true;
-    for (size_t i = rhsIndex + 1; allNullable && i < rhs.size(); ++i) {
-        if (!symbols[rhs[i]].nullable.value())
-            allNullable = false;
-        constraints |= symbols[rhs[i]].firstSet;
+    // Build `allTermConstraint`
+    auto symbolCount = static_cast<int>(symbols.size());
+    auto epsilonID = gram.getEpsilonSymbol().id;
+    auto cons = newConstraint(symbolCount);
+    for (int i = 0; i < symbolCount; ++i) {
+        if (symbols[i].type == SymbolType::TERM && i != epsilonID) {
+            cons->insert(ActionID{i});
+        }
     }
-    if (allNullable)
-        constraints |= parentConstraints;
-
-    return constraints;
+    allTermConstraint = cons;
 }
 
 void LRParser::buildNFA() {
     Automaton &M = this->nfa;
-    const Grammar &G = this->gram;
-    const auto &symbols = G.getAllSymbols();
-    auto const &productionTable = G.getProductionTable();
+    const auto &symbols = gram.getAllSymbols();
+    auto const &productionTable = gram.getProductionTable();
     util::Formatter f;
     constexpr const char *outFilePrefix = "build_nfa";
 
-    buildNFAStateLabels();
+    buildKernel();
 
-    nfa.setDumpFlag(shouldIncludeConstraintsInDump());
+    M.setDumpFlag(shouldIncludeConstraintsInDump());
 
     auto estimatedStateCount = symbols.size() + productionTable.size() * 4;
 
@@ -128,8 +107,8 @@ void LRParser::buildNFA() {
 
     auto addNewDependency = [&epsilonLinks, &unvisitedSeeds,
                              &seeds](StateID state, SymbolID symbolID,
-                                     util::BitSet<ActionID> *constraints) {
-        StateSeed seed = std::make_pair(symbolID, constraints);
+                                     util::BitSet<ActionID> *constraint) {
+        StateSeed seed = std::make_pair(symbolID, constraint);
         // Find iterator
         auto result = seeds.try_emplace(seed, std::vector<StateID>());
         // Add a dependency link
@@ -152,22 +131,26 @@ void LRParser::buildNFA() {
     // Create S' (start symbol in augmented grammar) for S
     {
         auto constraints = newConstraint(symbols.size());
-        constraints->insert(static_cast<ActionID>(G.getEndOfInputSymbol().id));
+        constraints->insert(
+            static_cast<ActionID>(gram.getEndOfInputSymbol().id));
+        auto augProdID = static_cast<ProductionID>(productionTable.size());
+        StateID s0 =
+            M.addState(augProdID, 0, kernelLabelMap[augProdID][0], constraints);
+        StateID s1 =
+            M.addState(augProdID, 1, kernelLabelMap[augProdID][1], constraints);
 
-        auto const &dotSign = Grammar::SignStrings::dot;
-        auto &start = G.getStartSymbol();
-        String name = start.name + '\'';
-        StateID s0 = M.addState(
-            newString(name + " -> " + dotSign + " " + start.name), constraints);
-        StateID s1 = M.addState(
-            newString(name + " -> " + start.name + " " + dotSign), constraints);
+        auto &start = gram.getStartSymbol();
         M.addTransition(s0, s1, static_cast<ActionID>(start.id));
         M.markStartState(s0);
         M.markFinalState(s1);
         this->extendedStart = s0;
         this->extendedEnd = s1;
 
-        addNewDependency(s0, start.id, constraints);
+        Production augProduction{
+            SymbolID{-1}, std::vector<SymbolID>{gram.getStartSymbol().id}};
+        addNewDependency(
+            s0, start.id,
+            resolveLocalConstraints(constraints, augProduction, 0));
     }
 
     // Process all seeds
@@ -179,25 +162,26 @@ void LRParser::buildNFA() {
             auto const &rhs = production.rightSymbols;
             StateID firstStateID;
             // Add states
-            for (size_t i = 0; i <= rhs.size(); ++i) {
-                const char *name = labelMap[productionID][i];
-                StateID stateID = M.addState(name, seedIter->first.second);
-                if (i == 0)
+            auto rhsSize = static_cast<int>(rhs.size());
+            for (int i = 0; i <= rhsSize; ++i) {
+                const char *name = kernelLabelMap[productionID][i];
+                StateID stateID =
+                    M.addState(productionID, i, name, seedIter->first.second);
+                if (i == 0) {
                     firstStateID = stateID;
+                }
             }
             // Link these states
-            for (size_t i = 0; i < rhs.size(); ++i) {
+            for (int i = 0; i < rhsSize; ++i) {
                 auto s1 = static_cast<StateID>(firstStateID + i);
                 auto s2 = static_cast<StateID>(firstStateID + i + 1);
                 auto const &curSymbol = symbols[rhs[i]];
                 M.addTransition(s1, s2, static_cast<ActionID>(curSymbol.id));
                 // Add new dependency
                 if (curSymbol.type == SymbolType::NON_TERM) {
-                    assert(seedIter->first.second);
-                    auto constraints = resolveLocalConstraints(
-                        gram, *seedIter->first.second, production, i);
-                    addNewDependency(s1, curSymbol.id,
-                                     newConstraint(std::move(constraints)));
+                    auto constraint = resolveLocalConstraints(
+                        seedIter->first.second, production, i);
+                    addNewDependency(s1, curSymbol.id, constraint);
                 }
             }
 
@@ -230,101 +214,87 @@ void LRParser::buildNFA() {
 
 void LRParser::buildDFA() {
     // Dump flag is inherited, no need to set again
-    nfa.setClosureEqualFunc(getClosureEqualFunc());
-    nfa.setDuplicateClosureHandler(getDuplicateClosureHandler());
+    // nfa.setClosureEqualFunc(getClosureEqualFunc());
+    // nfa.setDuplicateClosureHandler(getDuplicateClosureHandler());
     dfa = nfa.toDFA();
     display(AUTOMATON, INFO, "DFA is built", &dfa, (void *)"build_dfa");
 }
 
-void LRParser::buildParserTable() {
-    // Now DFA has complete information
-    // 1. DFA has epsilon action in its action vector, so we need to skip it.
-    // 2. DFA doesn't have a '$' action, and we need to process it specially.
-
+void LRParser::buildParseTable() {
     auto const &states = dfa.getAllStates();
     auto const &closures = dfa.getClosures();
-    auto const &formerStates = dfa.getFormerStates();
     auto const &symbols = gram.getAllSymbols();
-
-    auto nActions = static_cast<int>(dfa.getAllActions().size());
-    auto nDFAStates = static_cast<int>(states.size());
-
-    // Shift and Goto items
-    for (const auto &state : states) {
-        auto const &trans = *state.transitions;
-        for (auto const &tran : trans) {
-            ParseAction item{(symbols[tran.action].type == SymbolType::NON_TERM)
-                                 ? ParseAction::GOTO
-                                 : ParseAction::SHIFT,
-                             tran.to};
-            addParserTableEntry(state.id, tran.action, item);
-        }
-    }
-
-    // Process Reduce items
-    util::BitSet<StateID> reducibleStateMask{formerStates.size()};
-    for (auto const &entry : reduceMap) {
-        reducibleStateMask.insert(entry.first);
-    }
-
-    for (int i = 0; i < nDFAStates; ++i) {
-        auto state = static_cast<StateID>(i);
-        auto closure = closures[state]; // Copy a bitmap
-        closure &= reducibleStateMask;
-        for (auto substate : closure) {
-            for (int j = 0; j < nActions; ++j) {
-                auto action = static_cast<ActionID>(j);
-                if (symbols[action].type == SymbolType::NON_TERM) {
-                    continue;
-                }
-                ProductionID prodID = reduceMap.at(substate);
-                addParserTableEntry(state, action,
-                                    ParseAction{ParseAction::REDUCE, prodID},
-                                    substate);
-            }
-        }
-    }
-
-    // Process end of input
     auto endOfInput = static_cast<ActionID>(gram.getEndOfInputSymbol().id);
-    for (int i = 0; i < nDFAStates; ++i) {
-        if (closures[i].contains(this->extendedEnd)) {
-            addParserTableEntry(StateID{i}, endOfInput,
-                                ParseAction{ParseAction::SUCCESS, -1});
+    auto stateCount = static_cast<int>(states.size());
+    auto const &auxStates = dfa.getAuxStates();
+
+    for (int i = 0; i < stateCount; ++i) {
+        auto stateID = static_cast<StateID>(i);
+        // "Shift" and "Goto" items
+        auto const &trans = states[stateID].transitions;
+        for (auto const &tran : *trans) {
+            ParseAction item{symbols[tran.action].type == SymbolType::TERM
+                                 ? ParseAction::SHIFT
+                                 : ParseAction::GOTO,
+                             tran.destination};
+            addParseTableEntry(stateID, tran.action, item);
+        }
+        // Process "Reduce" items
+        for (auto auxStateID : closures[stateID]) {
+            auto const &auxState = auxStates[auxStateID];
+            ProductionID prodID = auxState.productionID;
+            // Skip those which cannot be reduced.
+            // prodID should be valid and not refer to the pseudo production
+            // "S' -> S".
+            if (prodID < 0 || prodID + 1 >= kernelLabelMap.size() ||
+                auxState.rhsIndex + 1 != kernelLabelMap[prodID].size()) {
+                continue;
+            }
+            for (auto actionID : *auxStates[auxStateID].constraint) {
+                addParseTableEntry(stateID, actionID,
+                                   ParseAction{ParseAction::REDUCE, prodID},
+                                   auxStateID);
+            }
+            // for (int j = 0; j < nActions; ++j) {
+            //     auto action = static_cast<ActionID>(j);
+            //     if (symbols[action].type == SymbolType::NON_TERM) {
+            //         continue;
+            //     }
+            //     addParseTableEntry(state, action,
+            //                        ParseAction{ParseAction::REDUCE, prodID},
+            //                        substate);
+            // }
+        }
+        // Process "Accept" item.
+        // TODO: extendedEnd not available in LALR.
+        if (closures[stateID].contains(this->extendedEnd)) {
+            addParseTableEntry(stateID, endOfInput,
+                               ParseAction{ParseAction::SUCCESS, -1});
         }
     }
 
     display(PARSE_TABLE, INFO, "Parse table", this);
 }
 
-auto LRParser::getClosureEqualFunc() const -> Automaton::ClosureEqualFuncType {
-    return [](Closure const &a, Closure const &b) { return a == b; };
-}
-
-auto LRParser::getDuplicateClosureHandler() const
-    -> Automaton::DuplicateClosureHandlerType {
-    return [](Closure const &a,
-              Closure const &b) { /* Default: do nothing */ };
-}
-
-void LRParser::addParserTableEntry(StateID state, ActionID act,
-                                   ParseAction pact, StateID subState) {
+void LRParser::addParseTableEntry(StateID state, ActionID act, ParseAction pact,
+                                  StateID subState) {
     using std::set;
     using std::vector;
-    if (!canAddParserTableEntry(state, act, pact, subState)) {
-        return;
-    }
-    if (parserTable.empty()) {
-        parserTable = vector<vector<set<ParseAction>>>(
+    // if (!canAddParseTableEntry(state, act, pact, subState)) {
+    //     return;
+    // }
+    if (parseTable.empty()) {
+        parseTable = vector<vector<set<ParseAction>>>(
             dfa.getAllStates().size(),
             vector<set<ParseAction>>(gram.getAllSymbols().size()));
     }
-    parserTable[state][act].insert(pact);
+    parseTable[state][act].insert(pact);
 }
 
-String LRParser::dumpParserTableEntry(StateID state, ActionID action) const {
-    auto const &items = parserTable.at(state).at(action);
-    String s;
+std::string LRParser::dumpParseTableEntry(StateID state,
+                                          ActionID action) const {
+    auto const &items = parseTable.at(state).at(action);
+    std::string s;
     bool commaFlag = false;
     for (auto const &item : items) {
         if (commaFlag)
@@ -348,14 +318,14 @@ String LRParser::dumpParserTableEntry(StateID state, ActionID action) const {
             break;
         default:
             throw std::runtime_error(
-                "dumpParserTableEntry(): Unknown parse action type");
+                "dumpParseTableEntry(): Unknown parse action type");
         }
     }
     return s;
 }
 
 void LRParser::readSymbol(util::TokenReader &reader) {
-    String s;
+    std::string s;
     if (reader.getToken(s)) {
         auto const &symbol = gram.findSymbol(s);
         if (!launchArgs.allowNonterminalAsInputs &&
@@ -389,17 +359,17 @@ bool LRParser::test(std::istream &stream) try {
 
     if (launchArgs.exhaustInput) {
         display(LOG, INFO,
-                "Please input symbols for test (Use '$' to end the input):");
+                "Please input symbols for test (Use '$' to end the input)");
         while (inputFlag) {
             readSymbol(reader);
         }
     }
 
-    display(PARSE_STATES, INFO, "Parse states", this);
+    display(PARSE_STATES, INFO, "Parser states", this);
 
     if (!launchArgs.exhaustInput) {
         display(LOG, INFO,
-                "Please input symbols for test (Use '$' to end the input):");
+                "Please input symbols for test (Use '$' to end the input)");
     }
 
     util::Formatter f;
@@ -414,7 +384,7 @@ bool LRParser::test(std::istream &stream) try {
                 "No next symbol to use, this shouldn't be possible");
 
         auto const &tableEntry =
-            parserTable[stateStack.back()][InputQueue.front()];
+            parseTable[stateStack.back()][InputQueue.front()];
 
         auto choices = tableEntry.size();
         if (choices <= 0)
@@ -450,7 +420,7 @@ bool LRParser::test(std::istream &stream) try {
             return true;
         }
 
-        display(PARSE_STATES, INFO, "Parse states", this);
+        display(PARSE_STATES, INFO, "Parser states", this);
     }
     throw UnreachableCodeError();
 } catch (std::exception const &e) {

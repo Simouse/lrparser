@@ -91,10 +91,10 @@ static void handleLog(const char *description, DisplayLogLevel level) {
         printf("[%-7s] %s\n", logs[level], description);
 }
 
-static String generateLogLine(const char *description, DisplayLogLevel level) {
+static std::string generateLogLine(const char *description, DisplayLogLevel level) {
     if (launchArgs.logLevel < level || !description) return "";
     util::Formatter f;
-    String s;
+    std::string s;
     if (level == INFO)
         s += f.formatView("> %s\n", description);
     else
@@ -105,7 +105,7 @@ static String generateLogLine(const char *description, DisplayLogLevel level) {
 static void handleParseStates(const char *description, DisplayLogLevel logLevel,
                               gram::LRParser const *lr) {
     util::Formatter f;
-    String s;
+    std::string s;
     auto const &stateStack = lr->getStateStack();
     auto const &symbolStack = lr->getSymbolStack();
     auto const &inputQueue = lr->getInputQueue();
@@ -136,7 +136,7 @@ static void handleParseStates(const char *description, DisplayLogLevel logLevel,
     printf("%s\n", s.c_str());
 }
 
-static void handleParserTable(const char *description, DisplayLogLevel logLevel,
+static void handleParseTable(const char *description, DisplayLogLevel logLevel,
                              gram::LRParser const *lr) {
     constexpr const int indexWidth = 8;
     constexpr const int actionWidth = 8;
@@ -145,11 +145,11 @@ static void handleParserTable(const char *description, DisplayLogLevel logLevel,
 
     auto const &grammar = lr->getGrammar();
     auto const &symbols = grammar.getAllSymbols();
-    auto parserTableRowNumber = lr->getParserTable().size();
+    auto parseTableRowNumber = lr->getParseTable().size();
     auto epsilonID = grammar.getEpsilonSymbol().id;
 
     util::Formatter f;
-    String outputString;
+    std::string outputString;
 
     outputString += generateLogLine(description, logLevel);
 
@@ -161,9 +161,9 @@ static void handleParserTable(const char *description, DisplayLogLevel logLevel,
     termVec.reserve(symbols.size());
     nontermVec.reserve(symbols.size());
     for (auto const &symbol : symbols) {
-        if (symbol.type == gram::SymbolType::TERM && symbol.id != epsilonID)
+        if (symbol.type == SymbolType::TERM && symbol.id != epsilonID)
             termVec.push_back(symbol.id);
-        else if (symbol.type == gram::SymbolType::NON_TERM)
+        else if (symbol.type == SymbolType::NON_TERM)
             nontermVec.push_back(symbol.id);
     }
 
@@ -191,16 +191,16 @@ static void handleParserTable(const char *description, DisplayLogLevel logLevel,
     outputString += f.formatView("\n");
 
     // Print table entries
-    for (int i = 0; static_cast<size_t>(i) < parserTableRowNumber; ++i) {
+    for (int i = 0; static_cast<size_t>(i) < parseTableRowNumber; ++i) {
         outputString += f.formatView("%*d ", indexWidth, i);
         for (int terminal : termVec) {
-            String s = lr->dumpParserTableEntry(gram::StateID{i},
-                                               gram::ActionID{terminal});
+            std::string s = lr->dumpParseTableEntry(StateID{i},
+                                               ActionID{terminal});
             outputString += f.formatView("|%*s ", actionWidth, s.c_str());
         }
         for (int nonterm : nontermVec) {
-            String s = lr->dumpParserTableEntry(gram::StateID{i},
-                                               gram::ActionID{nonterm});
+            std::string s = lr->dumpParseTableEntry(StateID{i},
+                                               ActionID{nonterm});
             outputString += f.formatView("|%*s ", gotoWidth, s.c_str());
         }
         outputString += f.formatView("\n");
@@ -218,18 +218,18 @@ static void handleAutomaton(const char *description, DisplayLogLevel logLevel,
     // Get file path
     fs::path outFile = launchArgs.resultsDir;
     outFile.append(f.formatView("%s.%d.gv", prefix, automatonCounter++));
-    String gvFileName = outFile.string();
+    std::string gvFileName = outFile.string();
 
     handleLog(description, logLevel);
 
-    String s = automaton->dump();
+    std::string s = automaton->dump();
 
     FILE *file = std::fopen(gvFileName.c_str(), "w");
     std::fwrite(s.c_str(), sizeof(char), s.size(), file);
     std::fclose(file);
 
     outFile.replace_extension("svg");
-    String svgFileName = outFile.string();
+    std::string svgFileName = outFile.string();
 
     if (!launchArgs.nodot) {
         auto clock = std::chrono::steady_clock();
@@ -282,7 +282,7 @@ static void handleSymbolTable(const char *description, DisplayLogLevel logLevel,
 
     auto &g = *grammar;
     util::Formatter f;
-    String outputString;
+    std::string outputString;
 
     outputString += generateLogLine(description, logLevel);
     outputString += f.formatView(lineFmt, nameWidth, "Name", "Nullable",
@@ -293,15 +293,15 @@ static void handleSymbolTable(const char *description, DisplayLogLevel logLevel,
     auto const &epsilon = g.getEpsilonSymbol();
     for (auto &symbol : g.getAllSymbols()) {
         // Do not output terminal information
-        if (symbol.type == gram::SymbolType::TERM) {
+        if (symbol.type == SymbolType::TERM) {
             continue;
         }
-        String nullable = g.dumpNullable(symbol);
-        String firstSet = g.dumpFirstSet(symbol);
-        String followSet = g.dumpFollowSet(symbol);
+        std::string nullable = g.dumpNullable(symbol);
+        std::string firstSet = g.dumpFirstSet(symbol);
+        std::string followSet = g.dumpFollowSet(symbol);
         int namew = (epsilon.id == symbol.id) ? nameWidth + 1 : nameWidth;
         int firstw =
-            (firstSet.find(gram::Grammar::SignStrings::epsilon) != String::npos)
+            (firstSet.find(gram::Grammar::SignStrings::epsilon) != std::string::npos)
                 ? firstWidth + 1
                 : firstWidth;
         outputString +=
@@ -316,8 +316,8 @@ static void handleSymbolTable(const char *description, DisplayLogLevel logLevel,
 static void handleGrammarRules(const char *description,
                                DisplayLogLevel logLevel,
                                gram::Grammar const *grammar) {
-    String s = grammar->dump();
-    String logLine = generateLogLine(description, logLevel);
+    std::string s = grammar->dump();
+    std::string logLine = generateLogLine(description, logLevel);
     printf("%s%s\n", logLine.c_str(), s.c_str());
 }
 
@@ -335,7 +335,7 @@ void display(DisplayType type, DisplayLogLevel level, const char *description,
             handleLog(description, level);
             break;
         case DisplayType::PARSE_TABLE:
-            handleParserTable(description, level, (LRParser const *)pointer);
+            handleParseTable(description, level, (LRParser const *)pointer);
             break;
         case DisplayType::GRAMMAR_RULES:
             handleGrammarRules(description, level, (Grammar const *)pointer);

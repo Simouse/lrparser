@@ -12,14 +12,14 @@ class LR1Parser : public LRParser {
   public:
     explicit LR1Parser(Grammar const &g) : LRParser(g) {}
 
-    [[nodiscard]] bool canAddParserTableEntry(StateID state, ActionID act,
+    [[nodiscard]] bool canAddParseTableEntry(StateID state, ActionID act,
                                              ParseAction pact,
                                              StateID substate) const override {
         // We need to check specific reduction rule
         if (pact.type == ParseAction::REDUCE) {
-            auto const &formerStates = dfa.getFormerStates();
-            auto const &reducibleState = formerStates[substate];
-            return reducibleState.constraint->contains(act);
+            auto const &auxStates = dfa.getAuxStates();
+            auto const &auxState = auxStates[substate];
+            return auxState.constraint->contains(act);
         }
 
         return true;
@@ -51,6 +51,26 @@ class LR1Parser : public LRParser {
         return [](StateSeed const &s1, StateSeed const &s2) -> bool {
             return s1.first == s2.first && *s1.second == *s2.second;
         };
+    }
+
+    [[nodiscard]] util::BitSet<ActionID> *
+    resolveLocalConstraints(const util::BitSet<ActionID> *parentConstraint,
+                            const Production &production,
+                            int rhsIndex) override {
+        auto const &symbols = gram.getAllSymbols();
+        auto const &rhs = production.rightSymbols;
+        util::BitSet<ActionID> constraints(symbols.size());
+
+        bool allNullable = true;
+        for (size_t i = rhsIndex + 1; allNullable && i < rhs.size(); ++i) {
+            if (!symbols[rhs[i]].nullable.value())
+                allNullable = false;
+            constraints |= symbols[rhs[i]].firstSet;
+        }
+        if (allNullable && parentConstraint)
+            constraints |= *parentConstraint;
+
+        return newConstraint(std::move(constraints));
     }
 };
 } // namespace gram

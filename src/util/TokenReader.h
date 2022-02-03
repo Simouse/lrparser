@@ -7,7 +7,7 @@
 namespace util {
 
 struct TokenReader {
-  virtual bool getToken(String &s) { return (bool)(stream >> s); }
+  virtual bool getToken(std::string &s) { return (bool)(stream >> s); }
   TokenReader(::std::istream &is) : stream(is) {}
 
  protected:

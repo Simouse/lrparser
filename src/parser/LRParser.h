@@ -48,21 +48,21 @@ class LRParser : public util::ResourceProvider<TransitionSet> {
     // Store actionTable and gotoTable in the same place.
     // Unfortunately, C++ doesn't have dynamic high-dimensional arrays, so
     // we have to use std::vector instead.
-    using ParserTable = ::std::vector<std::vector<std::set<ParseAction>>>;
+    using ParseTable = ::std::vector<std::vector<std::set<ParseAction>>>;
 
     // Stores data to generate states from a symbol's productions
     using StateSeed = std::pair<SymbolID, util::BitSet<ActionID> *>;
 
     explicit LRParser(const gram::Grammar &g) : gram(g), nfa(this), dfa(this) {}
 
-    void buildNFA();
-    void buildDFA();
-    void buildParserTable();
+    virtual void buildNFA();
+    virtual void buildDFA();
+    void buildParseTable();
     // Test given stream with parsed results
     bool test(::std::istream &stream);
 
     // Accessors
-    [[nodiscard]] auto const &getParserTable() const { return parserTable; }
+    [[nodiscard]] auto const &getParseTable() const { return parseTable; }
     [[nodiscard]] auto const &getGrammar() const { return gram; }
     [[nodiscard]] auto const &getNFA() const { return nfa; }
     [[nodiscard]] auto const &getDFA() const { return dfa; }
@@ -72,8 +72,8 @@ class LRParser : public util::ResourceProvider<TransitionSet> {
     [[nodiscard]] bool hasMoreInput() const { return inputFlag; }
 
     // Format
-    [[nodiscard]] String dumpParserTableEntry(StateID state,
-                                              ActionID action) const;
+    [[nodiscard]] std::string dumpParseTableEntry(StateID state,
+                                                   ActionID action) const;
 
     // With this interface automatons can get transition resources whose
     // lifetime can be longer than itself
@@ -89,61 +89,21 @@ class LRParser : public util::ResourceProvider<TransitionSet> {
     const gram::Grammar &gram;
     Automaton nfa;
     Automaton dfa;
-    ParserTable parserTable;
+    ParseTable parseTable;
     std::deque<SymbolID> InputQueue;
     std::vector<StateID> stateStack;
     std::vector<SymbolID> symbolStack;
     // This map stores states that can be reduced by certain productions
     std::unordered_map<StateID, ProductionID> reduceMap;
-    // [productionID][index] ==> label
-    std::vector<std::vector<const char *>> labelMap;
+    // [productionID][index] ==> label.
+    std::vector<std::vector<const char *>> kernelLabelMap;
     std::vector<std::unique_ptr<util::BitSet<ActionID>>> constraintPool;
     std::vector<std::unique_ptr<char[]>> stringPool;
     std::vector<std::unique_ptr<TransitionSet>> transitionSetPool;
+    // Contains all non-epsilon terminals. Built in buildKernel().
+    util::BitSet<ActionID> *allTermConstraint;
 
-    // Virtual functions.
-    // These functions change behaviors of the parser, and must be overridden.
-
-    // This method checks if current entry is applicable to add to the table.
-    [[nodiscard]] virtual bool
-    canAddParserTableEntry(StateID state, ActionID act, ParseAction pact,
-                           StateID subState) const = 0;
-
-    // Decides if the chain of this seed is final.
-    [[nodiscard]] virtual bool
-    canMarkFinal(StateSeed const &seed, Production const &production) const = 0;
-
-    [[nodiscard]] virtual bool shouldIncludeConstraintsInDump() const = 0;
-
-    [[nodiscard]] virtual std::function<size_t(StateSeed const &seed)>
-    getSeedHashFunc() const = 0;
-
-    [[nodiscard]] virtual std::function<bool(StateSeed const &a,
-                                             StateSeed const &b)>
-    getSeedEqualFunc() const = 0;
-
-    // These two functions are used by automaton, and have default values. Only
-    // LALR will override them.
-    [[nodiscard]] virtual Automaton::ClosureEqualFuncType
-    getClosureEqualFunc() const;
-
-    [[nodiscard]] virtual Automaton::DuplicateClosureHandlerType
-    getDuplicateClosureHandler() const;
-
-  private:
-    // Read next symbol from the given stream.
-    // This is only used inside test() method.
-    void readSymbol(util::TokenReader &reader);
-
-    // This function may not actually add the entry. It checks violations by
-    // calling canAddParserTableEntry() first, and when it returns false, the
-    // entry is discarded. When the entry is a reduction item, the former state
-    // which causes the reduction (called `subState`) is passed.
-    void addParserTableEntry(StateID state, ActionID act, ParseAction pact,
-                             StateID subState = StateID{-1});
-
-    // Throws an error if reduction fails.
-    void reduce(ProductionID prodID);
+    void buildKernel();
 
     util::BitSet<ActionID> *newConstraint(size_t size) {
         constraintPool.push_back(
@@ -158,7 +118,7 @@ class LRParser : public util::ResourceProvider<TransitionSet> {
     }
 
     // Copy a string, and stores it internally
-    const char *newString(String const &s) {
+    const char *newString(std::string const &s) {
         auto holder = std::make_unique<char[]>(s.size() + 1);
         char *buf = holder.get();
         strcpy(buf, s.c_str());
@@ -166,7 +126,69 @@ class LRParser : public util::ResourceProvider<TransitionSet> {
         return buf;
     }
 
-    void buildNFAStateLabels();
+    // The returned resource should be allocated by newConstraint(), which
+    // keeps the resource available until parser is destroyed.
+    // Because newConstraint() will allocate new resource, this function is not
+    // const.
+    // Arguement `parentConstraint` may be nullptr if parser is slr or lr0.
+    virtual util::BitSet<ActionID> *
+    resolveLocalConstraints(util::BitSet<ActionID> const *parentConstraint,
+                            Production const &production, int rhsIndex) = 0;
+
+    // Virtual functions.
+    // These functions change behaviors of the parser, and must be overridden if
+    // buildNFA() and buildDFA() are not.
+
+    // This method checks if current entry is applicable to add to the table.
+    [[nodiscard]] virtual bool
+    canAddParseTableEntry(StateID state, ActionID act, ParseAction pact,
+                           StateID subState) const = 0;
+
+    // Decides if the chain of this seed is final.
+    [[nodiscard]] virtual bool
+    canMarkFinal(StateSeed const &seed, Production const &production) const = 0;
+
+    [[nodiscard]] virtual bool shouldIncludeConstraintsInDump() const = 0;
+
+    // Only LR1 has to override this method
+    [[nodiscard]] virtual std::function<size_t(StateSeed const &seed)>
+    getSeedHashFunc() const {
+        return [](StateSeed const &seed) -> std::size_t {
+            return std::hash<int>()(seed.first);
+        };
+    }
+
+    // Only LR1 has to override this method
+    [[nodiscard]] virtual std::function<bool(StateSeed const &a,
+                                             StateSeed const &b)>
+    getSeedEqualFunc() const {
+        return [](StateSeed const &s1, StateSeed const &s2) -> bool {
+            return s1.first == s2.first;
+        };
+    }
+
+    // These two functions are used by automaton, and have default values. Only
+    // LALR will override them.
+    // [[nodiscard]] virtual Automaton::ClosureEqualFuncType
+    // getClosureEqualFunc() const;
+
+    // [[nodiscard]] virtual Automaton::DuplicateClosureHandlerType
+    // getDuplicateClosureHandler() const;
+
+  private:
+    // Read next symbol from the given stream.
+    // This is only used inside test() method.
+    void readSymbol(util::TokenReader &reader);
+
+    // This function may not actually add the entry. It checks violations by
+    // calling canAddParseTableEntry() first, and when it returns false, the
+    // entry is discarded. When the entry is a reduction item, the former state
+    // which causes the reduction (called `subState`) is passed.
+    void addParseTableEntry(StateID state, ActionID act, ParseAction pact,
+                             StateID subState = StateID{-1});
+
+    // Throws an error if reduction fails.
+    void reduce(ProductionID prodID);
 };
 
 } // namespace gram

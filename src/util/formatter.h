@@ -4,6 +4,8 @@
 #include <cstdarg>
 #include <cstdio>
 #include <type_traits>
+#include <string>
+#include <string_view>
 
 #include "src/common.h"
 
@@ -21,7 +23,7 @@ class Formatter {
 
     // Return value should be used right away
     template <class... Ts>
-    StringView formatView(const char *fmt, Ts const &...args) {
+    std::string_view formatView(const char *fmt, Ts const &...args) {
         static_assert(((std::is_scalar_v<Ts> || std::is_array_v<Ts>)&&...),
                       "All arguments must be of primitive types");
 
@@ -42,7 +44,7 @@ class Formatter {
     }
 
     template <class... Ts>
-    String format(const char *fmt, Ts const &...args) {
+    std::string format(const char *fmt, Ts const &...args) {
         auto sv = formatView(fmt, args...);
         return {sv.data(), sv.size()};
     }
@@ -50,8 +52,8 @@ class Formatter {
     // This method protects chars from being escaped.
     // e.g. \n ===> \\n so when you pass this string to functions
     // like printf, it's not interpreted as a newline char.
-    String reverseEscaped(StringView sv) {
-        String s;
+    std::string reverseEscaped(std::string_view sv) {
+        std::string s;
         for (char ch : sv) {
             switch (ch) {
                 case '\'':
@@ -70,8 +72,8 @@ class Formatter {
     // Concat executable path and thoses arguments used by command line.
     // The 0th argument is ignored, and there should be a trailing NULL pointer.
     // NULL as an argument is not checked.
-    String concatArgs(const char *path, char **ptr) {
-        String s = path;
+    std::string concatArgs(const char *path, char **ptr) {
+        std::string s = path;
         bool firstArgSkipped = false;
         for (; *ptr; ++ptr) {
             if (firstArgSkipped) {

@@ -116,7 +116,7 @@ void lrMain() {
     reportTime("NFA built");
     parser->buildDFA();
     reportTime("DFA built");
-    parser->buildParserTable();
+    parser->buildParseTable();
     reportTime("Parse table built");
     parser->test(std::cin);
     reportTime("Test finished");
