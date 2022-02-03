@@ -6,7 +6,7 @@
 #include <mutex>
 #include <vector>
 
-#include "src/automata/Automaton.h"
+#include "src/automata/PushDownAutomaton.h"
 #include "src/common.h"
 #include "src/grammar/Grammar.h"
 #include "src/parser/LRParser.h"
@@ -212,7 +212,8 @@ static void handleParseTable(const char *description, DisplayLogLevel logLevel,
 
 // This function is slow
 static void handleAutomaton(const char *description, DisplayLogLevel logLevel,
-                            const char *prefix, Automaton const *automaton) {
+                            const char *prefix,
+                            PushDownAutomaton const *automaton) {
     util::Formatter f;
 
     // Get file path
@@ -233,14 +234,14 @@ static void handleAutomaton(const char *description, DisplayLogLevel logLevel,
 
     if (!launchArgs.nodot) {
         auto clock = std::chrono::steady_clock();
-        auto t1 = clock.now();
+        auto t1 = std::chrono::steady_clock::now();
 
         futures.emplace_back(std::async(
 
             std::launch::async, [svgFileName = std::move(svgFileName),
                                  gvFileName = std::move(gvFileName)]() {
                 auto clock = std::chrono::steady_clock();
-                auto t1 = clock.now();
+                auto t1 = std::chrono::steady_clock::now();
 
                 std::array<const char *, 6> args = {"dot",
                                                     "-Tsvg",
@@ -250,7 +251,7 @@ static void handleAutomaton(const char *description, DisplayLogLevel logLevel,
                                                     nullptr};
                 proc::exec("dot", const_cast<char **>(&args[0]));
 
-                auto t2 = clock.now();
+                auto t2 = std::chrono::steady_clock::now();
                 std::chrono::duration<double, std::milli> duration = t2 - t1;
                 util::Formatter f;
                 const char *description = f.formatView(
@@ -258,18 +259,17 @@ static void handleAutomaton(const char *description, DisplayLogLevel logLevel,
                                                "in creating a process",
                                                duration.count())
                                               .data();
-                display(LOG, DEBUG, description);
+                handleLog(description, DEBUG);
             }));
 
-        auto t2 = clock.now();
+        auto t2 = std::chrono::steady_clock::now();
         std::chrono::duration<double, std::milli> duration = t2 - t1;
-        util::Formatter f;
         const char *description = f.formatView(
                                        "%.1f ms has been spent "
                                        "in creating a thread",
                                        duration.count())
                                       .data();
-        display(LOG, DEBUG, description);
+        handleLog(description, DEBUG);
     }
 }
 
@@ -326,7 +326,7 @@ void display(DisplayType type, DisplayLogLevel level, const char *description,
     switch (type) {
         case DisplayType::AUTOMATON:
             handleAutomaton(description, level, (const char *)auxPointer,
-                            (Automaton const *)pointer);
+                            (PushDownAutomaton const *)pointer);
             break;
         case DisplayType::SYMBOL_TABLE:
             handleSymbolTable(description, level, (Grammar const *)pointer);

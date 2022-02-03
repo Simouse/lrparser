@@ -257,7 +257,6 @@ void Grammar::resolveFollowSet(
         // Add follow set items from parent
         auto const &parentFollowSet = symbolVector[parent].followSet;
         auto &followSet = symbolVector[dependency.first].followSet;
-        // followSet.insert(parentFollowSet.begin(), parentFollowSet.end());
         followSet |= parentFollowSet;
     }
     parentSet.clear();

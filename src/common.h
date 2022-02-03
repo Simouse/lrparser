@@ -3,11 +3,9 @@
 
 #include <stdexcept>
 
-// This file does not contain a namespace.
-// Typing "namespace::" before some common definitions is what I want to
-// avoid.🤔
+// The only header file which does not use namespace.
 
-// 1. enums
+// 1. Enums
 enum DisplayType {
     LOG,
     AUTOMATON,
@@ -31,22 +29,13 @@ enum ActionID : int;
 enum StateID : int;
 enum TransitionID : int;
 enum ProductionID : int;
-// enum SymbolID : int;
+// // enum SymbolID : int;
 // We may use static_cast when an element needs it, but a container
 // containing those elements cannot be cast. And allowing BitSet<T1> and
 // BitSet<T2> to be calculated together sounds wired.
 using SymbolID = ActionID;
 
-// Enum can compare with each other.
-// template <class Enum> struct IntEnumLess {
-//     static_assert(sizeof(int) == sizeof(Enum) && std::is_enum_v<Enum>,
-//                   "Template argument type must be a int-based enum");
-//     bool operator()(Enum a, Enum b) const {
-//         return static_cast<int>(a) < static_cast<int>(b);
-//     }
-// };
-
-// 2. global accessible functions
+// 2. Global accessible functions
 void display(DisplayType type, DisplayLogLevel level, const char *description,
              void const *pointer = nullptr, void const *auxPointer = nullptr);
 void lrInit();
@@ -55,16 +44,16 @@ double upTimeInMilli();
 void reportTime(const char *tag = nullptr);
 
 // 3. Errors
-struct UnimplementedError : public ::std::runtime_error {
-    UnimplementedError() : ::std::runtime_error("Operation not implemented") {}
+struct UnimplementedError : public std::runtime_error {
+    UnimplementedError() : std::runtime_error("Operation not implemented") {}
 };
 
-struct UnsupportedError : public ::std::runtime_error {
-    UnsupportedError() : ::std::runtime_error("Operation not supported") {}
+struct UnsupportedError : public std::runtime_error {
+    UnsupportedError() : std::runtime_error("Operation not supported") {}
 };
 
-struct UnreachableCodeError : public ::std::logic_error {
-    UnreachableCodeError() : ::std::logic_error("Unreachable code") {}
+struct UnreachableCodeError : public std::logic_error {
+    UnreachableCodeError() : std::logic_error("Unreachable code") {}
 };
 
 // 4. Arguments
@@ -74,7 +63,6 @@ struct LaunchArguments {
     bool strict = false;
     bool exhaustInput = true;
     bool autoDefineTerminals = true;
-    bool allowNonterminalAsInputs = false;
     ParserType parserType = SLR;
     DisplayLogLevel logLevel = VERBOSE;
     std::string grammarFileName = "grammar.txt";

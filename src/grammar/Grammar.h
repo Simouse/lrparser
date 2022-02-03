@@ -8,12 +8,12 @@
 #include <unordered_set>
 #include <vector>
 
-#include "src/automata/Automaton.h"
+#include "src/automata/PushDownAutomaton.h"
 #include "src/common.h"
 #include "src/util/BitSet.h"
 
 namespace gram {
-class Automaton;
+class PushDownAutomaton;
 } // namespace gram
 
 namespace gram {

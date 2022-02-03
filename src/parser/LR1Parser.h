@@ -1,7 +1,7 @@
 #ifndef LRPARSER_LR1_H
 #define LRPARSER_LR1_H
 
-#include "src/automata/Automaton.h"
+#include "src/automata/PushDownAutomaton.h"
 #include "src/common.h"
 #include "src/grammar/Grammar.h"
 #include "src/parser/LRParser.h"
@@ -12,36 +12,16 @@ class LR1Parser : public LRParser {
   public:
     explicit LR1Parser(Grammar const &g) : LRParser(g) {}
 
-    [[nodiscard]] bool canAddParseTableEntry(StateID state, ActionID act,
-                                             ParseAction pact,
-                                             StateID substate) const override {
-        // We need to check specific reduction rule
-        if (pact.type == ParseAction::REDUCE) {
-            auto const &auxStates = dfa.getAuxStates();
-            auto const &auxState = auxStates[substate];
-            return auxState.constraint->contains(act);
-        }
-
-        return true;
-    }
-
-    [[nodiscard]] bool
-    canMarkFinal(const StateSeed &seed,
-                 Production const &production) const override {
-        auto endActionID = static_cast<ActionID>(gram.getEndOfInputSymbol().id);
-        assert(seed.second);
-        return seed.second->contains(endActionID);
-    }
-
-    [[nodiscard]] bool shouldIncludeConstraintsInDump() const override {
-        return true;
-    }
+  protected:
+    // Since we want constraints in labels, and we use base implementation to do
+    // that for us, we should override this method.
+    [[nodiscard]] bool shouldDumpConstraint() const override { return true; }
 
     [[nodiscard]] std::function<size_t(const StateSeed &)>
     getSeedHashFunc() const override {
         return [](StateSeed const &seed) -> std::size_t {
             size_t res = std::hash<int>()(seed.first);
-            res = res * 31 + std::hash<util::BitSet<ActionID>>()(*seed.second);
+            res = res * 31 + std::hash<Constraint>()(*seed.second);
             return res;
         };
     }
@@ -53,24 +33,24 @@ class LR1Parser : public LRParser {
         };
     }
 
-    [[nodiscard]] util::BitSet<ActionID> *
-    resolveLocalConstraints(const util::BitSet<ActionID> *parentConstraint,
+    [[nodiscard]] Constraint *
+    resolveLocalConstraints(const Constraint *parentConstraint,
                             const Production &production,
                             int rhsIndex) override {
         auto const &symbols = gram.getAllSymbols();
         auto const &rhs = production.rightSymbols;
-        util::BitSet<ActionID> constraints(symbols.size());
+        Constraint constraint(symbols.size());
 
         bool allNullable = true;
         for (size_t i = rhsIndex + 1; allNullable && i < rhs.size(); ++i) {
             if (!symbols[rhs[i]].nullable.value())
                 allNullable = false;
-            constraints |= symbols[rhs[i]].firstSet;
+            constraint |= symbols[rhs[i]].firstSet;
         }
         if (allNullable && parentConstraint)
-            constraints |= *parentConstraint;
+            constraint |= *parentConstraint;
 
-        return newConstraint(std::move(constraints));
+        return newConstraint(std::move(constraint));
     }
 };
 } // namespace gram

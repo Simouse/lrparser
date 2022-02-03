@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-#include "src/automata/Automaton.h"
+#include "src/automata/PushDownAutomaton.h"
 #include "src/common.h"
 #include "src/grammar/Grammar.h"
 #include "src/grammar/GrammarReader.h"
@@ -33,7 +33,6 @@ void LRParser::buildKernel() {
         const auto &rhs = production.rightSymbols;
         auto maxIndex = rhs.size();
         std::vector<const char *> labelVec(maxIndex + 1);
-        // std::vector<util::BitSet<ActionID> *> constraintVec(maxIndex + 1);
         // i: position of dot
         for (size_t i = 0; i <= maxIndex; ++i) {
             // Build label
@@ -78,7 +77,7 @@ void LRParser::buildKernel() {
 }
 
 void LRParser::buildNFA() {
-    Automaton &M = this->nfa;
+    PushDownAutomaton &M = this->nfa;
     const auto &symbols = gram.getAllSymbols();
     auto const &productionTable = gram.getProductionTable();
     util::Formatter f;
@@ -86,7 +85,7 @@ void LRParser::buildNFA() {
 
     buildKernel();
 
-    M.setDumpFlag(shouldIncludeConstraintsInDump());
+    M.setDumpFlag(shouldDumpConstraint());
 
     auto estimatedStateCount = symbols.size() + productionTable.size() * 4;
 
@@ -99,7 +98,7 @@ void LRParser::buildNFA() {
     // One state can only link to one seed, because if constraints are
     // different, LR1 should already mark sources as different states, and LR0
     // will merge them so no new state was generated.
-    // { State ID => iterator to `seeds` }
+    // State ID => iterator to `seeds`.
     std::unordered_map<StateID, decltype(seeds.begin())> epsilonLinks;
 
     // Mark symbols that have their productions visited
@@ -107,7 +106,7 @@ void LRParser::buildNFA() {
 
     auto addNewDependency = [&epsilonLinks, &unvisitedSeeds,
                              &seeds](StateID state, SymbolID symbolID,
-                                     util::BitSet<ActionID> *constraint) {
+                                     Constraint *constraint) {
         StateSeed seed = std::make_pair(symbolID, constraint);
         // Find iterator
         auto result = seeds.try_emplace(seed, std::vector<StateID>());
@@ -122,11 +121,10 @@ void LRParser::buildNFA() {
     // First we need to copy all actions by order, so symbols and actions are
     // paired.
     for (auto const &symbol : symbols) {
-        auto actionID = M.addAction(newString(symbol.name));
-        if (symbol.id == gram.getEpsilonSymbol().id) {
-            M.setEpsilonAction(actionID);
-        }
+        M.addAction(newString(symbol.name));
     }
+    M.setEndOfInputAction(gram.getEndOfInputSymbol().id);
+    M.setEpsilonAction(gram.getEpsilonSymbol().id);
 
     // Create S' (start symbol in augmented grammar) for S
     {
@@ -134,15 +132,13 @@ void LRParser::buildNFA() {
         constraints->insert(
             static_cast<ActionID>(gram.getEndOfInputSymbol().id));
         auto augProdID = static_cast<ProductionID>(productionTable.size());
-        StateID s0 =
-            M.addState(augProdID, 0, kernelLabelMap[augProdID][0], constraints);
-        StateID s1 =
-            M.addState(augProdID, 1, kernelLabelMap[augProdID][1], constraints);
+        StateID s0 = M.addState(augProdID, 0, constraints);
+        StateID s1 = M.addState(augProdID, 1, constraints);
 
         auto &start = gram.getStartSymbol();
         M.addTransition(s0, s1, static_cast<ActionID>(start.id));
         M.markStartState(s0);
-        M.markFinalState(s1);
+        //        M.markFinalState(s1);
         //        this->extendedStart = s0;
         this->auxEnd = s1;
 
@@ -164,9 +160,8 @@ void LRParser::buildNFA() {
             // Add states
             auto rhsSize = static_cast<int>(rhs.size());
             for (int i = 0; i <= rhsSize; ++i) {
-                const char *name = kernelLabelMap[productionID][i];
                 StateID stateID =
-                    M.addState(productionID, i, name, seedIter->first.second);
+                    M.addState(productionID, i, seedIter->first.second);
                 if (i == 0) {
                     firstStateID = stateID;
                 }
@@ -184,17 +179,6 @@ void LRParser::buildNFA() {
                     addNewDependency(s1, curSymbol.id, constraint);
                 }
             }
-
-            auto lastStateID = static_cast<StateID>(firstStateID + rhs.size());
-
-            // Mark possible final state
-            if (canMarkFinal(seedIter->first, production)) {
-                M.markFinalState(lastStateID);
-            }
-            // Record last state of a production
-            // (Production ID is needed in parser table)
-            //            reduceMap[lastStateID] = productionID;
-
             // We are in a loop. So if a symbol has multiple productions,
             // `seed->second` will store multiple start states.
             seedIter->second.push_back(firstStateID);
@@ -215,9 +199,7 @@ void LRParser::buildNFA() {
 }
 
 void LRParser::buildDFA() {
-    // Dump flag is inherited, no need to set again
-    // nfa.setClosureEqualFunc(getClosureEqualFunc());
-    // nfa.setDuplicateClosureHandler(getDuplicateClosureHandler());
+    // Dump flag is inherited from NFA, no need to set again.
     dfa = nfa.toDFA();
     display(AUTOMATON, INFO, "DFA is built", &dfa, (void *)"build_dfa");
 }
@@ -248,27 +230,16 @@ void LRParser::buildParseTable() {
             // Skip those which cannot be reduced.
             // prodID should be valid and not refer to the pseudo production
             // "S' -> S".
-            if (prodID < 0 || (size_t)(prodID + 1) >= kernelLabelMap.size() ||
-                (size_t)(auxState.rhsIndex + 1) !=
-                    kernelLabelMap[prodID].size()) {
+            if (prodID < 0 || prodID + 1 >= kernelLabelMap.size() ||
+                auxState.rhsIndex + 1 != kernelLabelMap[prodID].size()) {
                 continue;
             }
             for (auto actionID : *auxStates[auxStateID].constraint) {
                 addParseTableEntry(stateID, actionID,
                                    ParseAction{ParseAction::REDUCE, prodID});
             }
-            // for (int j = 0; j < nActions; ++j) {
-            //     auto action = static_cast<ActionID>(j);
-            //     if (symbols[action].type == SymbolType::NON_TERM) {
-            //         continue;
-            //     }
-            //     addParseTableEntry(state, action,
-            //                        ParseAction{ParseAction::REDUCE, prodID},
-            //                        substate);
-            // }
         }
         // Process "Accept" item.
-        // TODO: auxEnd not available in LALR.
         if (closures[stateID].contains(this->auxEnd)) {
             addParseTableEntry(stateID, endOfInput,
                                ParseAction{ParseAction::SUCCESS, -1});
@@ -330,8 +301,7 @@ void LRParser::readSymbol(util::TokenReader &reader) {
     std::string s;
     if (reader.getToken(s)) {
         auto const &symbol = gram.findSymbol(s);
-        if (!launchArgs.allowNonterminalAsInputs &&
-            symbol.type == SymbolType::NON_TERM) {
+        if (symbol.type == SymbolType::NON_TERM) {
             throw std::runtime_error("Non-terminals as inputs are not allowed");
         }
         if (symbol.id == gram.getEpsilonSymbol().id) {

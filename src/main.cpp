@@ -1,15 +1,14 @@
 #include <cstring>
 #include <iostream>
-#include <cstring>
 #include <string>
 
 #include "src/common.h"
 #include "src/grammar/Grammar.h"
+#include "src/parser/LALRParser.h"
 #include "src/parser/LR0Parser.h"
 #include "src/parser/LR1Parser.h"
 #include "src/parser/LRParser.h"
 #include "src/parser/SLRParser.h"
-#include "src/parser/LALRParser.h"
 #include "src/util/Formatter.h"
 
 using namespace gram;
@@ -72,14 +71,10 @@ void printUsageAndExit(bool printErrorLine = true) {
         "file. Without this flag, they are simply space-splitted.\n"
         "--debug   : Set output level to DEBUG.\n"
         "--step    : Read <stdin> step by step. If you have to process a very "
-        "large input file, you may "
-        "need this flag. But without this flag the parser can provide better "
-        "display for input queue.\n"
-        "--disable-auto-define: All terminals must be defined before "
-        "being used.\n"
-        "--allow-non-terminals: Allow non-terminal symbols as inputs. Usually "
-        "this option is not used, because the parser only receives data from "
-        "the lexer, which only generates terminals.\n");
+        "large input file, you may need this flag. But without this flag the "
+        "parser can provide better display for input queue.\n"
+        "--disable-auto-define: All terminals must be defined before being "
+        "used.\n");
     exit(0);
 }
 
@@ -93,7 +88,7 @@ void lrMain() {
     SLRParser slr{g};
     LR1Parser lr1{g};
     LALRParser lalr{g};
-    
+
     switch (launchArgs.parserType) {
     case LR0:
         parser = &lr0;
@@ -173,8 +168,6 @@ void lrParseArgs(int argc, char **argv) {
             launchArgs.exhaustInput = false;
         } else if (strcmp("--disable-auto-define", argv[i]) == 0) {
             launchArgs.autoDefineTerminals = false;
-        } else if (strcmp("--allow-non-terminals", argv[i]) == 0) {
-            launchArgs.allowNonterminalAsInputs = true;
         } else {
             printUsageAndExit();
         }

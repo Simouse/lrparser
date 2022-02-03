@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <type_traits>
 #include <cstring>
+#include <string>
 
 #include "src/common.h"
 
@@ -66,7 +67,10 @@ template <class T> class BitSet {
         }
     }
 
-    static size_type roundToNextPowerOf2(size_type i) {
+    // T is used for BitSet template argument, use SizeT instead.
+    template<class SizeT, typename std::enable_if_t<sizeof(SizeT) == 8, int> = 0>
+    static auto roundToNextPowerOf2(SizeT i) {
+        static_assert(std::is_unsigned_v<SizeT>);
         if (i <= 2)
             return i;
         --i;
@@ -76,6 +80,22 @@ template <class T> class BitSet {
         i |= i >> 8;
         i |= i >> 16;
         i |= i >> 32;
+        return 1 + i;
+    }
+
+    // T is used for BitSet template argument, use SizeT instead.
+    // This version is provided to avoid UB on Win32.
+    template<class SizeT, typename std::enable_if_t<sizeof(SizeT) == 4, int> = 0>
+    static auto roundToNextPowerOf2(SizeT i) {
+        static_assert(std::is_unsigned_v<SizeT>);
+        if (i <= 2)
+            return i;
+        --i;
+        i |= i >> 1;
+        i |= i >> 2;
+        i |= i >> 4;
+        i |= i >> 8;
+        i |= i >> 16;
         return 1 + i;
     }
 
@@ -193,6 +213,14 @@ template <class T> class BitSet {
         return m_data[N / block_bits] & (1LLU << (N % block_bits));
     }
 
+    [[nodiscard]] bool empty() const {
+        for (size_type i = 0; i < m_size; ++i) {
+            if (m_data[i])
+                return false;
+        }
+        return true;
+    }
+
     // Clear all bits and make bitset usable again (even if it was moved).
     void clear() {
         // If bitset data is corrupted (moved), allocate new memory for it
@@ -241,6 +269,10 @@ template <class T> class BitSet {
                 return false;
         }
         return true;
+    }
+
+    bool operator!=(BitSet const &other) const {
+        return !(*this == other);
     }
 
     BitSet &operator&=(BitSet const &other) {

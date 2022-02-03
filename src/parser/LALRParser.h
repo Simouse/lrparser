@@ -1,7 +1,7 @@
 #ifndef LRPARSER_LALR_H
 #define LRPARSER_LALR_H
 
-#include "src/automata/Automaton.h"
+#include "src/automata/PushDownAutomaton.h"
 #include "src/common.h"
 #include "src/grammar/Grammar.h"
 #include "src/parser/LRParser.h"
@@ -17,14 +17,13 @@
 namespace gram {
 class LALRParser : public LRParser {
   private:
-    using Constraint = util::BitSet<ActionID>;
     using LALRClosure = std::map<StateID, Constraint>;
 
     void makeClosure(std::vector<State> const &lr0States,
-                     LALRClosure &unclosured) {
+                     LALRClosure &lalrClosure) {
         ActionID epsilonID = gram.getEpsilonSymbol().id;
-        std::stack<decltype(unclosured.begin())> stack;
-        for (auto it = unclosured.begin(); it != unclosured.end(); ++it) {
+        std::stack<decltype(lalrClosure.begin())> stack;
+        for (auto it = lalrClosure.begin(); it != lalrClosure.end(); ++it) {
             stack.push(it);
         }
         while (!stack.empty()) {
@@ -34,10 +33,10 @@ class LALRParser : public LRParser {
             auto const &trans = *lr0State.transitions;
             auto range = trans.rangeOf(epsilonID);
             for (auto it = range.first; it != range.second; ++it) {
-                auto iter = unclosured.find(it->destination);
-                if (iter == unclosured.end()) {
+                auto iter = lalrClosure.find(it->destination);
+                if (iter == lalrClosure.end()) {
                     // State's not in closure. Should add it to closure.
-                    auto result = unclosured.emplace(
+                    auto result = lalrClosure.emplace(
                         it->destination,
                         resolveConstraintsPrivate(&lalrStateIter->second,
                                                   lr0State.productionID,
@@ -123,16 +122,15 @@ class LALRParser : public LRParser {
 
     // We have buildNFA() in base class build a LR0 NFA automaton for us.
     void buildDFA() override {
-        Automaton &M = dfa;
-
-        // const auto &symbols = gram.getAllSymbols();
-        // auto const &productionTable = gram.getProductionTable();
+        PushDownAutomaton &M = dfa;
         auto const &lr0States = nfa.getAllStates();
-        auto const epsilonID = gram.getEpsilonSymbol().id;
+        auto const epsilonID = nfa.epsilonAction;
 
         M.actions = nfa.actions;
         M.transformedDFAFlag = true;
         M.setDumpFlag(true);
+        M.setEpsilonAction(nfa.epsilonAction);
+        M.setEndOfInputAction(nfa.endOfInputAction);
 
         // <LALRClosure, ClosureID>
         std::map<LALRClosure, int, ClosureKernelCmp> closureIndexMap;
@@ -143,7 +141,7 @@ class LALRParser : public LRParser {
         // Prepare the first closure
         auto const &startState = lr0States.front();
         LALRClosure startClosure;
-        startClosure.emplace(startState.id, *startState.constraint);
+        startClosure.emplace(StateID{0}, *startState.constraint);
         makeClosure(lr0States, startClosure);
         // Add the first closure
         M.addPseudoState();
@@ -233,7 +231,6 @@ class LALRParser : public LRParser {
                 auto auxIndex = static_cast<StateID>(auxStates.size());
                 // Copy original state and change its ID and constraint
                 State auxState = lr0States[lr0State];
-                auxState.id = auxIndex;
                 auxState.constraint =
                     storeConstraint(const_cast<Constraint *>(&constraint));
                 auxStates.push_back(auxState);
@@ -251,40 +248,11 @@ class LALRParser : public LRParser {
     }
 
   protected:
-    [[nodiscard]] bool
-    canAddParseTableEntry(StateID state, ActionID act, ParseAction pact,
-                          StateID auxStateID) const override {
-        // We need to check specific reduction rule
-        if (pact.type == ParseAction::REDUCE) {
-            auto const &auxStates = dfa.getAuxStates();
-            auto const &auxState = auxStates[auxStateID];
-            return auxState.constraint->contains(act);
-        }
-
-        return true;
-    }
-
-    // Do not mark seed
-    [[nodiscard]] bool
-    canMarkFinal(const StateSeed &seed,
-                 Production const &production) const override {
-        // auto endActionID =
-        // static_cast<ActionID>(gram.getEndOfInputSymbol().id);
-        // assert(seed.second);
-        // return seed.second->contains(endActionID);
-        return false;
-    }
-
-    // Only build a LR0 automaton
-    [[nodiscard]] bool shouldIncludeConstraintsInDump() const override {
-        return false;
-    }
-
-    // Although LALRParser does have constraints, we cannot put the algorithm
+    // Although LALR Parser does have constraints, we cannot put the algorithm
     // here because we want buildNFA() process to build a pure LR0 NFA automaton
     // for us.
-    [[nodiscard]] util::BitSet<ActionID> *
-    resolveLocalConstraints(const util::BitSet<ActionID> *parentConstraint,
+    [[nodiscard]] Constraint *
+    resolveLocalConstraints(const Constraint *parentConstraint,
                             const Production &production,
                             int rhsIndex) override {
         return allTermConstraint;
