@@ -73,7 +73,7 @@ class LRParser : public util::ResourceProvider<TransitionSet> {
 
     // Format
     [[nodiscard]] std::string dumpParseTableEntry(StateID state,
-                                                   ActionID action) const;
+                                                  ActionID action) const;
 
     // With this interface automatons can get transition resources whose
     // lifetime can be longer than itself
@@ -84,24 +84,24 @@ class LRParser : public util::ResourceProvider<TransitionSet> {
 
   protected:
     bool inputFlag = true;
-    StateID extendedEnd{-1};
-    StateID extendedStart{-1};
+    // PDA final state ID (not closure ID). Used to put SUCCESS entry. Assigned
+    // in buildNFA(). Since LALR uses a different building method, this should
+    // be assigned in LALR's buildDFA().
+    StateID auxEnd{-1};
     const gram::Grammar &gram;
-    Automaton nfa;
-    Automaton dfa;
-    ParseTable parseTable;
+    Automaton nfa;         // Build in buildNFA()
+    Automaton dfa;         // Build in buildDFA()
+    ParseTable parseTable; // Built in buildParseTable()
     std::deque<SymbolID> InputQueue;
     std::vector<StateID> stateStack;
     std::vector<SymbolID> symbolStack;
-    // This map stores states that can be reduced by certain productions
-    std::unordered_map<StateID, ProductionID> reduceMap;
     // [productionID][index] ==> label.
     std::vector<std::vector<const char *>> kernelLabelMap;
     std::vector<std::unique_ptr<util::BitSet<ActionID>>> constraintPool;
     std::vector<std::unique_ptr<char[]>> stringPool;
     std::vector<std::unique_ptr<TransitionSet>> transitionSetPool;
     // Contains all non-epsilon terminals. Built in buildKernel().
-    util::BitSet<ActionID> *allTermConstraint;
+    util::BitSet<ActionID> *allTermConstraint = nullptr;
 
     void buildKernel();
 
@@ -130,7 +130,7 @@ class LRParser : public util::ResourceProvider<TransitionSet> {
     // keeps the resource available until parser is destroyed.
     // Because newConstraint() will allocate new resource, this function is not
     // const.
-    // Arguement `parentConstraint` may be nullptr if parser is slr or lr0.
+    // Argument `parentConstraint` may be nullptr.
     virtual util::BitSet<ActionID> *
     resolveLocalConstraints(util::BitSet<ActionID> const *parentConstraint,
                             Production const &production, int rhsIndex) = 0;
@@ -142,7 +142,7 @@ class LRParser : public util::ResourceProvider<TransitionSet> {
     // This method checks if current entry is applicable to add to the table.
     [[nodiscard]] virtual bool
     canAddParseTableEntry(StateID state, ActionID act, ParseAction pact,
-                           StateID subState) const = 0;
+                          StateID subState) const = 0;
 
     // Decides if the chain of this seed is final.
     [[nodiscard]] virtual bool
@@ -180,12 +180,9 @@ class LRParser : public util::ResourceProvider<TransitionSet> {
     // This is only used inside test() method.
     void readSymbol(util::TokenReader &reader);
 
-    // This function may not actually add the entry. It checks violations by
-    // calling canAddParseTableEntry() first, and when it returns false, the
-    // entry is discarded. When the entry is a reduction item, the former state
-    // which causes the reduction (called `subState`) is passed.
-    void addParseTableEntry(StateID state, ActionID act, ParseAction pact,
-                             StateID subState = StateID{-1});
+    // This method creates the table if it does not exist, and add an entry to
+    // it.
+    void addParseTableEntry(StateID state, ActionID act, ParseAction pact);
 
     // Throws an error if reduction fails.
     void reduce(ProductionID prodID);

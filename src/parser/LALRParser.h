@@ -9,6 +9,7 @@
 #include <cassert>
 #include <cstddef>
 #include <optional>
+#include <queue>
 #include <stack>
 #include <unordered_set>
 #include <utility>
@@ -17,9 +18,10 @@ namespace gram {
 class LALRParser : public LRParser {
   private:
     using Constraint = util::BitSet<ActionID>;
-    using Closure = std::map<StateID, Constraint>;
+    using LALRClosure = std::map<StateID, Constraint>;
 
-    void makeClosure(std::vector<State> const &lr0States, Closure &unclosured) {
+    void makeClosure(std::vector<State> const &lr0States,
+                     LALRClosure &unclosured) {
         ActionID epsilonID = gram.getEpsilonSymbol().id;
         std::stack<decltype(unclosured.begin())> stack;
         for (auto it = unclosured.begin(); it != unclosured.end(); ++it) {
@@ -52,47 +54,42 @@ class LALRParser : public LRParser {
     }
 
     // actionID cannot be epsilonID
-    std::optional<std::map<StateID, Constraint>>
-    transit(std::vector<State> const &lr0States, ActionID actionID,
-            Closure const &closure) {
+    std::map<StateID, Constraint> transit(std::vector<State> const &lr0States,
+                                          ActionID actionID,
+                                          LALRClosure const &lalrClosure) {
         std::map<StateID, Constraint> res;
-        bool found = false;
 
-        for (auto const &stateAndConstraint : closure) {
-            auto const &lr0State = lr0States[stateAndConstraint.first];
+        for (auto const &[lr0StateID, constraint] : lalrClosure) {
+            auto const &lr0State = lr0States[lr0StateID];
             auto const &trans = *lr0State.transitions;
             auto range = trans.rangeOf(actionID);
             for (auto it = range.first; it != range.second; ++it) {
-                found = true;
                 auto iter = res.find(it->destination);
                 if (iter == res.end()) {
-                    res.emplace(it->destination, stateAndConstraint.second);
+                    res.emplace(it->destination, constraint);
                 } else {
                     // Must merge
-                    iter->second |= stateAndConstraint.second;
+                    iter->second |= constraint;
                 }
             }
         }
 
-        if (!found)
-            return {};
-
         makeClosure(lr0States, res);
-        return std::make_optional(std::move(res));
+        return res;
     }
 
     // Real constraint resolving method.
-    [[nodiscard]] util::BitSet<ActionID>
+    [[nodiscard]] Constraint
     resolveConstraintsPrivate(const Constraint *parentConstraint,
                               ProductionID prodID, int rhsIndex) {
         auto const &symbols = gram.getAllSymbols();
-        util::BitSet<ActionID> constraints(symbols.size());
+        Constraint constraint(symbols.size());
 
         // Handle "S' -> S" carefully.
         auto const &productionTable = gram.getProductionTable();
         if (prodID == productionTable.size()) {
-            constraints.insert(gram.getEndOfInputSymbol().id);
-            return constraints;
+            constraint.insert(gram.getEndOfInputSymbol().id);
+            return constraint;
         }
 
         auto const &rhs = productionTable[prodID].rightSymbols;
@@ -101,23 +98,22 @@ class LALRParser : public LRParser {
         for (size_t i = rhsIndex + 1; allNullable && i < rhs.size(); ++i) {
             if (!symbols[rhs[i]].nullable.value())
                 allNullable = false;
-            constraints |= symbols[rhs[i]].firstSet;
+            constraint |= symbols[rhs[i]].firstSet;
         }
         if (allNullable && parentConstraint)
-            constraints |= *parentConstraint;
+            constraint |= *parentConstraint;
 
-        return constraints;
+        return constraint;
     }
 
     // Ignore constraints and only compare kernels
     struct ClosureKernelCmp {
-        bool operator()(Closure const &m1, Closure const &m2) const {
+        bool operator()(LALRClosure const &m1, LALRClosure const &m2) const {
             auto i1 = m1.begin(), i2 = m2.begin(), e1 = m1.end(), e2 = m2.end();
             for (; (i1 != e1) && (i2 != e2); (void)++i1, (void)++i2) {
                 if (i1->first != i2->first)
                     return i1->first < i2->first;
             }
-            // Run out at the same time
             return i1 == e1 && i2 != e2;
         };
     };
@@ -138,24 +134,25 @@ class LALRParser : public LRParser {
         M.transformedDFAFlag = true;
         M.setDumpFlag(true);
 
-        // <Closure, ClosureID>
-        std::map<Closure, int, ClosureKernelCmp> closures;
-        // stores iterators of unvisited closures
-        std::stack<decltype(closures.cbegin())> stack;
+        // <LALRClosure, ClosureID>
+        std::map<LALRClosure, int, ClosureKernelCmp> closureIndexMap;
+        // Stores iterators of unvisited closureIndexMap.
+        // Stack should be the same as queue. but queue is easier to debug.
+        std::queue<decltype(closureIndexMap.cbegin())> queue;
 
         // Prepare the first closure
         auto const &startState = lr0States.front();
-        Closure startClosure;
+        LALRClosure startClosure;
         startClosure.emplace(startState.id, *startState.constraint);
         makeClosure(lr0States, startClosure);
         // Add the first closure
         M.addPseudoState();
         M.markStartState(StateID{0});
-        stack.push(closures.emplace(std::move(startClosure), 0).first);
+        queue.push(closureIndexMap.emplace(std::move(startClosure), 0).first);
 
-        while (!stack.empty()) {
-            auto closureIter = stack.top();
-            stack.pop();
+        while (!queue.empty()) {
+            auto closureIter = queue.front();
+            queue.pop();
 
             // Try different actions
             auto nAction = static_cast<int>(M.actions.size());
@@ -163,20 +160,21 @@ class LALRParser : public LRParser {
                 if (i == epsilonID)
                     continue;
                 auto actionID = static_cast<ActionID>(i);
-                auto result = transit(lr0States, actionID, closureIter->first);
+                auto newClosure =
+                    transit(lr0States, actionID, closureIter->first);
 
                 // Cannot accept this action
-                if (!result.has_value()) {
+                if (newClosure.empty())
                     continue;
-                }
 
-                auto &value = result.value();
-                auto iter = closures.find(value);
-                if (iter == closures.end()) {
+                auto iter = closureIndexMap.find(newClosure);
+                if (iter == closureIndexMap.end()) {
                     // Add new closure
-                    auto closureID = static_cast<StateID>(closures.size());
-                    auto result = closures.emplace(std::move(value), closureID);
-                    stack.push(result.first);
+                    auto closureID =
+                        static_cast<StateID>(closureIndexMap.size());
+                    queue.push(closureIndexMap
+                                   .emplace(std::move(newClosure), closureID)
+                                   .first);
                     M.addPseudoState();
                     // Add link to this closure
                     M.addTransition(StateID{closureIter->second}, closureID,
@@ -184,16 +182,25 @@ class LALRParser : public LRParser {
                 } else {
                     // Merge closures.
                     // Now number of elements in two maps should be the same.
+                    bool effectFlag = false;
                     auto i1 = iter->first.begin(), e1 = iter->first.end();
-                    auto i2 = value.begin();
+                    auto i2 = newClosure.begin();
                     for (; i1 != e1; (void)++i1, (void)++i2) {
+                        auto before = i1->second;
                         *const_cast<Constraint *>(&i1->second) |= i2->second;
+                        if (i1->second != before)
+                            effectFlag = true;
                     }
+                    M.addTransition(StateID{closureIter->second},
+                                    StateID{iter->second}, actionID);
+                    // The merged state should be checked again
+                    if (effectFlag)
+                        queue.push(iter);
                 }
             }
         }
 
-        // Now we have all closures, we have to put them into automaton.
+        // Now we have all closureIndexMap, we have to put them into automaton.
         auto hashFunc = [](const Constraint *arg) {
             return std::hash<Constraint>()(*arg);
         };
@@ -204,7 +211,7 @@ class LALRParser : public LRParser {
         std::unordered_set<Constraint *, decltype(hashFunc),
                            decltype(equalFunc)>
             constraintSet(estimatedConstraintCount, hashFunc, equalFunc);
-        // If costraint is new, it will be moved.
+        // If constraint is new, it will be moved.
         auto storeConstraint = [&constraintSet, this](Constraint *constraint) {
             auto it = constraintSet.find(constraint);
             if (it != constraintSet.end())
@@ -215,23 +222,29 @@ class LALRParser : public LRParser {
         };
         // 1. Add aux states
         // 2. Build bitset
+        auto lr0AuxEnd = this->auxEnd;
         std::vector<State> &auxStates = M.auxStates; // Size is unknown yet
-        M.closures.resize(closures.size());          // Size is known
+        M.closures.resize(closureIndexMap.size());   // Size is known
         assert(auxStates.empty());
-        for (auto &entry : closures) {
+        for (auto &[lalrClosure, closureIndex] : closureIndexMap) {
             // BitSet that will be moved into automaton.
             util::BitSet<StateID> closure;
-            for (auto &stateAndConstraint : entry.first) {
+            for (auto &[lr0State, constraint] : lalrClosure) {
                 auto auxIndex = static_cast<StateID>(auxStates.size());
                 // Copy original state and change its ID and constraint
-                State auxState = lr0States[stateAndConstraint.first];
+                State auxState = lr0States[lr0State];
                 auxState.id = auxIndex;
-                auxState.constraint = storeConstraint(
-                    const_cast<Constraint *>(&stateAndConstraint.second));
+                auxState.constraint =
+                    storeConstraint(const_cast<Constraint *>(&constraint));
                 auxStates.push_back(auxState);
                 closure.insert(auxIndex);
+                if (lr0State == lr0AuxEnd) {
+                    assert(this->auxEnd == lr0AuxEnd ||
+                           this->auxEnd == auxIndex);
+                    this->auxEnd = StateID{auxIndex};
+                }
             }
-            M.closures[entry.second] = std::move(closure);
+            M.closures[closureIndex] = std::move(closure);
         }
 
         display(AUTOMATON, INFO, "DFA is built", &dfa, (void *)"build_dfa");

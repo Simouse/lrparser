@@ -28,7 +28,6 @@
 # fac   -> '(' exp ')'   | ID
 
 # TERM :{ID, "(", ')', '+', '*'}
-# START: exp
 exp   -> exp '+' term  | term
 term  -> term '*' fac  | fac
 fac   -> ID            | "(" exp ')'
@@ -40,23 +39,11 @@ fac   -> ID            | "(" exp ')'
 # E ->	V
 # |	    num
 
-# TERM: {a}
-# START: S
-# S -> a S | \e
-
-# TERM: {c, d}
-# START: S
-# S -> C C
-# C -> c C
-# C -> d
-
 # This is LR(1) but not SLR
 # TERM: {a, b, c, d}
 # START: S
 # S -> A a | b A c | d c | b d a
 # A -> d
 
-# TERM: {c, d}
-# START: S
 # S -> C C
 # C -> c C | d

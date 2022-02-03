@@ -130,9 +130,9 @@ class Automaton {
     void setEpsilonAction(ActionID actionID);
 
     // using ClosureEqualFuncType =
-    //     std::function<bool(const Closure &, const Closure &)>;
+    //     std::function<bool(const LALRClosure &, const LALRClosure &)>;
     // using DuplicateClosureHandlerType = std::function<void(
-    //     Closure const &existingClosure, Closure const &duplicateClosure)>;
+    //     LALRClosure const &existingClosure, LALRClosure const &duplicateClosure)>;
     // void setClosureEqualFunc(ClosureEqualFuncType const &func);
     // void setDuplicateClosureHandler(DuplicateClosureHandlerType const &func);
 

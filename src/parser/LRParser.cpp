@@ -143,8 +143,8 @@ void LRParser::buildNFA() {
         M.addTransition(s0, s1, static_cast<ActionID>(start.id));
         M.markStartState(s0);
         M.markFinalState(s1);
-        this->extendedStart = s0;
-        this->extendedEnd = s1;
+        //        this->extendedStart = s0;
+        this->auxEnd = s1;
 
         Production augProduction{
             SymbolID{-1}, std::vector<SymbolID>{gram.getStartSymbol().id}};
@@ -186,13 +186,15 @@ void LRParser::buildNFA() {
             }
 
             auto lastStateID = static_cast<StateID>(firstStateID + rhs.size());
+
             // Mark possible final state
             if (canMarkFinal(seedIter->first, production)) {
                 M.markFinalState(lastStateID);
             }
             // Record last state of a production
             // (Production ID is needed in parser table)
-            reduceMap[lastStateID] = productionID;
+            //            reduceMap[lastStateID] = productionID;
+
             // We are in a loop. So if a symbol has multiple productions,
             // `seed->second` will store multiple start states.
             seedIter->second.push_back(firstStateID);
@@ -246,14 +248,14 @@ void LRParser::buildParseTable() {
             // Skip those which cannot be reduced.
             // prodID should be valid and not refer to the pseudo production
             // "S' -> S".
-            if (prodID < 0 || prodID + 1 >= kernelLabelMap.size() ||
-                auxState.rhsIndex + 1 != kernelLabelMap[prodID].size()) {
+            if (prodID < 0 || (size_t)(prodID + 1) >= kernelLabelMap.size() ||
+                (size_t)(auxState.rhsIndex + 1) !=
+                    kernelLabelMap[prodID].size()) {
                 continue;
             }
             for (auto actionID : *auxStates[auxStateID].constraint) {
                 addParseTableEntry(stateID, actionID,
-                                   ParseAction{ParseAction::REDUCE, prodID},
-                                   auxStateID);
+                                   ParseAction{ParseAction::REDUCE, prodID});
             }
             // for (int j = 0; j < nActions; ++j) {
             //     auto action = static_cast<ActionID>(j);
@@ -266,8 +268,8 @@ void LRParser::buildParseTable() {
             // }
         }
         // Process "Accept" item.
-        // TODO: extendedEnd not available in LALR.
-        if (closures[stateID].contains(this->extendedEnd)) {
+        // TODO: auxEnd not available in LALR.
+        if (closures[stateID].contains(this->auxEnd)) {
             addParseTableEntry(stateID, endOfInput,
                                ParseAction{ParseAction::SUCCESS, -1});
         }
@@ -276,8 +278,8 @@ void LRParser::buildParseTable() {
     display(PARSE_TABLE, INFO, "Parse table", this);
 }
 
-void LRParser::addParseTableEntry(StateID state, ActionID act, ParseAction pact,
-                                  StateID subState) {
+void LRParser::addParseTableEntry(StateID state, ActionID act,
+                                  ParseAction pact) {
     using std::set;
     using std::vector;
     // if (!canAddParseTableEntry(state, act, pact, subState)) {
