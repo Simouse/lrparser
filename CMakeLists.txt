@@ -12,8 +12,10 @@ project(lrparser)
 
 include_directories(${PROJECT_SOURCE_DIR})
 
-file(GLOB_RECURSE SOURCES "src/*.cpp")
+# include_directories(SYSTEM "C:\\Program Files\\Graphviz\\include")
+# link_directories(SYSTEM "C:\\Program Files\\Graphviz\\lib")
 
+file(GLOB_RECURSE SOURCES "src/*.cpp")
 add_executable(lrparser ${SOURCES})
 
 if (UNIX)

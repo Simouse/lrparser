@@ -3,6 +3,7 @@
 #include <cassert>
 #include <optional>
 #include <stack>
+#include <string>
 #include <unordered_map>
 #include <utility>
 
@@ -60,10 +61,13 @@ auto PushDownAutomaton::dump() const -> std::string {
 
     s.reserve(1024);
 
-    s += "digraph G {\n"
-         "  graph[center=true]\n"
-         "  node [shape=box style=rounded]\n"
-         "  edge[arrowsize=0.8 arrowhead=vee constraint=true]\n";
+    s += "digraph G";
+    s += std::to_string((int)(upTimeInMilli() * 1000));
+    s += " {\n"
+         "  charset=utf8;\n"
+         "  graph[center=true];\n"
+         "  node [shape=box style=rounded];\n"
+         "  edge[arrowsize=0.8 arrowhead=vee constraint=true];\n";
 
     // For NFA in our case, LR looks prettier
     if (!transformedDFAFlag) {
@@ -72,14 +76,14 @@ auto PushDownAutomaton::dump() const -> std::string {
 
     // Add states
     if (getStartState() >= 0) {
-        s += "  start [label=Start shape=plain]\n";
+        s += "  start [label=Start shape=plain];\n";
     }
     for (StateID stateID{0}, stateIDLimit = static_cast<StateID>(states.size());
          stateID < stateIDLimit; stateID = StateID{stateID + 1}) {
         auto &state = states[stateID];
 
         auto [dumpedString, finalFlag] = dumpState(stateID);
-        std::string label = f.reverseEscaped(std::move(dumpedString));
+        std::string label = f.reverseEscape(std::move(dumpedString));
 
         s += f.formatView("  %d [label=\"%d: %s\"", stateID, stateID,
                           label.c_str());
@@ -93,13 +97,13 @@ auto PushDownAutomaton::dump() const -> std::string {
         //            highlightSet.remove(stateID);
         //        }
 
-        s += "]\n";
+        s += "];\n";
         if (stateID == getStartState()) {
-            s += f.formatView("  start -> %d\n", stateID);
+            s += f.formatView("  start -> %d;\n", stateID);
         }
         for (auto &tran : *state.transitions) {
             StateID destID = tran.destination;
-            label = f.reverseEscaped(actions[tran.action]);
+            label = f.reverseEscape(actions[tran.action]);
             s += f.formatView("  %d -> %d [label=\"%s\"", stateID, destID,
                               label.c_str());
             if (isEpsilonAction(tran.action))
@@ -108,7 +112,7 @@ auto PushDownAutomaton::dump() const -> std::string {
             //                s += " color=red fontcolor=red
             //                fontname=\"times-bold\""; tran.highlight = false;
             //            }
-            s += "]\n";
+            s += "];\n";
         }
     }
 
@@ -205,7 +209,7 @@ PushDownAutomaton::dumpClosure(Closure const &closure) const {
     bool newLineFlag = false;
     for (auto stateID : closure) {
         if (newLineFlag)
-            res.first += '\n';
+            res.first += "\n";
         auto const &auxState = auxStates[stateID];
         auto const &constraint = auxState.constraint;
 

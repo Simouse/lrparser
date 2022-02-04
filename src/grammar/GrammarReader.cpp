@@ -7,6 +7,7 @@
 #include <exception>
 #include <fstream>
 #include <stdexcept>
+#include <string>
 
 #include "src/common.h"
 #include "src/grammar/Grammar.h"

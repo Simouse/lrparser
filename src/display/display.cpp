@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdio>
@@ -18,13 +19,23 @@ namespace fs = std::filesystem;
 using namespace gram;
 using proc = util::Process;
 
+#define GET_EXEC_TIME_MILLIS(DOUBLE_VAR)                                       \
+    for (auto t1 = std::chrono::steady_clock().now(), t2 = t1; t1 == t2;       \
+         (void)(t2 = std::chrono::steady_clock().now()),                       \
+              (void)((DOUBLE_VAR) =                                            \
+                         static_cast<                                          \
+                             std::chrono::duration<double, std::milli>>(t2 -   \
+                                                                        t1)    \
+                             .count()))
+
 // If vector of future is stored in an object or it's class static storage
 // space, it cannot be initialized. Then a compile-time error occurs.
-static std::vector<std::future<void>> futures;
-
+// static std::vector<std::future<void>> futures;
+// static std::vector<std::string> gvFileNames;
 // Designated assignment is supported only in C++20...
-static std::array<const char *, DisplayLogLevel::LOG_LEVELS_COUNT> logs = {
-    nullptr};
+
+// log strings
+static std::array<const char *, LOG_LEVELS_COUNT> logs = {nullptr};
 static int automatonCounter = 0;
 static std::chrono::steady_clock globalClock;
 static decltype(globalClock.now()) startUpTime;
@@ -52,47 +63,51 @@ void lrInit() {
     logs[DisplayLogLevel::DEBUG] = "DEBUG";
     logs[DisplayLogLevel::ERR] = "ERROR";
 
-    futures.reserve(16);
+    // futures.reserve(16);
 
     util::Process::prevent_zombie();
 
     fs::path outDir = launchArgs.resultsDir;
-    if (!fs::exists(outDir)) fs::create_directories(outDir);
+    if (!fs::exists(outDir))
+        fs::create_directories(outDir);
 }
 
 void lrCleanUp() {
-    if (!launchArgs.launchSuccess) return;
+    if (!launchArgs.launchSuccess)
+        return;
 
-    auto clock = std::chrono::steady_clock();
-    auto t1 = clock.now();
+    // double duration = -1.0;
+    // GET_EXEC_TIME_MILLIS(duration) {
+    //     for (auto const &future : futures)
+    //         future.wait();
+    //     GraphvizCaller gv;
+    //     gv.batchProcess(gvFileNames);
+    // }
 
-    // Future waiting is automatic in it's deinit function.
-    // Wait here so we can get the time it costs.
-    for (auto const &future : futures) future.wait();
-
-    auto t2 = clock.now();
-    std::chrono::duration<double, std::milli> duration = t2 - t1;
-    if (!launchArgs.nodot) {
-        util::Formatter f;
-        const char *description =
-            f.formatView(
-                 "%.1f ms has been spent in waiting for threads to finish",
-                 duration.count())
-                .data();
-        display(LOG, DEBUG, description);
-    }
+    // if (!launchArgs.nodot) {
+    //     util::Formatter f;
+    //     const char *description =
+    //         f.formatView(
+    //              "%.1f ms has been spent in waiting for futures to finish",
+    //              duration)
+    //             .data();
+    //     display(LOG, DEBUG, description);
+    // }
 }
 
 static void handleLog(const char *description, DisplayLogLevel level) {
-    if (launchArgs.logLevel < level) return;
+    if (launchArgs.logLevel < level)
+        return;
     if (level == INFO)
         printf("> %s\n", description);
     else
         printf("[%-7s] %s\n", logs[level], description);
 }
 
-static std::string generateLogLine(const char *description, DisplayLogLevel level) {
-    if (launchArgs.logLevel < level || !description) return "";
+static std::string generateLogLine(const char *description,
+                                   DisplayLogLevel level) {
+    if (launchArgs.logLevel < level || !description)
+        return "";
     util::Formatter f;
     std::string s;
     if (level == INFO)
@@ -131,7 +146,8 @@ static void handleParseStates(const char *description, DisplayLogLevel logLevel,
         s += f.formatView(commaFlag ? ",%s" : "%s", symbols[i].name.c_str());
         commaFlag = true;
     }
-    if (lr->hasMoreInput()) s += "...";
+    if (lr->hasMoreInput())
+        s += "...";
 
     printf("%s\n", s.c_str());
 }
@@ -194,13 +210,13 @@ static void handleParseTable(const char *description, DisplayLogLevel logLevel,
     for (int i = 0; static_cast<size_t>(i) < parseTableRowNumber; ++i) {
         outputString += f.formatView("%*d ", indexWidth, i);
         for (int terminal : termVec) {
-            std::string s = lr->dumpParseTableEntry(StateID{i},
-                                               ActionID{terminal});
+            std::string s =
+                lr->dumpParseTableEntry(StateID{i}, ActionID{terminal});
             outputString += f.formatView("|%*s ", actionWidth, s.c_str());
         }
         for (int nonterm : nontermVec) {
-            std::string s = lr->dumpParseTableEntry(StateID{i},
-                                               ActionID{nonterm});
+            std::string s =
+                lr->dumpParseTableEntry(StateID{i}, ActionID{nonterm});
             outputString += f.formatView("|%*s ", gotoWidth, s.c_str());
         }
         outputString += f.formatView("\n");
@@ -210,67 +226,22 @@ static void handleParseTable(const char *description, DisplayLogLevel logLevel,
     printf("%s", outputString.c_str());
 }
 
-// This function is slow
 static void handleAutomaton(const char *description, DisplayLogLevel logLevel,
                             const char *prefix,
                             PushDownAutomaton const *automaton) {
     util::Formatter f;
+    fs::path gvFilePath = launchArgs.resultsDir;
+    gvFilePath /= f.formatView("%s.%d.gv", prefix, ++automatonCounter);
+    std::string gvFileName = gvFilePath.string();
 
-    // Get file path
-    fs::path outFile = launchArgs.resultsDir;
-    outFile.append(f.formatView("%s.%d.gv", prefix, automatonCounter++));
-    std::string gvFileName = outFile.string();
-
-    handleLog(description, logLevel);
-
-    std::string s = automaton->dump();
+    std::string gvContent = automaton->dump();
 
     FILE *file = std::fopen(gvFileName.c_str(), "w");
-    std::fwrite(s.c_str(), sizeof(char), s.size(), file);
+    std::fprintf(file, "%s\n", gvContent.c_str());
     std::fclose(file);
+    // gvFileNames.push_back(std::move(gvFileName));
 
-    outFile.replace_extension("svg");
-    std::string svgFileName = outFile.string();
-
-    if (!launchArgs.nodot) {
-        auto clock = std::chrono::steady_clock();
-        auto t1 = std::chrono::steady_clock::now();
-
-        futures.emplace_back(std::async(
-
-            std::launch::async, [svgFileName = std::move(svgFileName),
-                                 gvFileName = std::move(gvFileName)]() {
-                auto clock = std::chrono::steady_clock();
-                auto t1 = std::chrono::steady_clock::now();
-
-                std::array<const char *, 6> args = {"dot",
-                                                    "-Tsvg",
-                                                    "-o",
-                                                    svgFileName.c_str(),
-                                                    gvFileName.c_str(),
-                                                    nullptr};
-                proc::exec("dot", const_cast<char **>(&args[0]));
-
-                auto t2 = std::chrono::steady_clock::now();
-                std::chrono::duration<double, std::milli> duration = t2 - t1;
-                util::Formatter f;
-                const char *description = f.formatView(
-                                               "%.1f ms has been spent "
-                                               "in creating a process",
-                                               duration.count())
-                                              .data();
-                handleLog(description, DEBUG);
-            }));
-
-        auto t2 = std::chrono::steady_clock::now();
-        std::chrono::duration<double, std::milli> duration = t2 - t1;
-        const char *description = f.formatView(
-                                       "%.1f ms has been spent "
-                                       "in creating a thread",
-                                       duration.count())
-                                      .data();
-        handleLog(description, DEBUG);
-    }
+    handleLog(description, logLevel);
 }
 
 static void handleSymbolTable(const char *description, DisplayLogLevel logLevel,
@@ -300,10 +271,10 @@ static void handleSymbolTable(const char *description, DisplayLogLevel logLevel,
         std::string firstSet = g.dumpFirstSet(symbol);
         std::string followSet = g.dumpFollowSet(symbol);
         int namew = (epsilon.id == symbol.id) ? nameWidth + 1 : nameWidth;
-        int firstw =
-            (firstSet.find(gram::Grammar::SignStrings::epsilon) != std::string::npos)
-                ? firstWidth + 1
-                : firstWidth;
+        int firstw = (firstSet.find(gram::Grammar::SignStrings::epsilon) !=
+                      std::string::npos)
+                         ? firstWidth + 1
+                         : firstWidth;
         outputString +=
             f.formatView(lineFmt, namew, symbol.name.c_str(), nullable.c_str(),
                          firstw, firstSet.c_str(), followSet.c_str());
@@ -324,29 +295,28 @@ static void handleGrammarRules(const char *description,
 void display(DisplayType type, DisplayLogLevel level, const char *description,
              void const *pointer, void const *auxPointer) {
     switch (type) {
-        case DisplayType::AUTOMATON:
-            handleAutomaton(description, level, (const char *)auxPointer,
-                            (PushDownAutomaton const *)pointer);
-            break;
-        case DisplayType::SYMBOL_TABLE:
-            handleSymbolTable(description, level, (Grammar const *)pointer);
-            break;
-        case DisplayType::LOG:
-            handleLog(description, level);
-            break;
-        case DisplayType::PARSE_TABLE:
-            handleParseTable(description, level, (LRParser const *)pointer);
-            break;
-        case DisplayType::GRAMMAR_RULES:
-            handleGrammarRules(description, level, (Grammar const *)pointer);
-            break;
-        case DisplayType::PARSE_STATES:
-            handleParseStates(description, level, (LRParser const *)pointer);
-            break;
-        default:
-            fprintf(stderr,
-                    "[ERROR  ] Unknown display type. Check your code.\n");
-            exit(1);
-            break;
+    case DisplayType::AUTOMATON:
+        handleAutomaton(description, level, (const char *)auxPointer,
+                        (PushDownAutomaton const *)pointer);
+        break;
+    case DisplayType::SYMBOL_TABLE:
+        handleSymbolTable(description, level, (Grammar const *)pointer);
+        break;
+    case DisplayType::LOG:
+        handleLog(description, level);
+        break;
+    case DisplayType::PARSE_TABLE:
+        handleParseTable(description, level, (LRParser const *)pointer);
+        break;
+    case DisplayType::GRAMMAR_RULES:
+        handleGrammarRules(description, level, (Grammar const *)pointer);
+        break;
+    case DisplayType::PARSE_STATES:
+        handleParseStates(description, level, (LRParser const *)pointer);
+        break;
+    default:
+        fprintf(stderr, "[ERROR  ] Unknown display type. Check your code.\n");
+        exit(1);
+        break;
     }
 }

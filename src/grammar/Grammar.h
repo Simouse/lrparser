@@ -124,8 +124,10 @@ class Grammar {
     static auto fromStdin() -> Grammar;
 
     struct SignStrings {
-        static constexpr const char *dot = "\xE2\x97\x8F"; // "●" in UTF-8
-        static constexpr const char *epsilon = "\xCE\xB5"; // "ε" in UTF-8
+        static constexpr const char *dot =
+            "\xE2\x97\x8F"; // \xE2\x97\x8F is "●" in UTF-8
+        static constexpr const char *epsilon =
+            "\xCE\xB5"; // \xCE\xB5 is "ε" in UTF-8
         static constexpr const char *endOfInput = "$";
     };
 

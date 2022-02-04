@@ -65,8 +65,8 @@ void printUsageAndExit(bool printErrorLine = true) {
         "-h|--help : Output help message and exit.\n"
         "\n"
         "Flags:\n"
-        "--nodot   : Disable svg automaton output. Use this when you don't "
-        "have `dot` in your `PATH`.\n"
+        // "--nodot   : Disable svg automaton output. Use this when you don't "
+        // "have `dot` in your `PATH`.\n"
         "--strict  : Input token names must conform to rules of grammar "
         "file. Without this flag, they are simply space-splitted.\n"
         "--debug   : Set output level to DEBUG.\n"
@@ -74,7 +74,7 @@ void printUsageAndExit(bool printErrorLine = true) {
         "large input file, you may need this flag. But without this flag the "
         "parser can provide better display for input queue.\n"
         "--disable-auto-define: All terminals must be defined before being "
-        "used.\n");
+        "used. This flag disables the feature.\n");
     exit(0);
 }
 
@@ -134,7 +134,7 @@ void chooseParserType(const char *s) {
 void lrParseArgs(int argc, char **argv) {
     using std::strcmp;
     using std::strncmp;
-    for (int i = 1; i < argc; ++i) {
+    for (int i = 0; i < argc; ++i) {
         if (strncmp("-g", argv[i], 2) == 0) {
             if ((launchArgs.grammarFileName = argv[i] + 2).empty()) {
                 if (++i >= argc)
@@ -155,9 +155,11 @@ void lrParseArgs(int argc, char **argv) {
                     printUsageAndExit();
                 chooseParserType(argv[i]);
             }
-        } else if (strcmp("--nodot", argv[i]) == 0) {
-            launchArgs.nodot = true;
-        } else if (strcmp("--strict", argv[i]) == 0) {
+        }
+        // else if (strcmp("--nodot", argv[i]) == 0) {
+        //     launchArgs.nodot = true;
+        // }
+        else if (strcmp("--strict", argv[i]) == 0) {
             launchArgs.strict = true;
         } else if (strcmp("--debug", argv[i]) == 0) {
             launchArgs.logLevel = DEBUG;
@@ -179,7 +181,7 @@ void lrParseArgs(int argc, char **argv) {
 
 int main(int argc, char **argv) {
     lrInit();
-    lrParseArgs(argc, argv);
+    lrParseArgs(argc - 1, argv + 1);
     lrMain();
     lrCleanUp();
     reportTime("Clean up");

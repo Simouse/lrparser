@@ -4,9 +4,10 @@ results
 .cache
 .idea
 .vscode
+release
 build
-gbuild
 wsl_build
 bin
 contains
 test
+src/third-party/graphviz/lib/*

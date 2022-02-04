@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <string>
 
 #include "src/common.h"
 #include "src/util/BitSet.h"

@@ -317,87 +317,90 @@ void LRParser::readSymbol(util::TokenReader &reader) {
 }
 
 // Test given stream with parsed results
-bool LRParser::test(std::istream &stream) try {
-    inputFlag = true;
-    stateStack.clear();
-    symbolStack.clear();
-    InputQueue.clear();
-    stateStack.push_back(dfa.getStartState());
+bool LRParser::test(std::istream &stream) {
+    try {
+        inputFlag = true;
+        stateStack.clear();
+        symbolStack.clear();
+        InputQueue.clear();
+        stateStack.push_back(dfa.getStartState());
 
-    // Only one of them is used
-    GrammarReader grammarReader(stream);
-    util::TokenReader tokenReader(stream);
-    util::TokenReader &reader = launchArgs.strict ? grammarReader : tokenReader;
+        // Only one of them is used
+        GrammarReader grammarReader(stream);
+        util::TokenReader tokenReader(stream);
+        util::TokenReader &reader =
+            launchArgs.strict ? grammarReader : tokenReader;
 
-    if (launchArgs.exhaustInput) {
-        display(LOG, INFO,
-                "Please input symbols for test (Use '$' to end the input)");
-        while (inputFlag) {
-            readSymbol(reader);
-        }
-    }
-
-    display(PARSE_STATES, INFO, "Parser states", this);
-
-    if (!launchArgs.exhaustInput) {
-        display(LOG, INFO,
-                "Please input symbols for test (Use '$' to end the input)");
-    }
-
-    util::Formatter f;
-
-    while (true) {
-        if (InputQueue.empty() && inputFlag) {
-            readSymbol(reader);
-        }
-
-        if (InputQueue.empty())
-            throw std::logic_error(
-                "No next symbol to use, this shouldn't be possible");
-
-        auto const &tableEntry =
-            parseTable[stateStack.back()][InputQueue.front()];
-
-        auto choices = tableEntry.size();
-        if (choices <= 0)
-            throw std::runtime_error(
-                "No viable action in parse table for this input");
-        if (choices > 1) {
-            throw std::runtime_error(
-                "Multiple viable choices. Cannot decide which action "
-                "to take");
-        }
-
-        // Take action
-        auto const &decision = *tableEntry.begin();
-        switch (decision.type) {
-        case ParseAction::GOTO:
-        case ParseAction::SHIFT:
-            stateStack.push_back(decision.dest);
-            symbolStack.push_back(InputQueue.front());
-            InputQueue.pop_front();
-            display(LOG, VERBOSE,
-                    decision.type == ParseAction::GOTO ? "Apply GOTO rule"
-                                                       : "Apply SHIFT rule");
-            break;
-        case ParseAction::REDUCE:
-            reduce(decision.productionID);
-            display(LOG, VERBOSE,
-                    f.formatView("Apply REDUCE by production: %d",
-                                 decision.productionID)
-                        .data());
-            break;
-        case ParseAction::SUCCESS:
-            display(LOG, INFO, "Success");
-            return true;
+        if (launchArgs.exhaustInput) {
+            display(LOG, INFO,
+                    "Please input symbols for test (Use '$' to end the input)");
+            while (inputFlag) {
+                readSymbol(reader);
+            }
         }
 
         display(PARSE_STATES, INFO, "Parser states", this);
+
+        if (!launchArgs.exhaustInput) {
+            display(LOG, INFO,
+                    "Please input symbols for test (Use '$' to end the input)");
+        }
+
+        util::Formatter f;
+
+        while (true) {
+            if (InputQueue.empty() && inputFlag) {
+                readSymbol(reader);
+            }
+
+            if (InputQueue.empty())
+                throw std::logic_error(
+                    "No next symbol to use, this shouldn't be possible");
+
+            auto const &tableEntry =
+                parseTable[stateStack.back()][InputQueue.front()];
+
+            auto choices = tableEntry.size();
+            if (choices <= 0)
+                throw std::runtime_error(
+                    "No viable action in parse table for this input");
+            if (choices > 1) {
+                throw std::runtime_error(
+                    "Multiple viable choices. Cannot decide which action "
+                    "to take");
+            }
+
+            // Take action
+            auto const &decision = *tableEntry.begin();
+            switch (decision.type) {
+            case ParseAction::GOTO:
+            case ParseAction::SHIFT:
+                stateStack.push_back(decision.dest);
+                symbolStack.push_back(InputQueue.front());
+                InputQueue.pop_front();
+                display(LOG, VERBOSE,
+                        decision.type == ParseAction::GOTO
+                            ? "Apply GOTO rule"
+                            : "Apply SHIFT rule");
+                break;
+            case ParseAction::REDUCE:
+                reduce(decision.productionID);
+                display(LOG, VERBOSE,
+                        f.formatView("Apply REDUCE by production: %d",
+                                     decision.productionID)
+                            .data());
+                break;
+            case ParseAction::SUCCESS:
+                display(LOG, INFO, "Success");
+                return true;
+            }
+
+            display(PARSE_STATES, INFO, "Parser states", this);
+        }
+    } catch (std::runtime_error const &e) {
+        display(LOG, ERR, e.what());
+        return false;
     }
-    throw UnreachableCodeError();
-} catch (std::exception const &e) {
-    display(LOG, ERR, e.what());
-    return false;
 }
 
 // May throw errors

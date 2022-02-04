@@ -2,6 +2,7 @@
 #define LRPARSER_COMMON_H
 
 #include <stdexcept>
+#include <string>
 
 // The only header file which does not use namespace.
 

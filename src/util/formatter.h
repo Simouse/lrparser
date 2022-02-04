@@ -3,9 +3,10 @@
 
 #include <cstdarg>
 #include <cstdio>
-#include <type_traits>
 #include <string>
 #include <string_view>
+#include <type_traits>
+
 
 #include "src/common.h"
 
@@ -17,7 +18,7 @@ class Formatter {
     char *buf;
     int maxSize = INIT_SIZE;
 
-   public:
+  public:
     Formatter() : buf(mbuf) { mbuf[0] = '\0'; }
     Formatter(Formatter const &f) = delete;
 
@@ -50,20 +51,26 @@ class Formatter {
     }
 
     // This method protects chars from being escaped.
-    // e.g. \n ===> \\n so when you pass this string to functions
-    // like printf, it's not interpreted as a newline char.
-    std::string reverseEscaped(std::string_view sv) {
+    // e.g. \" ===> \\\" so when you pass this string to functions
+    // like printf, it's not interpreted as an escape sequence.
+    std::string reverseEscape(std::string_view sv) {
         std::string s;
         for (char ch : sv) {
             switch (ch) {
-                case '\'':
-                case '\"':
-                case '\\':
-                    s += '\\';
-                    s += ch;
-                    break;
-                default:
-                    s += ch;
+            case '\'':
+            case '\"':
+            case '\\':
+                s += '\\';
+                s += ch;
+                break;
+            case '\n':
+                s += "\\n";
+                break;
+            case '\t':
+                s += "\\t";
+                break;
+            default:
+                s += ch;
             }
         }
         return s;
@@ -86,9 +93,10 @@ class Formatter {
     }
 
     ~Formatter() {
-        if (buf != mbuf) delete[] buf;
+        if (buf != mbuf)
+            delete[] buf;
     }
 };
-}  // namespace util
+} // namespace util
 
 #endif
