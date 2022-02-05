@@ -180,14 +180,14 @@ Basic rules are as follows.
    fac   -> "(" exp ')'
    ```
 
-   `exp`, `term` and `fac` are in 3 different forms. You can define productions of the same symbol in one line. You can also append producitons of the previous symbol by using another production definition like how I define productions of `fac`.
+   Definitions of `exp`, `term` and `fac` are in 3 different forms. You can define productions of the same symbol in one line. You can also append producitons of the previous symbol by using another production definition like how I define productions of `fac`.
 
    There is no need to define non-terminals. Symbols in the left hand side of productions are defined as non-terminals automatically.
 
-It's sad that we cannot use grammars in Bison format here. Its because Bison has a semicolon after each definition, while we just start a new line. If you want to edit a grammar file in Bison format to adapt our grammar format. You can:
+It's sad that we cannot use grammars in Bison format here. It's because Bison has a semicolon after each definition, while we just start a new line. If you want to edit a grammar file in Bison format to adapt our grammar format, you can:
 
-   1. Remove semicolons. (You do not have to remove token definitions, because we've made `%` a comment starting token.)
-   2. Make sure all symbols in the same produciton body stay in the same line.
+   1. Remove semicolons. (You do not have to remove token definitions, because we've made `%` a comment-starting token.)
+   2. Make sure all symbols in the same production body stay in the same line.
    3. Pass argument `--body-start=":"` when launching the program. This argument makes the tool search for `:` instead of `->`. (Similarly, if you have production whose format is like `A ::= B a`, you can use `--body-start="::="`.)
 
 ## Usage
@@ -223,7 +223,7 @@ cmake -G Ninja .. # Or "cmake .." if you do not have Ninja
 cmake --build .
 ```
 
-This tools have some parts relying on pthread library if you are on Linux, so you may have to install it. Windows platform does not have this requirement. (Multi-threading was used for `svg` output. The feature was dropped but utility functions stayed in code.)
+This tool has some parts relying on pthread library (only if you are on Linux), so you may have to install it. Windows platform does not have this requirement. (Multi-threading was used for `svg` output. The feature was dropped but utility functions stayed in code.)
 
 ## Resources
 
@@ -233,8 +233,6 @@ I found some resources really helpful in my learning. I compared my results with
 
 [Context Free Grammar Tool (ucalgary.ca)](http://smlweb.cpsc.ucalgary.ca/start.html) is a website providing colorful parse tables for grammars. It does not support very long grammar due to the length limit of URL.
 
-[JFLAP](https://www.jflap.org/) is a powerful tool which I use quite often (at least these days).
-
 ## Q&As
 
 ### How to show `ε` correctly in console?
@@ -243,11 +241,11 @@ On Windows, you should change code page to 65001 to enable UTF-8. If you use VS 
 
 ### `#include <vcruntime.h>` causes compilation error.
 
-Just remove those lines. My editor added those for me, but they are not needed. I often forget to delete those lines.
+Just remove those lines. My editor added those for me, but they are not needed. I often forget to delete those lines...
 
 ### Why is the grammar format and command line arguments so strange?
 
-Well, one of my team projects needs this program and I have to provide support for it. For example, that project uses `!` as a divider between token definitions and production definitions, and I think that's unnecessary. So I just make `!` another comment sign. But `#` is more useful, because in editors you can associate your grammar file with `cmake` language,and then use `CTRL+/ `to comment lines.
+Well, one of my team projects needs this program and I have to provide support for it. For example, that project uses `!` as a divider between token definitions and production definitions, and I think that's unnecessary. So I just make `!` another comment sign. But `#` is more useful, because in editors you can associate your grammar file with `cmake` language, and then use `CTRL+/ `to comment lines, so the tool recognizes `#` as well. 
 
 ### No use of Bison?
 
