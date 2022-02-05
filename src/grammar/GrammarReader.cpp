@@ -56,11 +56,20 @@ void GrammarReader::parse(Grammar &g) try {
             startFound = true;
         }
 
-        expectOrThrow("->");
+        // Default: "->"
+        expectOrThrow(launchArgs.bodyStartString.c_str());
         do {
             std::vector<SymbolID> productionBody;
             bool hasEpsilon = false;
-            while (getToken(s, false)) {
+            for (int multiline = 1, lastline = this->linenum;
+                 getToken(s, multiline);
+                 multiline = 0, lastline = this->linenum) {
+
+                // Have a empty line. Consider it as the end of this production.
+                if (!multiline && (lastline + 1 < this->linenum)) {
+                    break;
+                }
+
                 // put symbol and delay checking if auto-define is not enabled
                 auto symid = launchArgs.autoDefineTerminals
                                  ? g.putSymbol(s.c_str(), true)
@@ -128,7 +137,7 @@ auto GrammarReader::getLineAndCount(istream &is, std::string &s) -> bool {
     return false;
 }
 
-static bool isCommentStart(char ch) { return ch == '!' || ch == '#'; }
+static bool isCommentStart(char ch) { return ch == '!' || ch == '#' || ch == '%'; }
 
 // Make sure *p is non-space
 // This is the only method to use `stream` directly, expect for
@@ -225,9 +234,7 @@ bool GrammarReader::getToken(std::string &s) try {
     exit(1);
 }
 
-// Try to get a token. This process may fail, so flag is returned in bool)
-// This process is difficult because C++ does not have a Scanner
-// like Java, and buffer needs to be managed by ourselves.
+// Tries to get a token. Returns if the process failed.
 auto GrammarReader::getToken(std::string &s, bool newlineAutoFetch) -> bool {
     if (!token.empty()) {
         s = token;
@@ -236,10 +243,10 @@ auto GrammarReader::getToken(std::string &s, bool newlineAutoFetch) -> bool {
     }
 
     util::Formatter f;
+    s.clear();
 
     const char *p = newlineAutoFetch ? skipSpaces(pos) : skipBlanks(pos);
     if (!p) {
-        display(LOG, DEBUG, "getToken(): No more input");
         return false;
     }
 
@@ -249,8 +256,6 @@ auto GrammarReader::getToken(std::string &s, bool newlineAutoFetch) -> bool {
         throw std::runtime_error(
             "getToken(): The first character of a token cannot be a digit");
     }
-
-    s.clear();
 
     if (*p == '\'' || *p == '\"') {
         char quoteChar = *p; // Quote
@@ -283,7 +288,7 @@ auto GrammarReader::getToken(std::string &s, bool newlineAutoFetch) -> bool {
         return true;
     }
 
-    // Allow `\` at the beginning so escaping sequences can work
+    // Allow `\` at the beginning so escaping sequences can work.
     if (*p == '\\')
         s += *p++;
 
@@ -300,7 +305,7 @@ auto GrammarReader::getToken(std::string &s, bool newlineAutoFetch) -> bool {
         return true;
     }
 
-    display(LOG, DEBUG, f.formatView("getToken() stops here: %s", pos).data());
+    // display(LOG, DEBUG, f.formatView("getToken() stops here: %s", pos).data());
 
     return false;
 }

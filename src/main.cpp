@@ -1,3 +1,4 @@
+#include <cctype>
 #include <cstring>
 #include <iostream>
 #include <string>
@@ -19,9 +20,10 @@ void printUsageAndExit(bool printErrorLine = true) {
     // Procedures in deconstructors can be tricky.
     launchArgs.launchSuccess = false;
     if (printErrorLine) {
-        printf("Error: Illegal arguments.\n\n");
+        fprintf(stderr, "Error: Illegal arguments.\n\n");
     }
-    printf(
+    fprintf(
+        stderr,
         "This program reads possibly LR grammar from <Grammar file>, takes "
         "test sequence from standard input stream, and stores analysis results "
         "into <Result Dir>.\n"
@@ -53,20 +55,33 @@ void printUsageAndExit(bool printErrorLine = true) {
         "line and not pass `--disable-auto-define` argument\n"
         "    TERM :{ID, '(', ')', '+', '*'}\n\n"
         "    # Define productions\n"
+        "    # Our format is flexible as well as buggy, which is why you need "
+        "to pay some attention.\n"
+        "    # At least symbols in the same production body should be in the "
+        "same line\n"
         "    exp   -> exp '+' term  | term\n"
-        "    term  -> term '*' fac  | fac\n"
-        "    fac   -> ID            | \"(\" exp ')'\n"
+        "    term  -> term '*' fac  \n"
+        "           | fac\n"
+        "    fac   -> ID\n"
+        "    fac   -> \"(\" exp ')'\n"
         "\n"
         "Options:\n"
         "-t        : Choose a parser type. Available: lr0, slr, lalr, "
         "lr1. (Default: slr)\n"
         "-o        : Specify output directory. (Default: \"results\").\n"
         "-g        : Specify grammar file path. (Default: \"grammar.txt\")\n"
-        "-h|--help : Output help message and exit.\n"
+        "-h|--help : Output help message and then exit.\n"
         "\n"
         "Flags:\n"
         // "--nodot   : Disable svg automaton output. Use this when you don't "
         // "have `dot` in your `PATH`.\n"
+        "--no-test : Just generate automatons and parse table. Do not test an "
+        "input sequence. Program will finish as soon as the table is "
+        "generated.\n"
+        "--body-start=<String>:\n"
+        "    Define the start of a production as the given <String>. "
+        "The default is \"->\", but you may want \"::=\" or \":\" if your "
+        "grammar is written that way.\n"
         "--strict  : Input token names must conform to rules of grammar "
         "file. Without this flag, they are simply space-splitted.\n"
         "--debug   : Set output level to DEBUG.\n"
@@ -74,7 +89,7 @@ void printUsageAndExit(bool printErrorLine = true) {
         "large input file, you may need this flag. But without this flag the "
         "parser can provide better display for input queue.\n"
         "--disable-auto-define: All terminals must be defined before being "
-        "used. This flag disables the feature.\n");
+        "used.\n");
     exit(0);
 }
 
@@ -113,6 +128,11 @@ void lrMain() {
     reportTime("DFA built");
     parser->buildParseTable();
     reportTime("Parse table built");
+
+    if (launchArgs.noTest) {
+        return;
+    }
+
     parser->test(std::cin);
     reportTime("Test finished");
 }
@@ -170,6 +190,24 @@ void lrParseArgs(int argc, char **argv) {
             launchArgs.exhaustInput = false;
         } else if (strcmp("--disable-auto-define", argv[i]) == 0) {
             launchArgs.autoDefineTerminals = false;
+        } else if (strcmp("--no-test", argv[i]) == 0) {
+            launchArgs.noTest = true;
+        } else if (strncmp("--body-start=", argv[i], 13) == 0) {
+            launchArgs.bodyStartString = argv[i] + 13;
+            // Check if all blank
+            auto const &s = launchArgs.bodyStartString;
+            bool hasSpace = s.empty();
+            for (char ch : s) {
+                if (std::isspace(ch)) {
+                    hasSpace = true;
+                    break;
+                }
+            }
+            if (hasSpace) {
+                fprintf(stderr, "Error: Argument \"--body-start=\" does not "
+                                "have a valid value.\n");
+                printUsageAndExit();
+            }
         } else {
             printUsageAndExit();
         }

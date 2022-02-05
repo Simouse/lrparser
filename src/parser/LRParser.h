@@ -104,6 +104,7 @@ class LRParser : public util::ResourceProvider<TransitionSet> {
     std::vector<std::unique_ptr<Constraint>> constraintPool;
     std::vector<std::unique_ptr<char[]>> stringPool;
     std::vector<std::unique_ptr<TransitionSet>> transitionSetPool;
+    std::set<std::pair<int, int>> parseTableConflicts;
     // Contains all non-epsilon terminals. Built in buildKernel().
     Constraint *allTermConstraint = nullptr;
 

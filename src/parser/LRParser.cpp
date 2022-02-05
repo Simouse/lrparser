@@ -5,6 +5,7 @@
 #include <memory>
 #include <stack>
 #include <stdexcept>
+#include <stdio.h>
 #include <string>
 #include <utility>
 #include <vector>
@@ -247,6 +248,18 @@ void LRParser::buildParseTable() {
     }
 
     display(PARSE_TABLE, INFO, "Parse table", this);
+
+    // Print summary
+    printf("> Summary: %zd states, %zd table cell conflicts.\n", states.size(),
+           parseTableConflicts.size());
+    if (!parseTableConflicts.empty()) {
+        int conflictIndex = 0;
+        printf("\nConflicts happen at:\n");
+        for (auto const &[stateIndex, symbolID] : parseTableConflicts) {
+            printf("   %3d)State %d, Symbol %s\n", ++conflictIndex, stateIndex,
+                   symbols[symbolID].name.c_str());
+        }
+    }
 }
 
 void LRParser::addParseTableEntry(StateID state, ActionID act,
@@ -261,7 +274,11 @@ void LRParser::addParseTableEntry(StateID state, ActionID act,
             dfa.getAllStates().size(),
             vector<set<ParseAction>>(gram.getAllSymbols().size()));
     }
-    parseTable[state][act].insert(pact);
+    auto &entrySet = parseTable[state][act];
+    entrySet.insert(pact);
+    if (entrySet.size() > 1) {
+        parseTableConflicts.emplace(state, act);
+    }
 }
 
 std::string LRParser::dumpParseTableEntry(StateID state,

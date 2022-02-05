@@ -64,10 +64,12 @@ struct LaunchArguments {
     bool strict = false;
     bool exhaustInput = true;
     bool autoDefineTerminals = true;
+    bool noTest = false;
     ParserType parserType = SLR;
     DisplayLogLevel logLevel = VERBOSE;
     std::string grammarFileName = "grammar.txt";
     std::string resultsDir = "results";
+    std::string bodyStartString = "->";
 };
 
 extern LaunchArguments launchArgs;
