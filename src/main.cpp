@@ -1,6 +1,7 @@
 #include <cctype>
 #include <cstring>
 #include <iostream>
+#include <string.h>
 #include <string>
 
 #include "src/common.h"
@@ -78,6 +79,9 @@ void printUsageAndExit(bool printErrorLine = true) {
         "--no-test : Just generate automatons and parse table. Do not test an "
         "input sequence. Program will finish as soon as the table is "
         "generated.\n"
+        "--no-pda  : Do not print automaton in results directory.\n"
+        "--no-pda-label:\n"
+        "    Only show index of each node in dumping results.\n"
         "--body-start=<String>:\n"
         "    Define the start of a production as the given <String>. "
         "The default is \"->\", but you may want \"::=\" or \":\" if your "
@@ -208,6 +212,10 @@ void lrParseArgs(int argc, char **argv) {
                                 "have a valid value.\n");
                 printUsageAndExit();
             }
+        } else if (strcmp("--no-pda", argv[i]) == 0) {
+            launchArgs.noPDA = true;
+        } else if (strcmp("--no-pda-label", argv[i]) == 0) {
+            launchArgs.noPDALabel = true;
         } else {
             printUsageAndExit();
         }

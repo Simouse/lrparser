@@ -1,6 +1,6 @@
 # LRParser
 
-This is a grammar parser which can read grammar files in our format, analyze attributes (nullable, first set and follow set) of symbols, generate pushdown automatons and parse tables. It aims at learning/teaching LR parsing algorithms, and does not have the functionalities to actually translate languages to intermediate code.
+This is a grammar parser which can read grammar files in our format, analyze attributes (nullable, first set, and follow set) of symbols, generate push-down automatons and parse tables. It aims at learning/teaching LR parsing algorithms and does not have the functionalities to actually translate languages to intermediate code.
 
 ## Output
 
@@ -42,19 +42,7 @@ Productions:
     3) term -> fac
     4) fac -> ID
     5) fac -> ( exp )
-> Calculate nullables
-      Name   Nullable              First{}         Follow{}
-  --------   --------             --------         --------
-       exp      false                   {}               {}
-      term      false                   {}               {}
-       fac      false                   {}               {}
-> Calculate first set
-      Name   Nullable              First{}         Follow{}
-  --------   --------             --------         --------
-       exp      false             { ID ( }               {}
-      term      false             { ID ( }               {}
-       fac      false             { ID ( }               {}
-> Calculate follow set
+> Calculate symbol attributes
       Name   Nullable              First{}         Follow{}
   --------   --------             --------         --------
        exp      false             { ID ( }        { $ + ) }
@@ -128,7 +116,7 @@ Input queue : Front ->| $
 > Success
 ```
 
-Automatons in graphviz language format are generated in result directory (default: results) because they are difficult to display in console. You need to invoke `dot` by yourself. The program used to provide generated `svg` files as well if you have `dot` installed, but invoking dot processes on Windows is too slow (in Linux it's just fast) and makes the tool a target of Windows Defender Anti-virus module because the tool invokes a lot of processes in such a short time. Later I tried to use graphviz as library in my code, but I found graphviz cgraph library had memory leaks and double free() bugs which I couldn't get right. So I dropped the support for directly generated svg files.
+Automatons in graphviz language format are generated in the result directory (default: results) because they are difficult to display in the console. You need to invoke `dot` by yourself. The program used to provide generated `svg` files as well if you have `dot` installed, but invoking dot processes on Windows is too slow (in Linux it's just fast) and makes the tool a target of Windows Defender Anti-virus module because the tool invokes a lot of processes in such a short time. Later I tried to use graphviz as library in my code, but I found graphviz cgraph library had memory leaks and double free() bugs which I couldn't get right. So I dropped the support for directly generated svg files.
 
 SLR NFA:
 
@@ -142,7 +130,7 @@ SLR DFA:
 
 Basic rules are as follows.
 
-1. Supports comments using `!` , `%`or `#`. Those behave like `#` in Python.
+1. Comments using `!`, `%`or `#` are supported. Those characters behave like `#` in Python.
 
    e.g.
 
@@ -180,19 +168,20 @@ Basic rules are as follows.
    fac   -> "(" exp ')'
    ```
 
-   Definitions of `exp`, `term` and `fac` are in 3 different forms. You can define productions of the same symbol in one line. You can also append producitons of the previous symbol by using another production definition like how I define productions of `fac`.
+   Definitions of `exp`, `term` and `fac` are in 3 different forms. You can define productions of the same symbol in one line. You can also append productions of the previous symbol by using another production definition like how I define productions of `fac`.
 
-   There is no need to define non-terminals. Symbols in the left hand side of productions are defined as non-terminals automatically.
+   There is no need to define non-terminals. Symbols in the left-hand side of productions are defined as non-terminals automatically.
 
 It's sad that we cannot use grammars in Bison format here. It's because Bison has a semicolon after each definition, while we just start a new line. If you want to edit a grammar file in Bison format to adapt our grammar format, you can:
 
    1. Remove semicolons. (You do not have to remove token definitions, because we've made `%` a comment-starting token.)
    2. Make sure all symbols in the same production body stay in the same line.
    3. Pass argument `--body-start=":"` when launching the program. This argument makes the tool search for `:` instead of `->`. (Similarly, if you have production whose format is like `A ::= B a`, you can use `--body-start="::="`.)
+   4. Move at least one production of the start token to the beginning of the rules.
 
 ## Usage
 
-```bash
+```txt
 lrparser [[-h|--help]|[-t<Type>] [-g<Grammar file>] [-o<Result Dir>]] <FLAGS>
 
 Possible command: lrparser -tslr -g grammar.txt -o results
@@ -204,14 +193,22 @@ Options:
 -h|--help : Output help message and then exit.
 
 Flags:
---no-test : Just generate automatons and parse table. Do not test an input sequence. Program will finish as soon as the table is generated.
+--no-test : Just generate automatons and parse table. Do not test an input sequence. Program will finish as soon as the table is generated.    
+--no-pda  : Do not print automaton in results directory.
+--no-pda-label:
+    Only show index of each node in dumping results.
 --body-start=<String>:
-    Define the start of a production as the given <String>. The default is "->", but you may want "::=" or ":" if your grammar is written that way.
+    Define the start of a production as the given <String>. The default is "->", but you may want "::=" or ":" if your grammar is written that 
+way.
 --strict  : Input token names must conform to rules of grammar file. Without this flag, they are simply space-splitted.
 --debug   : Set output level to DEBUG.
 --step    : Read <stdin> step by step. If you have to process a very large input file, you may need this flag. But without this flag the parser can provide better display for input queue.
 --disable-auto-define: All terminals must be defined before being used.
 ```
+
+## For large inputs
+
+For very large test sequences, you can use `--step` flag to disable memory cache of all input characters. Use `--no-pda` to save time if you don't need PDA, or use `--no-pda-label` to hide details of nodes as well as saving time. Normally, just `--no-pda-label` is enough. I tested my tool against ANSI-C grammar (which is not a LALR1 grammar), and found hundreds of DFA states have been generated. Chances are that if you are trying to analyze a grammar that complex, `dot` will freeze when you try to visualize the graph.
 
 ## Build
 
@@ -223,11 +220,13 @@ cmake -G Ninja .. # Or "cmake .." if you do not have Ninja
 cmake --build .
 ```
 
-This tool has some parts relying on pthread library (only if you are on Linux), so you may have to install it. Windows platform does not have this requirement. (Multi-threading was used for `svg` output. The feature was dropped but utility functions stayed in code.)
+This tool has some parts relying on `pthread` library (only if you are on Linux), so you may have to install it. Windows platform does not have this requirement. (Multi-threading was used for `svg` output. The feature was dropped, but utility functions stayed in code.)
+
+The code relies on C++ STL much. You may consider enabling `-O2` optimization or set build variant to `Release` if possible.
 
 ## Resources
 
-I found some resources really helpful in my learning. I compared my results with their programs' to detect my bugs and the reasons causing the bugs. I didn't use their code though.
+I found some resources really helpful in my learning. I compared my results with their programs' to detect my bugs and the reasons causing them. I didn't use their code though.
 
 [jsmachines](http://jsmachines.sourceforge.net/machines/) supports ll1/lr1/lalr/slr/turing, etc. It's lightweight and fast.
 
@@ -245,8 +244,8 @@ Just remove those lines. My editor added those for me, but they are not needed. 
 
 ### Why is the grammar format and command line arguments so strange?
 
-Well, one of my team projects needs this program and I have to provide support for it. For example, that project uses `!` as a divider between token definitions and production definitions, and I think that's unnecessary. So I just make `!` another comment sign. But `#` is more useful, because in editors you can associate your grammar file with `cmake` language, and then use `CTRL+/ `to comment lines, so the tool recognizes `#` as well. 
+Well, one of my team projects needs this program and I have to provide support for it. For example, that project uses `!` as a divider between token definitions and production definitions, and I think that's unnecessary. So I just make `!` another comment sign. But `#` is more useful, because in editors you can associate your grammar file with `cmake` language, and then use `CTRL+/ `to comment lines. So the tool recognizes `#` as well. 
 
 ### No use of Bison?
 
-At first I thought I was writing (, not using) a LR parsing program, so I shouldn't use bison. But later I found the grammar rule parsing so difficult and tiring. I used a lot of branches, making my code really messy. So if I were to choose again, I definitely would use Bison in that part.
+At first, I thought I was writing (, not using) a LR parsing program, so I shouldn't use bison. But later I found the grammar rule parsing so difficult and tiring. I used a lot of branches, making my code really messy. So if I were to choose again, I definitely would use Bison in that part.

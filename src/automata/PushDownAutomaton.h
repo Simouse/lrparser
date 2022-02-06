@@ -7,10 +7,10 @@
 #include <optional>
 #include <set>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
-#include <string>
 
 #include "src/common.h"
 #include "src/util/BitSet.h"
@@ -148,16 +148,15 @@ class PushDownAutomaton {
     // Dump in graphviz format.
     // `posMap` is used to switch state indexes so the result can be easier to
     // observe. It stores: realState => stateAlias(label).
-    [[nodiscard]] std::string dump() const;
+    void dump(FILE *stream) const;
 
-    // Dump State in human-readable string. The second return value is a flag
-    // indicating if this state can be final.
-    [[nodiscard]] std::pair<std::string, bool> dumpState(StateID stateID) const;
+    // Dump State in human-readable string. Returns a flag indicating if this
+    // state can be final.
+    [[nodiscard]] bool dumpState(FILE *stream, StateID stateID) const;
 
-    // Dump StateClosure in human-readable string. The second return value is a
-    // flag indicating if this state can be final.
-    [[nodiscard]] std::pair<std::string, bool>
-    dumpClosure(Closure const &closure) const;
+    // Dump StateClosure in human-readable string. Returns a flag indicating if
+    // this state can be final.
+    [[nodiscard]] bool dumpClosure(FILE *stream, StateID closureID) const;
 
     // This error is thrown when current state is illegal. This may
     // be caused by not setting start state.

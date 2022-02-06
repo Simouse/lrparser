@@ -5,7 +5,6 @@
 #include <memory>
 #include <stack>
 #include <stdexcept>
-#include <stdio.h>
 #include <string>
 #include <utility>
 #include <vector>
@@ -256,7 +255,7 @@ void LRParser::buildParseTable() {
         int conflictIndex = 0;
         printf("\nConflicts happen at:\n");
         for (auto const &[stateIndex, symbolID] : parseTableConflicts) {
-            printf("   %3d)State %d, Symbol %s\n", ++conflictIndex, stateIndex,
+            printf("   %3d) State %d, Symbol %s\n", ++conflictIndex, stateIndex,
                    symbols[symbolID].name.c_str());
         }
     }

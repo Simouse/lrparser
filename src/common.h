@@ -65,6 +65,8 @@ struct LaunchArguments {
     bool exhaustInput = true;
     bool autoDefineTerminals = true;
     bool noTest = false;
+    bool noPDA = false;
+    bool noPDALabel = false;
     ParserType parserType = SLR;
     DisplayLogLevel logLevel = VERBOSE;
     std::string grammarFileName = "grammar.txt";

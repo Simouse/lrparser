@@ -275,7 +275,7 @@ Grammar &Grammar::resolveSymbolAttributes() {
         resolveNullable(symbol);
     }
 
-    display(SYMBOL_TABLE, INFO, "Calculate nullables", this);
+    // display(SYMBOL_TABLE, INFO, "Calculate nullables", this);
 
     // First Set
     
@@ -300,7 +300,7 @@ Grammar &Grammar::resolveSymbolAttributes() {
         resolveFirstSet(visit, symbol);
     }
 
-    display(SYMBOL_TABLE, INFO, "Calculate first set", this);
+    // display(SYMBOL_TABLE, INFO, "Calculate first set", this);
 
     // Follow Set
 
@@ -354,7 +354,7 @@ Grammar &Grammar::resolveSymbolAttributes() {
         resolveFollowSet(visit, dependencyTable, entry);
     }
 
-    display(SYMBOL_TABLE, INFO, "Calculate follow set", this);
+    display(SYMBOL_TABLE, INFO, "Calculate symbol attributes", this);
 
     return *this;
 }

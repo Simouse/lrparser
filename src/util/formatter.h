@@ -53,7 +53,7 @@ class Formatter {
     // This method protects chars from being escaped.
     // e.g. \" ===> \\\" so when you pass this string to functions
     // like printf, it's not interpreted as an escape sequence.
-    std::string reverseEscape(std::string_view sv) {
+    [[nodiscard]] static std::string reverseEscape(std::string_view sv) {
         std::string s;
         for (char ch : sv) {
             switch (ch) {
@@ -79,7 +79,7 @@ class Formatter {
     // Concat executable path and thoses arguments used by command line.
     // The 0th argument is ignored, and there should be a trailing NULL pointer.
     // NULL as an argument is not checked.
-    std::string concatArgs(const char *path, char **ptr) {
+    [[nodiscard]] static std::string concatArgs(const char *path, char **ptr) {
         std::string s = path;
         bool firstArgSkipped = false;
         for (; *ptr; ++ptr) {

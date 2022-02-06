@@ -125,7 +125,7 @@ class Grammar {
 
     struct SignStrings {
         static constexpr const char *dot =
-            "\xE2\x97\x8F"; // \xE2\x97\x8F is "●" in UTF-8
+            "\xE2\x80\xA2"; // \xE2\x80\xA2 is "•"; \xE2\x97\x8F is "●" in UTF-8
         static constexpr const char *epsilon =
             "\xCE\xB5"; // \xCE\xB5 is "ε" in UTF-8
         static constexpr const char *endOfInput = "$";

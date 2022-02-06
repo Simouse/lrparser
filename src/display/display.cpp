@@ -230,18 +230,19 @@ static void handleAutomaton(const char *description, DisplayLogLevel logLevel,
                             const char *prefix,
                             PushDownAutomaton const *automaton) {
     util::Formatter f;
+    handleLog(description, logLevel);
+
+    if (launchArgs.noPDA)
+        return;
+    
     fs::path gvFilePath = launchArgs.resultsDir;
     gvFilePath /= f.formatView("%s.%d.gv", prefix, ++automatonCounter);
     std::string gvFileName = gvFilePath.string();
 
-    std::string gvContent = automaton->dump();
-
     FILE *file = std::fopen(gvFileName.c_str(), "w");
-    std::fprintf(file, "%s\n", gvContent.c_str());
+    automaton->dump(file);
+    fprintf(file, "\n");
     std::fclose(file);
-    // gvFileNames.push_back(std::move(gvFileName));
-
-    handleLog(description, logLevel);
 }
 
 static void handleSymbolTable(const char *description, DisplayLogLevel logLevel,
