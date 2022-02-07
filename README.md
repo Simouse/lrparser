@@ -178,6 +178,8 @@ It's sad that we cannot use grammars in Bison format here. It's because Bison ha
    2. Make sure all symbols in the same production body stay in the same line.
    3. Pass argument `--body-start=":"` when launching the program. This argument makes the tool search for `:` instead of `->`. (Similarly, if you have production whose format is like `A ::= B a`, you can use `--body-start="::="`.)
    4. Move at least one production of the start token to the beginning of the rules.
+   5. Remove comments and code blocks (syntax-directed translation is not supported by this tool).
+   6. Replace epsilons with `\e`.
 
 ## Usage
 
@@ -206,10 +208,6 @@ way.
 --disable-auto-define: All terminals must be defined before being used.
 ```
 
-## For large inputs
-
-For very large test sequences, you can use `--step` flag to disable memory cache of all input characters. Use `--no-pda` to save time if you don't need PDA, or use `--no-pda-label` to hide details of nodes as well as saving time. Normally, just `--no-pda-label` is enough. I tested my tool against ANSI-C grammar (which is not a LALR1 grammar), and found hundreds of DFA states have been generated. Chances are that if you are trying to analyze a grammar that complex, `dot` will freeze when you try to visualize the graph.
-
 ## Build
 
 ```bash
@@ -232,7 +230,7 @@ I found some resources really helpful in my learning. I compared my results with
 
 [Context Free Grammar Tool (ucalgary.ca)](http://smlweb.cpsc.ucalgary.ca/start.html) is a website providing colorful parse tables for grammars. It does not support very long grammar due to the length limit of URL.
 
-## Q&As
+## Questions and some explanations
 
 ### How to show `ε` correctly in console?
 
@@ -249,3 +247,11 @@ Well, one of my team projects needs this program and I have to provide support f
 ### No use of Bison?
 
 At first, I thought I was writing (, not using) a LR parsing program, so I shouldn't use bison. But later I found the grammar rule parsing so difficult and tiring. I used a lot of branches, making my code really messy. So if I were to choose again, I definitely would use Bison in that part.
+
+### For large inputs
+
+For very large test sequences, you can use `--step` flag to disable memory cache of all input characters. Use `--no-pda` to save time if you don't need PDA, or use `--no-pda-label` to hide details of nodes as well as saving time. Normally, just `--no-pda-label` is enough. I tested my tool against ANSI-C grammar (which is not a LALR1 grammar), and found hundreds of DFA states have been generated. Chances are that if you are trying to analyze a grammar that complex, `dot` will freeze when you try to visualize the graph.
+
+### State differences from Bison
+
+It seems that Bison defines an augmented production for each grammar. For example, for simple grammar `S -> a`, bison sees two grammars: `S' -> S; S -> a`. So it may have a few more states than some online tools. Besides, when state `S' -> S •` is reached, Bison has to shift the pseudo end token, as if the state is `S' -> S • <end>`, so bison has one more state. Since my tool uses an augmented grammar as well, the LALR push-down automaton should have exactly one less state than Bison.

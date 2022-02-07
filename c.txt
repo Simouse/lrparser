@@ -1,4 +1,4 @@
-# Copyed from https://www.lysator.liu.se/c/ANSI-C-grammar-y.html
+# Adapted from https://www.lysator.liu.se/c/ANSI-C-grammar-y.html
 
 translation_unit -> external_declaration
  | translation_unit external_declaration
