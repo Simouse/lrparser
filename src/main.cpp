@@ -1,7 +1,8 @@
 #include <cctype>
 #include <cstring>
+#include <exception>
 #include <iostream>
-#include <string.h>
+#include <cstdlib>
 #include <string>
 
 #include "src/common.h"
@@ -17,83 +18,16 @@ using namespace gram;
 
 LaunchArguments launchArgs;
 
-void printUsageAndExit(bool printErrorLine = true) {
-    // Procedures in deconstructors can be tricky.
+extern const char *help_message; // in help.txt
+
+void printUsageAndExit(bool onError = true) {
     launchArgs.launchSuccess = false;
-    if (printErrorLine) {
+    if (onError) {
         fprintf(stderr, "Error: Illegal arguments.\n\n");
+        fprintf(stderr, help_message);
+    } else {
+        fprintf(stdout, help_message);
     }
-    fprintf(
-        stderr,
-        "This program reads possibly LR grammar from <Grammar file>, takes "
-        "test sequence from standard input stream, and stores analysis results "
-        "into <Result Dir>.\n"
-        "\n"
-        "Usage: lrparser [[-h|--help]|[-t<Type>] [-g<Grammar file>] [-o<Result "
-        "Dir>]] <FLAGS>\n"
-        "\n"
-        "Possible command: lrparser -tslr -g grammar.txt -o results\n"
-        "\n"
-        "Grammar file:\n"
-        "    1) Use `!` or `#` to start a line comment.\n"
-        "    2) Token naming is based on C-style variable naming. Besides, "
-        "`\\` can appear at the first character of token, and "
-        "quoted symbols are supported. (See the next rule)\n"
-        "    3) `\"` or `'` can be used to quote a symbol, e.g. '+'. \"'\" and "
-        "'\"' are okay, but there's no way to use them both in one symbol. "
-        "Spaces in a quoted string are not allowed.\n"
-        "    4) \\e, _e, and \\epsilon are reserved for epsilon. \n"
-        "    5) You shouldn't use `$` in grammar file.\n"
-        "    6) Define terminals, the start symbol, and productions as the "
-        "following example shows. All symbols at the left hand side of "
-        "productions are automatically defined as non-terminals. The first "
-        "non-terminal symbol is defined as the start symbol. If you choose to "
-        "define terminals before using them, argument `--disable-auto-define` "
-        "must be passed.\n"
-        "    e.g.\n"
-        "    # Define terminals\n"
-        "    # If you don't want to define terminals, you should remove this "
-        "line and not pass `--disable-auto-define` argument\n"
-        "    TERM :{ID, '(', ')', '+', '*'}\n\n"
-        "    # Define productions\n"
-        "    # Our format is flexible as well as buggy, which is why you need "
-        "to pay some attention.\n"
-        "    # At least symbols in the same production body should be in the "
-        "same line\n"
-        "    exp   -> exp '+' term  | term\n"
-        "    term  -> term '*' fac  \n"
-        "           | fac\n"
-        "    fac   -> ID\n"
-        "    fac   -> \"(\" exp ')'\n"
-        "\n"
-        "Options:\n"
-        "-t        : Choose a parser type. Available: lr0, slr, lalr, "
-        "lr1. (Default: slr)\n"
-        "-o        : Specify output directory. (Default: \"results\").\n"
-        "-g        : Specify grammar file path. (Default: \"grammar.txt\")\n"
-        "-h|--help : Output help message and then exit.\n"
-        "\n"
-        "Flags:\n"
-        // "--nodot   : Disable svg automaton output. Use this when you don't "
-        // "have `dot` in your `PATH`.\n"
-        "--no-test : Just generate automatons and parse table. Do not test an "
-        "input sequence. Program will finish as soon as the table is "
-        "generated.\n"
-        "--no-pda  : Do not print automaton in results directory.\n"
-        "--no-pda-label:\n"
-        "    Only show index of each node in dumping results.\n"
-        "--body-start=<String>:\n"
-        "    Define the start of a production as the given <String>. "
-        "The default is \"->\", but you may want \"::=\" or \":\" if your "
-        "grammar is written that way.\n"
-        "--strict  : Input token names must conform to rules of grammar "
-        "file. Without this flag, they are simply space-splitted.\n"
-        "--debug   : Set output level to DEBUG.\n"
-        "--step    : Read <stdin> step by step. If you have to process a very "
-        "large input file, you may need this flag. But without this flag the "
-        "parser can provide better display for input queue.\n"
-        "--disable-auto-define: All terminals must be defined before being "
-        "used.\n");
     exit(0);
 }
 
@@ -102,43 +36,33 @@ void lrMain() {
     reportTime("Grammar rules read");
 
     // Choose a parser
-    LRParser *parser;
-    LR0Parser lr0{g};
-    SLRParser slr{g};
-    LR1Parser lr1{g};
-    LALRParser lalr{g};
+    LRParser *parser = nullptr;
+    ParserType t = launchArgs.parserType;
 
-    switch (launchArgs.parserType) {
-    case LR0:
-        parser = &lr0;
-        break;
-    case SLR:
-        parser = &slr;
-        break;
-    case LR1:
-        parser = &lr1;
-        break;
-    case LALR:
-        parser = &lalr;
-        break;
-    default:
+    if (t == LR0)       parser = new LR0Parser(g);
+    else if (t == SLR)  parser = new SLRParser(g);
+    else if (t == LR1)  parser = new LR1Parser(g);
+    else if (t == LALR) parser = new LALRParser(g);
+    else {
         fprintf(stderr, "Unknown parser type. Check your code\n");
         exit(1);
     }
 
     parser->buildNFA();
     reportTime("NFA built");
+
     parser->buildDFA();
     reportTime("DFA built");
+    
     parser->buildParseTable();
     reportTime("Parse table built");
 
-    if (launchArgs.noTest) {
-        return;
+    if (!launchArgs.noTest) {
+        parser->test(std::cin);
+        reportTime("Test finished");
     }
 
-    parser->test(std::cin);
-    reportTime("Test finished");
+    delete parser;
 }
 
 void chooseParserType(const char *s) {
@@ -225,10 +149,13 @@ void lrParseArgs(int argc, char **argv) {
     }
 }
 
-int main(int argc, char **argv) {
-    lrInit();
+int main(int argc, char **argv) try {
     lrParseArgs(argc - 1, argv + 1);
+    lrInit();
     lrMain();
     lrCleanUp();
     reportTime("Clean up");
+} catch (std::exception &e) {
+    fprintf(stderr, "%s\n", e.what());
+    exit(1);
 }

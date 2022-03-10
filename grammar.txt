@@ -28,11 +28,11 @@
 # fac   -> '(' exp ')'   | ID
 
 # TERM :{ID, "(", ')', '+', '*'}
-# exp   -> exp '+' term  | term
-# term  -> term '*' fac
-#        | fac
-# fac   -> ID
-# fac   -> "(" exp ')'
+exp   -> exp '+' term  | term
+term  -> term '*' fac
+       | fac
+fac   -> ID
+fac   -> "(" exp ')'
 
 # TERM: {num, id, assign}
 # S ->	id
@@ -50,8 +50,8 @@
 # S -> C C
 # C -> c C | d
 
- S	->	L '=' R
- S	->	R
- L	->	'*' R
- L	->	id
- R	->	L
+#  S	->	L '=' R
+#  S	->	R
+#  L	->	'*' R
+#  L	->	id
+#  R	->	L

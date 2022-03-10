@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstdarg>
 #include <cstdio>
 #include <filesystem>
 #include <future>
@@ -14,31 +15,18 @@
 #include "src/parser/SLRParser.h"
 #include "src/util/Formatter.h"
 #include "src/util/Process.h"
+#include "src/display/steps.h"
 
 namespace fs = std::filesystem;
 using namespace gram;
 using proc = util::Process;
 
-#define GET_EXEC_TIME_MILLIS(DOUBLE_VAR)                                       \
-    for (auto t1 = std::chrono::steady_clock().now(), t2 = t1; t1 == t2;       \
-         (void)(t2 = std::chrono::steady_clock().now()),                       \
-              (void)((DOUBLE_VAR) =                                            \
-                         static_cast<                                          \
-                             std::chrono::duration<double, std::milli>>(t2 -   \
-                                                                        t1)    \
-                             .count()))
-
-// If vector of future is stored in an object or it's class static storage
-// space, it cannot be initialized. Then a compile-time error occurs.
-// static std::vector<std::future<void>> futures;
-// static std::vector<std::string> gvFileNames;
-// Designated assignment is supported only in C++20...
-
-// log strings
+// Log strings
 static std::array<const char *, LOG_LEVELS_COUNT> logs = {nullptr};
 static int automatonCounter = 0;
 static std::chrono::steady_clock globalClock;
 static decltype(globalClock.now()) startUpTime;
+FILE *stepFile;
 
 double upTimeInMilli() {
     auto now = globalClock.now();
@@ -55,6 +43,13 @@ void reportTime(const char *tag) {
                 .data());
 }
 
+// void stepcode(const char *fmt, ...) {
+//     va_list ap;
+//     va_start(ap, fmt);
+//     std::vfprintf(stepFile, fmt, ap);
+//     va_end(ap);
+// }
+
 void lrInit() {
     startUpTime = globalClock.now();
 
@@ -63,36 +58,23 @@ void lrInit() {
     logs[DisplayLogLevel::DEBUG] = "DEBUG";
     logs[DisplayLogLevel::ERR] = "ERROR";
 
-    // futures.reserve(16);
-
     util::Process::prevent_zombie();
 
-    fs::path outDir = launchArgs.resultsDir;
-    if (!fs::exists(outDir))
-        fs::create_directories(outDir);
+    fs::path outPath = launchArgs.resultsDir;
+    if (!fs::exists(outPath))
+        fs::create_directories(outPath);
+
+    outPath /= "steps.py";
+    std::string outName = outPath.string();
+    stepFile = std::fopen(outName.c_str(), "w");
 }
 
 void lrCleanUp() {
-    if (!launchArgs.launchSuccess)
+    if (!launchArgs.launchSuccess) {
         return;
-
-    // double duration = -1.0;
-    // GET_EXEC_TIME_MILLIS(duration) {
-    //     for (auto const &future : futures)
-    //         future.wait();
-    //     GraphvizCaller gv;
-    //     gv.batchProcess(gvFileNames);
-    // }
-
-    // if (!launchArgs.nodot) {
-    //     util::Formatter f;
-    //     const char *description =
-    //         f.formatView(
-    //              "%.1f ms has been spent in waiting for futures to finish",
-    //              duration)
-    //             .data();
-    //     display(LOG, DEBUG, description);
-    // }
+    }
+    stepFinish();
+    std::fclose(stepFile);
 }
 
 static void handleLog(const char *description, DisplayLogLevel level) {
@@ -234,7 +216,7 @@ static void handleAutomaton(const char *description, DisplayLogLevel logLevel,
 
     if (launchArgs.noPDA)
         return;
-    
+
     fs::path gvFilePath = launchArgs.resultsDir;
     gvFilePath /= f.formatView("%s.%d.gv", prefix, ++automatonCounter);
     std::string gvFileName = gvFilePath.string();
@@ -272,8 +254,7 @@ static void handleSymbolTable(const char *description, DisplayLogLevel logLevel,
         std::string firstSet = g.dumpFirstSet(symbol);
         std::string followSet = g.dumpFollowSet(symbol);
         int namew = (epsilon.id == symbol.id) ? nameWidth + 1 : nameWidth;
-        int firstw = (firstSet.find(gram::Grammar::SignStrings::epsilon) !=
-                      std::string::npos)
+        int firstw = (firstSet.find(Constants::epsilon) != std::string::npos)
                          ? firstWidth + 1
                          : firstWidth;
         outputString +=

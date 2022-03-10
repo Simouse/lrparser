@@ -16,6 +16,7 @@
 #include "src/util/BitSet.h"
 #include "src/util/Formatter.h"
 #include "src/util/TokenReader.h"
+#include "src/display/steps.h"
 
 namespace gram {
 
@@ -45,7 +46,7 @@ void LRParser::buildKernel() {
                 s += symbols[rhs[j]].name;
             }
             s += ' ';
-            s += Grammar::SignStrings::dot;
+            s += Constants::dot;
             for (; j < rhs.size(); ++j) {
                 s += ' ';
                 s += symbols[rhs[j]].name;
@@ -58,10 +59,10 @@ void LRParser::buildKernel() {
     // For "S' -> S".
     std::vector<const char *> augLabelVec(2);
     const auto &startName = gram.getStartSymbol().name;
-    augLabelVec[0] = newString(startName + "' -> " + Grammar::SignStrings::dot +
+    augLabelVec[0] = newString(startName + "' -> " + Constants::dot +
                                " " + startName);
     augLabelVec[1] = newString(startName + "' -> " + startName + " " +
-                               Grammar::SignStrings::dot);
+                               Constants::dot);
     kernelLabelMap[productionTable.size()] = std::move(augLabelVec);
 
     // Build `allTermConstraint`
@@ -261,6 +262,31 @@ void LRParser::buildParseTable() {
     }
 }
 
+std::string singleParseTableEntry(LRParser::ParseAction pact) {
+    using Type = LRParser::ParseAction::Type;
+    std::string s;
+    switch (pact.type) {
+    case Type::SUCCESS:
+        s += "acc";
+        break;
+    case Type::GOTO:
+        s += std::to_string(pact.dest);
+        break;
+    case Type::SHIFT:
+        s += 's';
+        s += std::to_string(pact.dest);
+        break;
+    case Type::REDUCE:
+        s += 'r';
+        s += std::to_string(pact.productionID);
+        break;
+    default:
+        throw std::runtime_error(
+            "dumpParseTableEntry(): Unknown parse action type");
+    }
+    return s;
+}
+
 void LRParser::addParseTableEntry(StateID state, ActionID act,
                                   ParseAction pact) {
     using std::set;
@@ -278,6 +304,8 @@ void LRParser::addParseTableEntry(StateID state, ActionID act,
     if (entrySet.size() > 1) {
         parseTableConflicts.emplace(state, act);
     }
+    auto entry = singleParseTableEntry(pact);
+    stepTableAdd(state, act, entry.c_str());
 }
 
 std::string LRParser::dumpParseTableEntry(StateID state,
@@ -289,26 +317,7 @@ std::string LRParser::dumpParseTableEntry(StateID state,
         if (commaFlag)
             s += ',';
         commaFlag = true;
-        using Type = ParseAction::Type;
-        switch (item.type) {
-        case Type::SUCCESS:
-            s += "acc";
-            break;
-        case Type::GOTO:
-            s += std::to_string(item.dest);
-            break;
-        case Type::SHIFT:
-            s += 's';
-            s += std::to_string(item.dest);
-            break;
-        case Type::REDUCE:
-            s += 'r';
-            s += std::to_string(item.productionID);
-            break;
-        default:
-            throw std::runtime_error(
-                "dumpParseTableEntry(): Unknown parse action type");
-        }
+        s += singleParseTableEntry(item);
     }
     return s;
 }
@@ -326,9 +335,12 @@ void LRParser::readSymbol(util::TokenReader &reader) {
             inputFlag = false;
         }
         InputQueue.push_back(symbol.id);
+        stepPrintf("input_queue.append(%d)\n", symbol.id);
     } else {
         inputFlag = false;
-        InputQueue.push_back(gram.getEndOfInputSymbol().id);
+        auto EOI = gram.getEndOfInputSymbol().id;
+        InputQueue.push_back(EOI);
+        stepPrintf("input_queue.append(%d)\n", EOI);
     }
 }
 
@@ -340,6 +352,8 @@ bool LRParser::test(std::istream &stream) {
         symbolStack.clear();
         InputQueue.clear();
         stateStack.push_back(dfa.getStartState());
+        stepTestInit();
+        stepPrintf("state_stack.append(%d)\n", dfa.getStartState());
 
         // Only one of them is used
         GrammarReader grammarReader(stream);
@@ -356,6 +370,7 @@ bool LRParser::test(std::istream &stream) {
         }
 
         display(PARSE_STATES, INFO, "Parser states", this);
+        stepPrintf("# Parser states are initialized\n");
 
         if (!launchArgs.exhaustInput) {
             display(LOG, INFO,
@@ -377,10 +392,13 @@ bool LRParser::test(std::istream &stream) {
                 parseTable[stateStack.back()][InputQueue.front()];
 
             auto choices = tableEntry.size();
-            if (choices <= 0)
+            if (choices <= 0) {
+                stepPrintf("# Failure: No viable actions for this input\n");
                 throw std::runtime_error(
                     "No viable action in parse table for this input");
+            }
             if (choices > 1) {
+                stepPrintf("# Failure: Action conflicts\n");
                 throw std::runtime_error(
                     "Multiple viable choices. Cannot decide which action "
                     "to take");
@@ -392,12 +410,18 @@ bool LRParser::test(std::istream &stream) {
             case ParseAction::GOTO:
             case ParseAction::SHIFT:
                 stateStack.push_back(decision.dest);
+                stepPrintf("state_stack.append(%d)\n", decision.dest);
                 symbolStack.push_back(InputQueue.front());
+                stepPrintf("symbol_stack.append(%d)\n", InputQueue.front());
                 InputQueue.pop_front();
-                display(LOG, VERBOSE,
-                        decision.type == ParseAction::GOTO
-                            ? "Apply GOTO rule"
-                            : "Apply SHIFT rule");
+                stepPrintf("input_queue.popleft()\n");
+                if (decision.type == ParseAction::GOTO) {
+                    display(LOG, VERBOSE, "Apply GOTO rule");
+                    stepPrintf("# Apply goto rule\n");
+                } else {
+                    display(LOG, VERBOSE, "Apply SHIFT rule");
+                    stepPrintf("# Apply shift rule\n");
+                }
                 break;
             case ParseAction::REDUCE:
                 reduce(decision.productionID);
@@ -408,6 +432,7 @@ bool LRParser::test(std::istream &stream) {
                 break;
             case ParseAction::SUCCESS:
                 display(LOG, INFO, "Success");
+                stepPrintf("# Success\n");
                 return true;
             }
 
@@ -441,8 +466,12 @@ void LRParser::reduce(ProductionID prodID) {
     for (size_t i = 0; i < bodySize; ++i) {
         symbolStack.pop_back();
         stateStack.pop_back();
+        stepPrintf("symbol_stack.pop()\n");
+        stepPrintf("state_stack.pop()\n");
     }
     InputQueue.push_front(prod.leftSymbol);
+    stepPrintf("input_queue.appendleft(%d)\n", prod.leftSymbol);
+    stepPrintf("# Apply reduce rule: %d\n", prodID);
 }
 
 } // namespace gram
