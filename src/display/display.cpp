@@ -43,13 +43,6 @@ void reportTime(const char *tag) {
                 .data());
 }
 
-// void stepcode(const char *fmt, ...) {
-//     va_list ap;
-//     va_start(ap, fmt);
-//     std::vfprintf(stepFile, fmt, ap);
-//     va_end(ap);
-// }
-
 void lrInit() {
     startUpTime = globalClock.now();
 

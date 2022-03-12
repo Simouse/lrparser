@@ -370,7 +370,7 @@ bool LRParser::test(std::istream &stream) {
         }
 
         display(PARSE_STATES, INFO, "Parser states", this);
-        stepPrintf("# Parser states are initialized\n");
+        stepPrintf("# Parser states are initialized.\n");
 
         if (!launchArgs.exhaustInput) {
             display(LOG, INFO,
@@ -393,12 +393,12 @@ bool LRParser::test(std::istream &stream) {
 
             auto choices = tableEntry.size();
             if (choices <= 0) {
-                stepPrintf("# Failure: No viable actions for this input\n");
+                stepPrintf("# Failure: No viable actions for this input.\n");
                 throw std::runtime_error(
                     "No viable action in parse table for this input");
             }
             if (choices > 1) {
-                stepPrintf("# Failure: Action conflicts\n");
+                stepPrintf("# Failure: Action conflicts.\n");
                 throw std::runtime_error(
                     "Multiple viable choices. Cannot decide which action "
                     "to take");
@@ -417,10 +417,10 @@ bool LRParser::test(std::istream &stream) {
                 stepPrintf("input_queue.popleft()\n");
                 if (decision.type == ParseAction::GOTO) {
                     display(LOG, VERBOSE, "Apply GOTO rule");
-                    stepPrintf("# Apply goto rule\n");
+                    stepPrintf("# Apply goto rule.\n");
                 } else {
                     display(LOG, VERBOSE, "Apply SHIFT rule");
-                    stepPrintf("# Apply shift rule\n");
+                    stepPrintf("# Apply shift rule.\n");
                 }
                 break;
             case ParseAction::REDUCE:
@@ -432,7 +432,7 @@ bool LRParser::test(std::istream &stream) {
                 break;
             case ParseAction::SUCCESS:
                 display(LOG, INFO, "Success");
-                stepPrintf("# Success\n");
+                stepPrintf("# Success.\n");
                 return true;
             }
 
@@ -471,7 +471,7 @@ void LRParser::reduce(ProductionID prodID) {
     }
     InputQueue.push_front(prod.leftSymbol);
     stepPrintf("input_queue.appendleft(%d)\n", prod.leftSymbol);
-    stepPrintf("# Apply reduce rule: %d\n", prodID);
+    stepPrintf("# Apply reduce rule: %d.\n", prodID);
 }
 
 } // namespace gram

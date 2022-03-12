@@ -10,43 +10,10 @@ const int N_STATES = 2048;
 
 void stepPrepare(int nsym, int nprod) {
   fprintf(stepFile, 1 + R"(
+#!nsym=%d,nprod=%d
+
 from collections import deque
-)");
-//     fprintf(stepFile, 1 + R"(
-// import json
-// from collections import deque
-
-// class Symbol:
-//   def __init__(self, name: str, is_term: bool, is_start: bool):
-//     self.name = name
-//     self.is_term = is_term
-//     self.is_start = is_start
-//     self.productions = []
-//     self.nullable = None
-//     self.first = set()
-//     self.follow = set()
-
-// class Production:
-//   def __init__(self, head: int, body: list):
-//     self.head = head
-//     self.body = body
-
-// class Encoder(json.JSONEncoder):
-//    def default(self, obj):
-//       if isinstance(obj, set):
-//         return list(obj)
-//       if isinstance(obj, (Symbol, Production)):
-//         return obj.__dict__
-//       return json.JSONEncoder.default(self, obj)
-
-// def to_json(obj):
-//   return json.dumps(obj, cls=Encoder, sort_keys=False, indent=4)
-
-// symbol = [None for _ in range(0, %d)]
-// production = [{} for _ in range(0, %d)]
-// table = [[set() for _ in range(0, %d)] for _ in range(0, %d)]
-
-// )", nsym, nprod, nsym, N_STATES);
+)", nsym, nprod);
 }
 
 void stepFinish() {

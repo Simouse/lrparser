@@ -35,7 +35,6 @@ using SymbolID = ActionID;
 // 2. Global accessible functions
 void display(DisplayType type, DisplayLogLevel level, const char *description,
              void const *pointer = nullptr, void const *auxPointer = nullptr);
-// void stepcode(const char *fmt, ...);
 void lrInit();
 void lrCleanUp();
 double upTimeInMilli();
