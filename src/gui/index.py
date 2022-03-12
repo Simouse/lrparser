@@ -33,12 +33,12 @@ class LRWindow(QtWidgets.QTabWidget):
         self.setMovable(False)
         self.setWindowTitle('LR Parser')
         self.resize(800, 600)
-        self._tab_classes = [AttributeTab, GrammarEditorTab, LRParseTab]
-        self._tab_titles = ['Attributes', 'Grammar Editor', "Parsing"]
+        self._tab_classes = [GrammarEditorTab, AttributeTab, LRParseTab]
+        self._tab_titles = ['Grammar Editor', 'Attributes', 'Parsing']
         self._tab_count = 0
 
         opts = LRParserOptions(tempfile.mkdtemp(), './build/lrparser.exe',
-                               'grammar.txt')
+                               None)
         self._opts = opts
         
         self.nextButtonPressed(-1);
@@ -46,6 +46,7 @@ class LRWindow(QtWidgets.QTabWidget):
         # if __debug__:
         #     self.nextButtonPressed(0)
 
+    # Called by subviews.
     def nextButtonPressed(self, tabIndex):
         # print('Next button pressed in tab {}'.format(tabIndex))
         nextTab = tabIndex + 1
@@ -84,13 +85,6 @@ class MainWindow(QtWidgets.QMainWindow):
         window = LRWindow()
         window.show()
         self._prevent_gc.append(window)
-
-    # def contextMenuEvent(self, e):
-    #     context = QtWidgets.QMenu(self)
-    #     context.addAction(QtWidgets.QAction("test 1", self))
-    #     context.addAction(QtWidgets.QAction("test 2", self))
-    #     context.addAction(QtWidgets.QAction("test 3", self))
-    #     context.exec_(e.globalPos())
 
 
 if __name__ == "__main__":

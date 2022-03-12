@@ -1,57 +1,36 @@
-# This is a comment
-# You can use '!' just like "//" in C99 and C++.
+% exp   -> term exp1
+% exp1  -> '+' term exp1 | \epsilon    
+% term  -> fac term1
+% term1 -> '*' fac term1 | \epsilon
+% fac   -> '(' exp ')'   | ID
 
-# '#' style comment is also supported. (Doing so will allow
-# you to use the comment function provided by your editor when
-# you associate this text file with bash mode. You can temporarily
-# comment some grammar rules and later uncomment them easily
-# in this way.)
+% exp   -> exp '+' term  | term
+% term  -> term '*' fac
+%        | fac
+% fac   -> ID
+% fac   -> "(" exp ')'
 
-# But "//" and "/**/" are not supported
+% exp   -> exp + term  | term
+% term  -> term * fac
+%        | fac
+% fac   -> ID
+% fac   -> ( exp )
 
-# Escape sequences are not supported, which means you
-# cannot use "'" and '"' together. To use one of them,
-# you need to use the other as the quote sign.
+a -> \e
 
-# \epsilon \e _e are reserved as aliases for epsilon. You may need to use
-# it in your productions.
+% S ->	id | V assign E
+% V ->	id
+% E ->	V | num
 
-# "$" is reserved for end-of-input, so do not use it in your productions.
+% This is LR(1) but not SLR
+% S -> A a | b A c | d c | b d a
+% A -> d
 
+% S -> C C
+% C -> c C | d
 
-# TERM :{ID, PLUS, TIMES, "(", ')', '+', '*'}
-# START: exp
-# exp   -> term exp1
-# exp1  -> '+' term exp1 | \epsilon     # Yet another comment
-# term  -> fac term1
-# term1 -> '*' fac term1 | \epsilon
-# fac   -> '(' exp ')'   | ID
-
-# TERM :{ID, "(", ')', '+', '*'}
-exp   -> exp '+' term  | term
-term  -> term '*' fac
-       | fac
-fac   -> ID
-fac   -> "(" exp ')'
-
-# TERM: {num, id, assign}
-# S ->	id
-# |	    V assign E
-# V ->	id
-# E ->	V
-# |	    num
-
-# This is LR(1) but not SLR
-# TERM: {a, b, c, d}
-# START: S
-# S -> A a | b A c | d c | b d a
-# A -> d
-
-# S -> C C
-# C -> c C | d
-
-#  S	->	L '=' R
-#  S	->	R
-#  L	->	'*' R
-#  L	->	id
-#  R	->	L
+%  S	->	L '=' R
+%  S	->	R
+%  L	->	'*' R
+%  L	->	id
+%  R	->	L

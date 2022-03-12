@@ -129,6 +129,10 @@ std::string Grammar::dump() const {
             s += ' ';
             s += vec[sym].name;
         }
+        if (table[i].rightSymbols.empty()) {
+            s += ' ';
+            s += Constants::epsilon;
+        }
         stepProduction(i, table[i].leftSymbol,
                        (const int *)table[i].rightSymbols.data(),
                        table[i].rightSymbols.size());

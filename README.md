@@ -4,16 +4,16 @@ This is a grammar parser which can read grammar files in our format, analyze att
 
 ## Output
 
-For grammar:
+For grammar (stored in `grammar.txt`):
 
 ```txt
-exp   -> exp '+' term  | term
-term  -> term '*' fac  | fac
+exp   -> exp + term  | term
+term  -> term * fac  | fac
 fac   -> ID
-fac   -> "(" exp ')'
+fac   -> ( exp )
 ```
 
-and input:
+and input (stored in `input.txt`):
 
 ```txt
 ID * ID * ( ID + ID ) + ID $
@@ -126,87 +126,74 @@ SLR DFA:
 
 ![](res/build_dfa.2.svg)
 
-## Grammar format
-
-Basic rules are as follows.
-
-1. Comments using `!`, `%`or `#` are supported. Those characters behave like `#` in Python.
-
-   e.g.
-
-   ```txt
-   # This is a comment
-   ! This is another comment
-   exp -> term '+' exp1 % Yet another comment
-   ```
-
-2. `\epsilon`, `\e`, `_e` are reserved as aliases for epsilon.
-
-3. `$` is reserved as end-of-input token.
-
-4. **All C-language valid variable names are designed to be valid in this grammar**.
-
-5. `'TOKEN'` and `"TOKEN"` can be used if `TOKEN` contains characters other than those allowed in C-language. e.g. `'"'` means `"` character, and `"'"` means `'` character. But nested quotes are not supported and spaces cannot appear in symbol names. 
-
-6. You can use `\` to start a name. e.g. `\2345` and `\oops` are valid. Do not reply on this feature, because it's originally designed to support epsilon.
-
-7. Define tokens as follows.
-
-   ```txt
-   TERM :{ID, '(', ')', '+', '*'}
-   ```
-
-   This can be used if you want to control the index order of tokens. You need to pass flag `--disable-auto-define` to make it happen. In most cases, you can just define productions directly.
-
-8. Define productions as follows.
-
-   ```txt
-   exp   -> exp '+' term  | term
-   term  -> term '*' fac
-          | fac
-   fac   -> ID
-   fac   -> "(" exp ')'
-   ```
-
-   Definitions of `exp`, `term` and `fac` are in 3 different forms. You can define productions of the same symbol in one line. You can also append productions of the previous symbol by using another production definition like how I define productions of `fac`.
-
-   There is no need to define non-terminals. Symbols in the left-hand side of productions are defined as non-terminals automatically.
-
-It's sad that we cannot use grammars in Bison format here. It's because Bison has a semicolon after each definition, while we just start a new line. If you want to edit a grammar file in Bison format to adapt our grammar format, you can:
-
-   1. Remove semicolons. (You do not have to remove token definitions, because we've made `%` a comment-starting token.)
-   2. Make sure all symbols in the same production body stay in the same line.
-   3. Pass argument `--body-start=":"` when launching the program. This argument makes the tool search for `:` instead of `->`. (Similarly, if you have production whose format is like `A ::= B a`, you can use `--body-start="::="`.)
-   4. Move at least one production of the start token to the beginning of the rules.
-   5. Remove comments and code blocks (syntax-directed translation is not supported by this tool).
-   6. Replace epsilons with `\e`.
-
 ## Usage
 
 ```txt
-lrparser [[-h|--help]|[-t<Type>] [-g<Grammar file>] [-o<Result Dir>]] <FLAGS>
+This program reads a possibly LR grammar from <Grammar file>, takes test
+sequence from standard input stream, and stores analysis results into
+<Result Dir>.
+
+Usage: lrparser -h|--help
+       lrparser [-t<Type>] [-g<Grammar file>] [-o<Result Dir>]] <FLAGS>
 
 Possible command: lrparser -tslr -g grammar.txt -o results
 
+Grammar file:
+  1) Use % to start a line comment.
+  2) \e, _e, and \epsilon are reserved for epsilon.
+  3) You shouldn't use token $ in grammar file.
+  4) Define productions as the following example shows. All symbols at the left
+     hand side of productions are automatically defined as non-terminals. The
+     first non-terminal symbol is defined as the start symbol. While symbols in
+     the same production body should be kept in the same line, multiple bodies
+     can be written in consecutive lines or be separated in different
+     productions (as the definition of "fac" shows below).
+
+     exp   -> exp + term  | term
+     term  -> term * fac
+            | fac
+     fac   -> ID
+     fac   -> ( exp )
+
+  5) Strict mode: In this mode, token naming is based on C-style variable
+     naming. Besides, \ can appear at the first character of token, and quoted
+     symbols are supported. " and ' can be used to quote a symbol, e.g. '+'. "'"
+     and '"' are okay, but you may not use them both in one symbol. Spaces in a
+     quoted string are not allowed. This mode can be turned on using argument
+     `--strict`. In most cases, this mode is not necessary.
+
 Options:
--t        : Choose a parser type. Available: lr0, slr, lalr, lr1. (Default: slr)
--o        : Specify output directory. (Default: "results").
--g        : Specify grammar file path. (Default: "grammar.txt")
--h|--help : Output help message and then exit.
+  -t        : Choose a parser type. Available: lr0, slr (default), lalr, lr1.
+  -o        : Specify output directory. (Default: ".").
+  -g        : Specify grammar file path. (Default: "grammar.txt")
+  -h|--help : Output help message and then exit.
 
 Flags:
---no-test : Just generate automatons and parse table. Do not test an input sequence. Program will finish as soon as the table is generated.    
---no-pda  : Do not print automaton in results directory.
---no-pda-label:
-    Only show index of each node in dumping results.
---body-start=<String>:
-    Define the start of a production as the given <String>. The default is "->", but you may want "::=" or ":" if your grammar is written that 
-way.
---strict  : Input token names must conform to rules of grammar file. Without this flag, they are simply space-splitted.
---debug   : Set output level to DEBUG.
---step    : Read <stdin> step by step. If you have to process a very large input file, you may need this flag. But without this flag the parser can provide better display for input queue.
---disable-auto-define: All terminals must be defined before being used.
+--no-test : Just generate automatons and parse table. Do not test an input
+            sequence. Program will finish as soon as the table is generated.
+--no-label: Only show index of each node in dumping results.
+--sep=str : Define the start of a production as the given <str>. The default
+            is "->", but you may want "::=" or ":" if your grammar is written
+            that way. This might be helpful if you are comparing several
+            different grammar parsing tools.
+--strict  : This option applies to both the grammar and input sequence. See
+            grammar introduction above.
+--debug   : Set output level to DEBUG. Not helpful if you are not developing.
+--step    : Read <stdin> step by step. If you have to process a very large input
+            file, you may need this flag. But without this flag the parser can
+            provide better display for input queue (by read all input into
+            memory).
 ```
+
+The grammar is not compatible with Bison's. It's because Bison has a semicolon after each definition, while we just start a new line. If you want to edit a grammar file in Bison format to adapt our grammar format, you can:
+
+   1. Remove semicolons. (You do not have to remove token definitions, because we've made `%` a comment-starting token.)
+   2. Make sure all symbols in the same production body stay in the same line.
+   3. Pass argument `--sep=":"` when launching the program. This argument makes the tool search for `:` instead of `->`. (Similarly, if you have production whose format is like `A ::= B a`, you can use `--sep="::="`.)
+   4. Move at least one production of the start token to the beginning of the rules.
+   5. Remove comments and code blocks (syntax-directed translation is not supported by this tool).
+   6. Replace epsilons with `\e`.
+   7. Pass argument `--strict` to enable limited quoting support.
 
 ## Build
 
@@ -234,7 +221,7 @@ I found some resources really helpful in my learning. I compared my results with
 
 ### How to show `ε` correctly in console?
 
-On Windows, you should change code page to 65001 to enable UTF-8. If you use VS Code, a plain `chcp 65001` does not seem to work. You could either modify system registry table (**NOT recommended**) or use console profiles.
+On Windows, you can use `chcp 65001` to enable UTF-8 in cmd.exe, and use `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` when in PowerShell.
 
 ### `#include <vcruntime.h>` causes compilation error.
 
@@ -243,10 +230,6 @@ Just remove those lines. My editor added those for me, but they are not needed. 
 ### Why is the grammar format and command line arguments so strange?
 
 Well, one of my team projects needs this program and I have to provide support for it. For example, that project uses `!` as a divider between token definitions and production definitions, and I think that's unnecessary. So I just make `!` another comment sign. But `#` is more useful, because in editors you can associate your grammar file with `cmake` language, and then use `CTRL+/ `to comment lines. So the tool recognizes `#` as well. 
-
-### No use of Bison?
-
-At first, I thought I was writing (, not using) a LR parsing program, so I shouldn't use bison. But later I found the grammar rule parsing so difficult and tiring. I used a lot of branches, making my code really messy. So if I were to choose again, I definitely would use Bison in that part.
 
 ### For large inputs
 

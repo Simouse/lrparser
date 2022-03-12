@@ -1,3 +1,4 @@
+import tempfile
 from model import *
 import sys
 import os
@@ -56,7 +57,7 @@ class CenterDelegate(QtWidgets.QStyledItemDelegate):
         super().__init__()
         self._item_font = QtGui.QFont()
         self._item_font.setPointSize(14)
-    
+
     def createEditor(self, parent, option, index):
         editor = QtWidgets.QStyledItemDelegate.createEditor(
             self, parent, option, index)
@@ -67,7 +68,7 @@ class CenterDelegate(QtWidgets.QStyledItemDelegate):
 class EditorTable(QtWidgets.QWidget):
     def __init__(self) -> None:
         super().__init__()
-        
+
         table = QtWidgets.QTableView()
         editorData = [['', '', ''], ['', '', ''], ['', '', '']]
         model = ProductionEditorModel(editorData)
@@ -79,8 +80,8 @@ class EditorTable(QtWidgets.QWidget):
         table.setHorizontalHeader(header)
         table.setItemDelegate(CenterDelegate())
         self.editorData = editorData
-        self.model = model
-        self.table = table
+        self._model = model
+        self._table = table
 
         tableButtons = QtWidgets.QVBoxLayout()
         button = QtWidgets.QPushButton('+')
@@ -94,7 +95,7 @@ class EditorTable(QtWidgets.QWidget):
         tableButtons.addWidget(button)
         button = QtWidgets.QPushButton('-')
         button.setToolTip('Remove selected rows')
-        
+
         button.clicked.connect(self.removeButtonClicked)
         font = button.font()
         font.setPointSize(14)
@@ -111,17 +112,17 @@ class EditorTable(QtWidgets.QWidget):
         self.setLayout(tableLayout)
 
     def removeButtonClicked(self):
-        rows = set(index.row() for index in self.table.selectedIndexes())
+        rows = set(index.row() for index in self._table.selectedIndexes())
         rows = sorted(rows, reverse=True)
         for row in rows:
             self.editorData.pop(row)
-        self.model.layoutChanged.emit()
-        self.table.clearSelection()
+        self._model.layoutChanged.emit()
+        self._table.clearSelection()
 
     def addButtonClicked(self):
         # row = len(self.editorData)
         self.editorData.append(['', '', ''])
-        self.model.layoutChanged.emit()
+        self._model.layoutChanged.emit()
 
 
 def isspace(s):
@@ -144,7 +145,7 @@ def gformat(data): # Returns a string
     return (s, None)
 
 class GrammarEditorTab(QtWidgets.QWidget):
-    def __init__(self, opts, lrwindow) -> None:
+    def __init__(self, opts: LRParserOptions, lrwindow) -> None:
         super().__init__()
         self._opts = opts
         self._lrwindow = lrwindow
@@ -158,13 +159,14 @@ class GrammarEditorTab(QtWidgets.QWidget):
         button = QtWidgets.QPushButton('Start')
         button.setCheckable(False)
         button.clicked.connect(self.startButtonClicked)
+        button.setFixedWidth(100)
         buttonLayout.addStretch(1)
         buttonLayout.addWidget(button)
         buttonLayout.addStretch(1)
 
         info = QtWidgets.QLabel()
         info.setText(
-            'Enter productions in the above table. \nAll consecutive symbols should be separated by whitespaces.'
+            "Enter productions in the above table. \nAll consecutive symbols should be separated by whitespaces."
         )
         font = info.font()
         font.setPointSize(12)
@@ -182,8 +184,18 @@ class GrammarEditorTab(QtWidgets.QWidget):
     def startButtonClicked(self):
         data = self.table.editorData
         s, err = gformat(data)
-        if not err:
+        if not err and not isspace(s):
+            print('Grammar rules:')
             print(s, end='')
-        else:
+            if '_temp_file' not in self.__dict__:
+                self._temp_file = tempfile.NamedTemporaryFile(delete=False)
+            file = self._temp_file
+            file.truncate(0)
+            file.write(s.encode('utf-8'))
+            file.flush()
+            self._opts.grammarFile = file.name
+            self._lrwindow.nextButtonPressed(0)
+            # TODO: What if there is already a panel? Then editing the grammer
+            # would be of no use.
+        elif err:
             print('Error:', err)
-

@@ -68,10 +68,13 @@ class ProductionTableModel(QtCore.QAbstractTableModel):
                 value = l
 
             s = ''
-            for i in range(0, len(value)):
-                if i > 0:
-                    s += ' '
-                s += self._symvec[value[i]].name
+            if len(value) == 0:
+                s += 'ε'
+            else:
+                for i in range(0, len(value)):
+                    if i > 0:
+                        s += ' '
+                    s += self._symvec[value[i]].name
             return s
 
         if role == Qt.TextAlignmentRole:
@@ -127,9 +130,6 @@ class SymbolTable(QtWidgets.QWidget):
 
     def refresh(self):
         self._model.layoutChanged.emit()
-        # self.setModel(SymbolTableModel(self._data))
-        # self.resizeColumnsToContents()
-        # self.resizeRowsToContents()
 
 
 class ProductionTable(QtWidgets.QWidget):
@@ -166,9 +166,6 @@ class ProductionTable(QtWidgets.QWidget):
         self.refresh()
 
     def refresh(self):
-        # self.setModel(ProductionTableModel(*self._data))
-        # self.resizeColumnsToContents()
-        # self.resizeRowsToContents()
         self._model.layoutChanged.emit()
 
 
@@ -181,10 +178,13 @@ class AttributeTab(QtWidgets.QWidget):
 
         # Get initial parser status
         cmd = ' '.join([
-            self.opt.exePath, "-o", self.opt.outDir, "-g",
-            self.opt.grammarFile, "--no-test"
+            self.opt.exePath, '-o', self.opt.outDir, '-g',
+            self.opt.grammarFile, '--no-test'
         ])
-        status = subprocess.call(cmd, timeout=2.0, stdout=subprocess.DEVNULL)
+        print(cmd)
+        # status = subprocess.call(cmd, timeout=2.0, stdout=subprocess.DEVNULL)
+        status = subprocess.call(cmd, timeout=2.0)
+
         if status != 0:
             raise Exception('Cannot launch LR parser')
         with open(os.path.join(opt.outDir, 'steps.py'),
