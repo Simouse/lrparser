@@ -41,13 +41,13 @@ auto Grammar::putSymbolNoDuplicate(Symbol &&sym) -> SymbolID {
         }
         // This item attempts to overwrite symbol type
         if (sym.type != SymbolType::UNCHECKED) {
-            if (!launchArgs.autoDefineTerminals && storedSym.type != sym.type) {
-                throw std::runtime_error(
-                    "Redefinition of previous symbol with different types");
-            } else if (launchArgs.autoDefineTerminals &&
-                       sym.type == SymbolType::NON_TERM) {
-                // If auto-define is enabled, a symbol can upgrade to
-                // non-terminal.
+            // if (!launchArgs.autoDefineTerminals && storedSym.type != sym.type) {
+            //     throw std::runtime_error(
+            //         "Redefinition of previous symbol with different types");
+            // } else 
+            // if (launchArgs.autoDefineTerminals && sym.type == SymbolType::NON_TERM) {
+            if (sym.type == SymbolType::NON_TERM) {
+                // A symbol can be upgraded to a non-terminal.
                 storedSym.type = SymbolType::NON_TERM;
             }
         }

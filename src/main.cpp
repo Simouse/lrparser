@@ -24,9 +24,9 @@ void printUsageAndExit(bool onError = true) {
     launchArgs.launchSuccess = false;
     if (onError) {
         fprintf(stderr, "Error: Illegal arguments.\n\n");
-        fprintf(stderr, help_message);
+        fprintf(stderr, "%s", help_message);
     } else {
-        fprintf(stdout, help_message);
+        fprintf(stdout, "%s", help_message);
     }
     exit(0);
 }
@@ -103,11 +103,7 @@ void lrParseArgs(int argc, char **argv) {
                     printUsageAndExit();
                 chooseParserType(argv[i]);
             }
-        }
-        // else if (strcmp("--nodot", argv[i]) == 0) {
-        //     launchArgs.nodot = true;
-        // }
-        else if (strcmp("--strict", argv[i]) == 0) {
+        } else if (strcmp("--strict", argv[i]) == 0) {
             launchArgs.strict = true;
         } else if (strcmp("--debug", argv[i]) == 0) {
             launchArgs.logLevel = DEBUG;
@@ -116,14 +112,12 @@ void lrParseArgs(int argc, char **argv) {
             printUsageAndExit(false);
         } else if (strcmp("--step", argv[i]) == 0) {
             launchArgs.exhaustInput = false;
-        } else if (strcmp("--disable-auto-define", argv[i]) == 0) {
-            launchArgs.autoDefineTerminals = false;
         } else if (strcmp("--no-test", argv[i]) == 0) {
             launchArgs.noTest = true;
-        } else if (strncmp("--body-start=", argv[i], 13) == 0) {
-            launchArgs.bodyStartString = argv[i] + 13;
-            // Check if all blank
-            auto const &s = launchArgs.bodyStartString;
+        } else if (strncmp("--sep=", argv[i], 13) == 0) {
+            launchArgs.sep = argv[i] + 13;
+            // Check if arg is space
+            auto const &s = launchArgs.sep;
             bool hasSpace = s.empty();
             for (char ch : s) {
                 if (std::isspace(ch)) {
@@ -132,13 +126,11 @@ void lrParseArgs(int argc, char **argv) {
                 }
             }
             if (hasSpace) {
-                fprintf(stderr, "Error: Argument \"--body-start=\" does not "
+                fprintf(stderr, "Error: Argument \"--sep=\" does not "
                                 "have a valid value.\n");
                 printUsageAndExit();
             }
-        } else if (strcmp("--no-pda", argv[i]) == 0) {
-            launchArgs.noPDA = true;
-        } else if (strcmp("--no-pda-label", argv[i]) == 0) {
+        } else if (strcmp("--no-label", argv[i]) == 0) {
             launchArgs.noPDALabel = true;
         } else {
             printUsageAndExit();

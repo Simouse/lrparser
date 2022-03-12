@@ -59,15 +59,15 @@ struct LaunchArguments {
     bool nodot = false;
     bool strict = false;
     bool exhaustInput = true;
-    bool autoDefineTerminals = true;
+    // bool autoDefineTerminals = true;
     bool noTest = false;
-    bool noPDA = false;
+    // bool noPDA = false;
     bool noPDALabel = false;
     ParserType parserType = SLR;
     DisplayLogLevel logLevel = VERBOSE;
     std::string grammarFileName = "grammar.txt";
     std::string resultsDir = ".";
-    std::string bodyStartString = "->";
+    std::string sep = "->";
 };
 
 extern LaunchArguments launchArgs;

@@ -30,23 +30,6 @@ Grammar GrammarReader::parse(istream &stream) {
 
 void GrammarReader::parse(Grammar &g) try {
     std::string s;
-
-    // Start T definition
-    if (!launchArgs.autoDefineTerminals) {
-        expectOrThrow("TERM");
-        expectOrThrow(":");
-        expectOrThrow("{");
-
-        while (getToken(s)) {
-            g.putSymbol(s.c_str(), true);
-            if (!expect(','))
-                break;
-        }
-
-        expectOrThrow("}");
-    }
-
-    // Start N definition
     bool startFound = false;
 
     while (getToken(s)) { // Has more rules
@@ -57,7 +40,7 @@ void GrammarReader::parse(Grammar &g) try {
         }
 
         // Default: "->"
-        expectOrThrow(launchArgs.bodyStartString.c_str());
+        expectOrThrow(launchArgs.sep.c_str());
         do {
             std::vector<SymbolID> productionBody;
             bool hasEpsilon = false;
@@ -65,15 +48,12 @@ void GrammarReader::parse(Grammar &g) try {
                  getToken(s, multiline);
                  multiline = 0, lastline = this->linenum) {
 
-                // Have a empty line. Consider it as the end of this production.
+                // Have an empty line. The production has ended.
                 if (!multiline && (lastline + 1 < this->linenum)) {
                     break;
                 }
 
-                // put symbol and delay checking if auto-define is not enabled
-                auto symid = launchArgs.autoDefineTerminals
-                                 ? g.putSymbol(s.c_str(), true)
-                                 : g.putSymbolUnchecked(s.c_str());
+                auto symid = g.putSymbol(s.c_str(), true);
                 productionBody.push_back(symid);
                 if (symid == g.getEpsilonSymbol().id) {
                     hasEpsilon = true;
@@ -137,7 +117,8 @@ auto GrammarReader::getLineAndCount(istream &is, std::string &s) -> bool {
     return false;
 }
 
-static bool isCommentStart(char ch) { return ch == '!' || ch == '#' || ch == '%'; }
+// static bool isCommentStart(char ch) { return ch == '!' || ch == '#' || ch == '%'; }
+static bool isCommentStart(char ch) { return ch == '%'; }
 
 // Make sure *p is non-space
 // This is the only method to use `stream` directly, expect for
@@ -250,62 +231,67 @@ auto GrammarReader::getToken(std::string &s, bool newlineAutoFetch) -> bool {
         return false;
     }
 
-    // Check the first character
-    // There are 4 cases: backslash quote digit(invalid) _alpha
-    if (std::isdigit(*p)) {
-        throw std::runtime_error(
-            "getToken(): The first character of a token cannot be a digit");
-    }
-
-    if (*p == '\'' || *p == '\"') {
-        char quoteChar = *p; // Quote
-        const char *cur = p + 1;
-        for (; *cur && *cur != quoteChar; ++cur) {
-            continue;
-        }
-
-        // Change pos so error report is more precise.
-        pos = cur;
-        if (*cur != quoteChar) {
+    if (launchArgs.strict) {
+        // Check the first character
+        // There are 4 cases: backslash quote digit(invalid) _alpha
+        if (std::isdigit(*p)) {
             throw std::runtime_error(
-                f.formatView("getToken(): Cannot find matching quote pair %c",
-                             quoteChar)
-                    .data());
+                "getToken(): The first character of a token cannot be a digit");
         }
 
-        // [p, pos] ===> [" ... "]
-        // Advance pos so we don't get overlapped scanning results
-        s.append(p + 1, pos++);
-
-        for (char ch : s) {
-            if (std::isspace(ch)) {
-                throw std::runtime_error(
-                    "getToken(): token cannot contain spaces");
+        if (*p == '\'' || *p == '\"') {
+            char quoteChar = *p; // Quote
+            const char *cur = p + 1;
+            for (; *cur && *cur != quoteChar; ++cur) {
+                continue;
             }
+
+            // Change pos so error report is more precise.
+            pos = cur;
+            if (*cur != quoteChar) {
+                auto err = f.formatView(
+                    "getToken(): Cannot find matching quote pair %c",
+                    quoteChar);
+                throw std::runtime_error(err.data());
+            }
+
+            // [p, pos] ===> [" ... "]
+            // Advance pos so we don't get overlapped scanning results
+            s.append(p + 1, pos++);
+
+            for (char ch : s) {
+                if (std::isspace(ch)) {
+                    throw std::runtime_error(
+                        "getToken(): token cannot contain spaces");
+                }
+            }
+
+            tokenLineNo[s] = linenum;
+            return true;
         }
 
-        tokenLineNo[s] = linenum;
-        return true;
+        // Allow `\` at the beginning so escaping sequences can work.
+        if (*p == '\\')
+            s += *p++;
+
+        for (; *p && (std::isalnum(*p) || *p == '_'); ++p) {
+            s += *p;
+        }
+
+    } else {
+        while (*p && !isspace(*p) && *p != '|' && !isCommentStart(*p)) {
+            s += *p++;
+        }
     }
 
-    // Allow `\` at the beginning so escaping sequences can work.
-    if (*p == '\\')
-        s += *p++;
-
-    for (; *p && (std::isalnum(*p) || *p == '_'); ++p) {
-        s += *p;
-    }
-
-    // Even if s is empty, we may have skipped some spaces,
-    // which saves time for later work
+    // Even if s is empty, we may have skipped some spaces, which will save 
+    // time for later work.
     pos = p;
 
     if (!s.empty()) {
         tokenLineNo[s] = linenum;
         return true;
     }
-
-    // display(LOG, DEBUG, f.formatView("getToken() stops here: %s", pos).data());
 
     return false;
 }
@@ -316,8 +302,5 @@ auto GrammarReader::ungetToken(const std::string &s) -> void {
     }
     token = s;
 }
-// void GrammarReader::setGetTokenVerbose(bool flag) {
-//   getTokenVerboseFlag = flag;
-// }
 
 } // namespace gram

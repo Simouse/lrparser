@@ -207,8 +207,8 @@ static void handleAutomaton(const char *description, DisplayLogLevel logLevel,
     util::Formatter f;
     handleLog(description, logLevel);
 
-    if (launchArgs.noPDA)
-        return;
+    // if (launchArgs.noPDA)
+    //     return;
 
     fs::path gvFilePath = launchArgs.resultsDir;
     gvFilePath /= f.formatView("%s.%d.gv", prefix, ++automatonCounter);
