@@ -1,6 +1,4 @@
 # Tested on Python 3.7
-from tabs.grammar import *
-from model import *
 import json
 import sys
 import os
@@ -11,10 +9,11 @@ from PySide6.QtCore import Qt
 import tempfile
 import signal
 from tabs.attribute import *
+from tabs.grammar import *
+from model import *
 
 # For faster debugging
 signal.signal(signal.SIGINT, signal.SIG_DFL)
-
 
 class LRParseTab(QtWidgets.QWidget):
     def __init__(self, tag, opts, lrwindow) -> None:

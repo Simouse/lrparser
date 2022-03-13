@@ -71,10 +71,10 @@ OutIter escape_ascii(std::string const& s, OutIter out, char quote) {
 }
 
 void stepPrepare(int nsym, int nprod) {
-  fprintf(stepFile, 1 + R"(
-#!nsym=%d,nprod=%d
+//   fprintf(stepFile, 1 + R"(
+// #!nsym=%d,nprod=%d
 
-)", nsym, nprod);
+// )", nsym, nprod);
 }
 
 void stepFinish() {

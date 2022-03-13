@@ -195,16 +195,16 @@ class AttributeTab(QtWidgets.QWidget):
         self._exec_line = 0
         print('Output written to temporary directory', opts.outDir, sep=' ')
 
-        result = re.match('#!nsym=(\d+),nprod=(\d+)', self._exec_content[0])
-        if result:
-            nsym = int(result.group(1))
-            nprod = int(result.group(2))
-            self._exec_line += 1
-        else:
-            print('Error: cannot get arguments: [nsym, nprod]')
-            sys.exit(1)
+        # result = re.match('#!nsym=(\d+),nprod=(\d+)', self._exec_content[0])
+        # if result:
+        #     nsym = int(result.group(1))
+        #     nprod = int(result.group(2))
+        #     self._exec_line += 1
+        # else:
+        #     print('Error: cannot get arguments: [nsym, nprod]')
+        #     sys.exit(1)
 
-        env = createExecEnv(nsym, nprod, 2048)
+        env = newEnv()
         self._opts.env = env
         self.productionTable = ProductionTable(env['symbol'],
                                                env['production'])

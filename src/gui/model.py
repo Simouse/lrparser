@@ -1,6 +1,7 @@
 from PySide6 import QtCore, QtWidgets, QtGui
 from PySide6.QtCore import Qt
 from collections import deque
+import sys
 
 class Symbol:
     def __init__(self, name: str, is_term: bool, is_start: bool):
@@ -24,12 +25,30 @@ class Production:
     def new():
         return Production(None, None)
 
+class GrowingList(list):
+    def __init__(self, factory, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._factory = factory
 
-def createExecEnv(nsym: int, nprod: int, maxstate: int):
+    def __setitem__(self, index, value):
+        if index >= len(self):
+            self.extend([self._factory() for _ in range(0, index + 1 - len(self))])
+        list.__setitem__(self, index, value)
+
+    def __getitem__(self, index):
+        if index >= len(self):
+            self.extend([self._factory() for _ in range(0, index + 1 - len(self))])
+        return list.__getitem__(self, index)
+
+
+def newEnv():
+    symbol = GrowingList(Symbol.new)
+    production = GrowingList(Production.new)
+    table = GrowingList(lambda: GrowingList(lambda: set()))
     return {
-        'symbol': [Symbol.new() for _ in range(0, nsym)],
-        'production': [Production.new() for _ in range(0, nprod)],
-        'table': [[set() for _ in range(0, 10)] for _ in range(0, maxstate)],
+        'symbol': symbol,
+        'production': production,
+        'table': table,
         'state_stack': deque(),
         'symbol_stack': deque(),
         'input_queue': deque(),
