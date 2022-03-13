@@ -52,6 +52,7 @@ class ProductionEditorModel(QtCore.QAbstractTableModel):
             self._data[index.row()][index.column()] = value
             return True
 
+
 class CenterDelegate(QtWidgets.QStyledItemDelegate):
     def __init__(self) -> None:
         super().__init__()
@@ -64,6 +65,7 @@ class CenterDelegate(QtWidgets.QStyledItemDelegate):
         editor.setAlignment(Qt.AlignCenter)
         editor.setFont(self._item_font)
         return editor
+
 
 class EditorTable(QtWidgets.QWidget):
     def __init__(self) -> None:
@@ -128,9 +130,13 @@ class EditorTable(QtWidgets.QWidget):
 def isspace(s):
     return s.isspace() or len(s) == 0
 
-def gformat(data): # Returns a string
+
+# Returns (result: str, err: str).
+# TODO: detect reserved words.
+def gformat(data):
     if not isinstance(data, list):
         raise Exception('data is not an instance of list')
+    vio = ''
     s = ''
     for i, entry in enumerate(data):
         noHead = isspace(entry[0])
@@ -139,14 +145,29 @@ def gformat(data): # Returns a string
             err = 'Line {} is incorrect because no head is given'.format(i)
             return ('', err)
         elif not noHead and noBody:
+            vio += '{} -> \n'.format(entry[0])
             s += '{} -> _e\n'.format(entry[0])
         elif not noHead:
+            vio += '{} -> {}\n'.format(entry[0], entry[2])
             s += '{} -> {}\n'.format(entry[0], entry[2])
-    return (s, None)
+
+    violations = set()
+    for sub in ['\\e', '$', '_e', '\\epsilon', '|', '%']:
+        if sub in vio:
+            violations.add(sub)
+
+    if len(violations) == 0:
+        return (s, None)
+    else:
+        return ('', 'Please remove those keywords for the parser to work:\n{}'.
+                format(', '.join(violations)))
+
 
 class GrammarEditorTab(QtWidgets.QWidget):
-    def __init__(self, opts: LRParserOptions, lrwindow) -> None:
+    def __init__(self, tag, opts: LRParserOptions, lrwindow) -> None:
         super().__init__()
+
+        self._tag = tag
         self._opts = opts
         self._lrwindow = lrwindow
 
@@ -184,18 +205,54 @@ class GrammarEditorTab(QtWidgets.QWidget):
     def startButtonClicked(self):
         data = self.table.editorData
         s, err = gformat(data)
-        if not err and not isspace(s):
-            print('Grammar rules:')
-            print(s, end='')
-            if '_temp_file' not in self.__dict__:
-                self._temp_file = tempfile.NamedTemporaryFile(delete=False)
-            file = self._temp_file
-            file.truncate(0)
-            file.write(s.encode('utf-8'))
-            file.flush()
-            self._opts.grammarFile = file.name
-            self._lrwindow.nextButtonPressed(0)
-            # TODO: What if there is already a panel? Then editing the grammer
-            # would be of no use.
-        elif err:
+        if not err:
+            if isspace(s):
+                self.showTextDialog('Please provide at least one production.')
+            else:
+                print('Grammar rules:')
+                print(s, end='')
+                if '_temp_file' not in self.__dict__:
+                    self._temp_file = tempfile.NamedTemporaryFile(delete=False)
+                file = self._temp_file
+                file.truncate(0)
+                file.write(s.encode('utf-8'))
+                file.flush()
+                self._opts.grammarFile = file.name
+                self._lrwindow.requestNext(self._tag)
+        else:
             print('Error:', err)
+            self.showTextDialog('{}.'.format(err))
+
+    def showTextDialog(self, text):
+        dialog = QtWidgets.QDialog(self._lrwindow)
+
+        label = QtWidgets.QLabel()
+        label.setText(text)
+        # label.setAlignment(Qt.AlignCenter)
+
+        labelLayout = QtWidgets.QHBoxLayout()
+        labelLayout.addSpacing(16)
+        labelLayout.addWidget(label)
+        labelLayout.addSpacing(16)
+
+        button = QtWidgets.QPushButton('OK')
+        button.setCheckable(False)
+        button.clicked.connect(dialog.close)
+        button.setFixedWidth(100)
+
+        buttonLayout = QtWidgets.QHBoxLayout()
+        buttonLayout.addStretch(1)
+        buttonLayout.addWidget(button)
+        buttonLayout.addStretch(1)
+
+        layout = QtWidgets.QVBoxLayout()
+        layout.addSpacing(16)
+        layout.addLayout(labelLayout)
+        layout.addSpacing(16)
+        layout.addLayout(buttonLayout)
+        layout.addSpacing(16)
+
+        dialog.setLayout(layout)
+        dialog.setModal(True)
+        dialog.setWindowTitle('Dialog')
+        dialog.show()

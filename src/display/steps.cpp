@@ -1,5 +1,7 @@
-#include <cstdio>
 #include <stdarg.h>
+#include <string>
+#include <algorithm>
+#include <iostream>
 #include "src/display/steps.h"
 
 extern FILE *stepFile;
@@ -8,11 +10,70 @@ const char *bool_str[2] = {"False", "True"};
 
 const int N_STATES = 2048;
 
+template<class OutIter>
+OutIter escape_unicode(std::string const& s, OutIter out, char quote) {
+  if (quote)
+    *out++ = quote;
+
+  for (std::string::const_iterator i = s.begin(), end = s.end(); i != end; ++i) {
+    unsigned char c = *i;
+    if (' ' <= c && c <= '~' && c != '\\' && c != '"') {
+      *out++ = c;
+    } 
+    else {
+      *out++ = '\\';
+      switch(c) {
+      case '"':  *out++ = '"';  break;
+      case '\\': *out++ = '\\'; break;
+      case '\t': *out++ = 't';  break;
+      case '\r': *out++ = 'r';  break;
+      case '\n': *out++ = 'n';  break;
+      case '\'': *out++ = '\''; break;
+      default:
+        char const* const hexdig = "0123456789ABCDEF";
+        *out++ = 'x';
+        *out++ = hexdig[c >> 4];
+        *out++ = hexdig[c & 0xF];
+      }
+    }
+  }
+
+  if (quote)
+    *out++ = quote;
+
+  return out;
+}
+
+template<class OutIter>
+OutIter escape_ascii(std::string const& s, OutIter out, char quote) {
+  if (quote)
+    *out++ = quote;
+  for (std::string::const_iterator i = s.begin(), end = s.end(); i != end; ++i) {
+    unsigned char c = *i;
+    if (' ' <= c && c <= '~' && c != '\\' && c != '"') {
+      *out++ = c;
+    } 
+    else {
+      switch(c) {
+      case '"':  *out++ = '\\'; *out++ = '"';  break;
+      case '\\': *out++ = '\\'; *out++ = '\\'; break;
+      case '\t': *out++ = '\\'; *out++ = 't';  break;
+      case '\r': *out++ = '\\'; *out++ = 'r';  break;
+      case '\n': *out++ = '\\'; *out++ = 'n';  break;
+      case '\'': *out++ = '\\'; *out++ = '\''; break;
+      default:   *out++ = c;
+      }
+    }
+  }
+  if (quote)
+    *out++ = quote;
+  return out;
+}
+
 void stepPrepare(int nsym, int nprod) {
   fprintf(stepFile, 1 + R"(
 #!nsym=%d,nprod=%d
 
-from collections import deque
 )", nsym, nprod);
 }
 
@@ -24,21 +85,11 @@ void stepFinish() {
 }
 
 void stepSymbol(int id, const char *name, bool is_term, bool is_start) {
-    fprintf(stepFile, "symbol[%d].name='%s'\n", id, name);
+    std::string escaped_name;
+    escape_ascii(name, std::back_inserter(escaped_name), '\'');
+    fprintf(stepFile, "symbol[%d].name=%s\n", id, escaped_name.c_str());
     fprintf(stepFile, "symbol[%d].is_term=%s\n", id, bool_str[is_term]);
     fprintf(stepFile, "symbol[%d].is_start=%s\n", id, bool_str[is_start]);
-    // fprintf(stepFile, "symbol[%d]['productions']=[]\n", id);
-    // fprintf(stepFile, "symbol[%d] = { ", id);
-    // fprintf(stepFile, "'name' : '%s', ", name);
-    // fprintf(stepFile, "'is_term' : %s, ", bool_str[is_term]);
-    // fprintf(stepFile, "'is_start' : %s, ", bool_str[is_start]);
-    // fprintf(stepFile, "'productions' : [], ");
-    // fprintf(stepFile, "'first' : set(), ");
-    // fprintf(stepFile, "'follow' : set(), ");
-    // fprintf(stepFile, "'nullable' : None, ");
-    // fprintf(stepFile, "}\n");
-    // fprintf(stepFile, "symbol[%d] = Symbol('%s', %s, %s)\n", id, name,
-    //         bool_str[is_term], bool_str[is_start]);
 }
 
 void stepProduction(int id, int head, const int *body, size_t body_size) {
@@ -48,11 +99,6 @@ void stepProduction(int id, int head, const int *body, size_t body_size) {
       fprintf(stepFile, index ? ", %d" : "%d", body[index]);
     }
     fprintf(stepFile, "]\n");
-    // fprintf(stepFile, "production[%d] = Production(%d, [", id, head);
-    // for (size_t index = 0; index < body_size; ++index) {
-    //   fprintf(stepFile, index ? ", %d" : "%d", body[index]);
-    // }
-    // fprintf(stepFile, "])\n");
     fprintf(stepFile, "symbol[%d].productions.append(%d)\n", head, id);
     
 }

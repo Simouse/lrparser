@@ -15,8 +15,9 @@ from tabs.attribute import *
 # For faster debugging
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
+
 class LRParseTab(QtWidgets.QWidget):
-    def __init__(self, opts, lrwindow) -> None:
+    def __init__(self, tag, opts, lrwindow) -> None:
         super().__init__()
 
         layout = QtWidgets.QVBoxLayout()
@@ -26,7 +27,7 @@ class LRParseTab(QtWidgets.QWidget):
         self.setLayout(layout)
 
 
-class LRWindow(QtWidgets.QTabWidget):
+class ParserWindow(QtWidgets.QTabWidget):
     def __init__(self) -> None:
         super().__init__()
         self.setTabPosition(QtWidgets.QTabWidget.North)
@@ -40,28 +41,33 @@ class LRWindow(QtWidgets.QTabWidget):
         opts = LRParserOptions(tempfile.mkdtemp(), './build/lrparser.exe',
                                None)
         self._opts = opts
-        
-        self.nextButtonPressed(-1);
 
-        # if __debug__:
-        #     self.nextButtonPressed(0)
+        self.switchTabByIndex(0)
 
     # Called by subviews.
-    def nextButtonPressed(self, tabIndex):
-        # print('Next button pressed in tab {}'.format(tabIndex))
-        nextTab = tabIndex + 1
-        if nextTab < len(self._tab_classes):  # Valid tab index
-            if nextTab >= self._tab_count:  # Need to create this one
-                clazz = self._tab_classes[nextTab]
-                self.addTab(clazz(self._opts, self), self._tab_titles[nextTab])
+    def switchTabByIndex(self, index):
+        if index < len(self._tab_classes):  # Valid tab index
+            if index >= self._tab_count:  # Need to create this one
+                clazz = self._tab_classes[index]
+                self.addTab(clazz(self._tab_titles[index], self._opts, self),
+                            self._tab_titles[index])
                 self._tab_count += 1
-            self.setCurrentIndex(nextTab)
+            self.setCurrentIndex(index)
+
+    def requestNext(self, currentTag):
+        if currentTag in self._tab_titles:
+            index = self._tab_titles.index(currentTag)
+            self.switchTabByIndex(index + 1)
+        else:
+            raise Exception(
+                'This is a programming error. Check argument `currentTag`.')
 
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self._prevent_gc = []
+        self.setWindowTitle('Home')
 
         lrButton = QtWidgets.QPushButton('LR Parsing')
         lrButton.setCheckable(False)
@@ -82,9 +88,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(widget)
 
     def startLR(self):
-        window = LRWindow()
+        window = ParserWindow()
         window.show()
         self._prevent_gc.append(window)
+
+    def CloseEvent(self, event):
+        print("Close event: {}".format(event))
 
 
 if __name__ == "__main__":

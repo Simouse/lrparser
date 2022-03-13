@@ -141,8 +141,9 @@ Possible command: lrparser -tslr -g grammar.txt -o results
 Grammar file:
   1) Use % to start a line comment.
   2) \e, _e, and \epsilon are reserved for epsilon.
-  3) You shouldn't use token $ in grammar file.
-  4) Define productions as the following example shows. All symbols at the left
+  3) | is reserved for separating multiple bodies of a production.
+  4) You shouldn't use token $ in grammar file.
+  5) Define productions as the following example shows. All symbols at the left
      hand side of productions are automatically defined as non-terminals. The
      first non-terminal symbol is defined as the start symbol. While symbols in
      the same production body should be kept in the same line, multiple bodies
@@ -155,7 +156,7 @@ Grammar file:
      fac   -> ID
      fac   -> ( exp )
 
-  5) Strict mode: In this mode, token naming is based on C-style variable
+  6) Strict mode: In this mode, token naming is based on C-style variable
      naming. Besides, \ can appear at the first character of token, and quoted
      symbols are supported. " and ' can be used to quote a symbol, e.g. '+'. "'"
      and '"' are okay, but you may not use them both in one symbol. Spaces in a
@@ -226,10 +227,6 @@ On Windows, you can use `chcp 65001` to enable UTF-8 in cmd.exe, and use `[Conso
 ### `#include <vcruntime.h>` causes compilation error.
 
 Just remove those lines. My editor added those for me, but they are not needed. I often forget to delete those lines...
-
-### Why is the grammar format and command line arguments so strange?
-
-Well, one of my team projects needs this program and I have to provide support for it. For example, that project uses `!` as a divider between token definitions and production definitions, and I think that's unnecessary. So I just make `!` another comment sign. But `#` is more useful, because in editors you can associate your grammar file with `cmake` language, and then use `CTRL+/ `to comment lines. So the tool recognizes `#` as well. 
 
 ### For large inputs
 

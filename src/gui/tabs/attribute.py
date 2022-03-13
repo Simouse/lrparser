@@ -170,16 +170,17 @@ class ProductionTable(QtWidgets.QWidget):
 
 
 class AttributeTab(QtWidgets.QWidget):
-    def __init__(self, opt: LRParserOptions, lrwindow) -> None:
+    def __init__(self, tag, opts: LRParserOptions, lrwindow) -> None:
         super().__init__()
 
-        self.opt = opt
-        self.lrwindow = lrwindow
+        self._tag = tag
+        self._opts = opts
+        self._lrwindow = lrwindow
 
         # Get initial parser status
         cmd = ' '.join([
-            self.opt.exePath, '-o', self.opt.outDir, '-g',
-            self.opt.grammarFile, '--no-test'
+            self._opts.exePath, '-o', self._opts.outDir, '-g',
+            self._opts.grammarFile, '--no-test'
         ])
         print(cmd)
         # status = subprocess.call(cmd, timeout=2.0, stdout=subprocess.DEVNULL)
@@ -187,12 +188,12 @@ class AttributeTab(QtWidgets.QWidget):
 
         if status != 0:
             raise Exception('Cannot launch LR parser')
-        with open(os.path.join(opt.outDir, 'steps.py'),
+        with open(os.path.join(opts.outDir, 'steps.py'),
                   mode='r',
                   encoding='utf-8') as f:
             self._exec_content = f.read().split(sep='\n')
         self._exec_line = 0
-        print('Output written to temporary directory', opt.outDir, sep=' ')
+        print('Output written to temporary directory', opts.outDir, sep=' ')
 
         result = re.match('#!nsym=(\d+),nprod=(\d+)', self._exec_content[0])
         if result:
@@ -204,7 +205,7 @@ class AttributeTab(QtWidgets.QWidget):
             sys.exit(1)
 
         env = createExecEnv(nsym, nprod, 2048)
-        self.opt.env = env
+        self._opts.env = env
         self.productionTable = ProductionTable(env['symbol'],
                                                env['production'])
         self.symbolTable = SymbolTable(env['symbol'])
@@ -260,7 +261,7 @@ class AttributeTab(QtWidgets.QWidget):
         self.productionTable.refresh()
 
     def nextButtonClicked(self):
-        self.lrwindow.nextButtonPressed(0)
+        self._lrwindow.requestNext(self._tag)
 
     def finish(self):
         # print('Finish')
@@ -280,7 +281,7 @@ class AttributeTab(QtWidgets.QWidget):
             line += 1
         # print(s)
         try:
-            exec(s, self.opt.env)
+            exec(s, self._opts.env)
         except:
             print('Exception happens between line {} and line {}'.format(
                 self._exec_line, line))
@@ -332,7 +333,7 @@ class AttributeTab(QtWidgets.QWidget):
             line += 1
         # print(s)
         try:
-            exec(s, self.opt.env)
+            exec(s, self._opts.env)
         except:
             print('Exception happens between line {} and line {}'.format(
                 self._exec_line, line))

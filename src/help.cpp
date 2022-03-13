@@ -12,8 +12,9 @@ Possible command: lrparser -tslr -g grammar.txt -o results
 Grammar file:
   1) Use % to start a line comment.
   2) \e, _e, and \epsilon are reserved for epsilon. 
-  3) You shouldn't use token $ in grammar file.
-  4) Define productions as the following example shows. All symbols at the left 
+  3) | is reserved for separating multiple bodies of a production.
+  4) You shouldn't use token $ in grammar file.
+  5) Define productions as the following example shows. All symbols at the left 
      hand side of productions are automatically defined as non-terminals. The 
      first non-terminal symbol is defined as the start symbol. While symbols in 
      the same production body should be kept in the same line, multiple bodies
@@ -26,7 +27,7 @@ Grammar file:
      fac   -> ID
      fac   -> ( exp )
 
-  5) Strict mode: In this mode, token naming is based on C-style variable 
+  6) Strict mode: In this mode, token naming is based on C-style variable 
      naming. Besides, \ can appear at the first character of token, and quoted 
      symbols are supported. " and ' can be used to quote a symbol, e.g. '+'. "'" 
      and '"' are okay, but you may not use them both in one symbol. Spaces in a 
