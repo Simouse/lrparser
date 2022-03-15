@@ -213,6 +213,8 @@ void LRParser::buildParseTable() {
     auto stateCount = static_cast<int>(states.size());
     auto const &auxStates = dfa.getAuxStates();
 
+    stepPrintf("#! Parse Table\n");
+
     for (int i = 0; i < stateCount; ++i) {
         auto stateID = static_cast<StateID>(i);
         // "Shift" and "Goto" items
@@ -346,6 +348,7 @@ void LRParser::readSymbol(util::TokenReader &reader) {
 
 // Test given stream with parsed results
 bool LRParser::test(std::istream &stream) {
+    stepPrintf("#! Test\n"); 
     try {
         inputFlag = true;
         stateStack.clear();
@@ -370,6 +373,7 @@ bool LRParser::test(std::istream &stream) {
         }
 
         display(PARSE_STATES, INFO, "Parser states", this);
+        stepPrintf("#! Init Test.\n");
         stepPrintf("# Parser states are initialized.\n");
 
         if (!launchArgs.exhaustInput) {
@@ -393,12 +397,12 @@ bool LRParser::test(std::istream &stream) {
 
             auto choices = tableEntry.size();
             if (choices <= 0) {
-                stepPrintf("# Failure: No viable actions for this input.\n");
+                stepPrintf("# Error: No viable actions for this input.\n");
                 throw std::runtime_error(
                     "No viable action in parse table for this input");
             }
             if (choices > 1) {
-                stepPrintf("# Failure: Action conflicts.\n");
+                stepPrintf("# Error: Action conflicts.\n");
                 throw std::runtime_error(
                     "Multiple viable choices. Cannot decide which action "
                     "to take");

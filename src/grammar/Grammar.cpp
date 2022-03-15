@@ -315,7 +315,8 @@ void Grammar::resolveFollowSet(
 Grammar &Grammar::resolveSymbolAttributes() {
     collectNonterminals();
 
-    stepPrintf("# Grammar file is read.\n");
+    // stepPrintf("# Grammar file is read.\n");
+    stepPrintf("#! Attributes\n");
 
     // Nullable
     // Epsilon is nullable // This is done in resolveNullable
@@ -420,7 +421,6 @@ Grammar &Grammar::resolveSymbolAttributes() {
     }
 
     display(SYMBOL_TABLE, INFO, "Calculate symbol attributes", this);
-    stepPrintf("# Done.\n");
 
     return *this;
 }

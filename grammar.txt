@@ -10,13 +10,13 @@
 % fac   -> ID
 % fac   -> "(" exp ')'
 
-% exp   -> exp + term  | term
-% term  -> term * fac
-%        | fac
-% fac   -> ID
-% fac   -> ( exp )
+exp   -> exp + term  | term
+term  -> term * fac
+       | fac
+fac   -> ID
+fac   -> ( exp )
 
-a -> \e
+% a -> \e
 
 % S ->	id | V assign E
 % V ->	id

@@ -1,14 +1,13 @@
-import sys
-import os
 import re
+from typing import List
 from PySide6 import QtCore, QtWidgets, QtGui
 from PySide6.QtCore import Qt
-import subprocess
-from model import *
+from ParseTable import *
+from Model import *
 
 
 class SymbolTableModel(QtCore.QAbstractTableModel):
-    def __init__(self, symvec):
+    def __init__(self, symvec: List[Symbol]) -> None:
         super().__init__()
         self._symvec = symvec
         self._colnames = ['name', 'is_term', 'nullable', 'first', 'follow']
@@ -32,6 +31,11 @@ class SymbolTableModel(QtCore.QAbstractTableModel):
         if role == Qt.TextAlignmentRole:
             return Qt.AlignCenter
 
+        if role == Qt.BackgroundRole:
+            sym = self._symvec[index.row()]
+            if index.column() == len(self._colheader) - 1 and sym.is_term:
+                return QtGui.QColor(216, 216, 216)
+
     def rowCount(self, index):
         return len(self._symvec)
 
@@ -45,9 +49,16 @@ class SymbolTableModel(QtCore.QAbstractTableModel):
             return str(section)
         return super().headerData(section, orientation, role)
 
+    def flags(self, index):
+        sym = self._symvec[index.row()]
+        if index.column() == len(self._colheader) - 1 and sym.is_term:
+            return Qt.NoItemFlags
+        else:
+            return Qt.ItemIsEnabled | Qt.ItemIsSelectable
+
 
 class ProductionTableModel(QtCore.QAbstractTableModel):
-    def __init__(self, symvec, prods):
+    def __init__(self, symvec: List[Symbol], prods: List[Production]) -> None:
         super().__init__()
         self._prods = prods
         self._symvec = symvec
@@ -93,8 +104,9 @@ class ProductionTableModel(QtCore.QAbstractTableModel):
             return str(section)
         return super().headerData(section, orientation, role)
 
+
 class SymbolTable(QtWidgets.QWidget):
-    def __init__(self, symvec, *args) -> None:
+    def __init__(self, symvec: List[Symbol], *args) -> None:
         super().__init__(*args)
         self._data = symvec
         self._model = SymbolTableModel(self._data)
@@ -102,11 +114,12 @@ class SymbolTable(QtWidgets.QWidget):
         table = QtWidgets.QTableView()
         table.setModel(self._model)
         header = table.horizontalHeader()
-        header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
-        header.setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
-        header.setSectionResizeMode(2, QtWidgets.QHeaderView.Stretch)
-        header.setSectionResizeMode(3, QtWidgets.QHeaderView.Stretch)
-        header.setSectionResizeMode(4, QtWidgets.QHeaderView.Stretch)
+        # header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        # header.setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
+        # header.setSectionResizeMode(2, QtWidgets.QHeaderView.Stretch)
+        # header.setSectionResizeMode(3, QtWidgets.QHeaderView.Stretch)
+        # header.setSectionResizeMode(4, QtWidgets.QHeaderView.Stretch)
+        header.setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         table.setHorizontalHeader(header)
 
         layout = QtWidgets.QHBoxLayout()
@@ -128,21 +141,22 @@ class SymbolTable(QtWidgets.QWidget):
 
         self.refresh()
 
-    def refresh(self):
+    def refresh(self) -> None:
         self._model.layoutChanged.emit()
 
 
 class ProductionTable(QtWidgets.QWidget):
-    def __init__(self, symvec, prods, *args) -> None:
+    def __init__(self, symvec: List[Symbol], prods: List[Production], *args) -> None:
         super().__init__(*args)
-        self._data = (symvec, prods)
-        self._model = ProductionTableModel(*self._data)
+        # self._data = (symvec, prods)
+        self._model = ProductionTableModel(symvec, prods)
 
         table = QtWidgets.QTableView()
         table.setModel(self._model)
         header = table.horizontalHeader()
-        header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
-        header.setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
+        # header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        # header.setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
+        header.setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         table.setHorizontalHeader(header)
 
         layout = QtWidgets.QHBoxLayout()
@@ -165,50 +179,30 @@ class ProductionTable(QtWidgets.QWidget):
 
         self.refresh()
 
-    def refresh(self):
+    def refresh(self) -> None:
         self._model.layoutChanged.emit()
 
 
 class AttributeTab(QtWidgets.QWidget):
-    def __init__(self, tag, opts: LRParserOptions, lrwindow) -> None:
+    def __init__(self, parent: QtWidgets.QWidget, opts: LRParserOptions) -> None:
         super().__init__()
 
-        self._tag = tag
+        # self._tag = tag
         self._opts = opts
-        self._lrwindow = lrwindow
+        self._lrwindow = parent
 
-        # Get initial parser status
-        cmd = ' '.join([
-            self._opts.exePath, '-o', self._opts.outDir, '-g',
-            self._opts.grammarFile, '--no-test'
-        ])
-        print(cmd)
-        # status = subprocess.call(cmd, timeout=2.0, stdout=subprocess.DEVNULL)
-        status = subprocess.call(cmd, timeout=2.0)
+        code, err = getLRSteps(self._opts)
+        if err:
+            raise Exception(err)
+        self._code = code
+        self._line = 0
 
-        if status != 0:
-            raise Exception('Cannot launch LR parser')
-        with open(os.path.join(opts.outDir, 'steps.py'),
-                  mode='r',
-                  encoding='utf-8') as f:
-            self._exec_content = f.read().split(sep='\n')
-        self._exec_line = 0
-        print('Output written to temporary directory', opts.outDir, sep=' ')
+        # print(self._code)
 
-        # result = re.match('#!nsym=(\d+),nprod=(\d+)', self._exec_content[0])
-        # if result:
-        #     nsym = int(result.group(1))
-        #     nprod = int(result.group(2))
-        #     self._exec_line += 1
-        # else:
-        #     print('Error: cannot get arguments: [nsym, nprod]')
-        #     sys.exit(1)
-
-        env = newEnv()
-        self._opts.env = env
-        self.productionTable = ProductionTable(env['symbol'],
-                                               env['production'])
-        self.symbolTable = SymbolTable(env['symbol'])
+        env = ParsingEnv()
+        self._env = env
+        self.productionTable = ProductionTable(env.symbol, env.production)
+        self.symbolTable = SymbolTable(env.symbol)
 
         hLayout = QtWidgets.QHBoxLayout()
         hLayout.addWidget(self.productionTable)
@@ -236,7 +230,7 @@ class AttributeTab(QtWidgets.QWidget):
         font = infoText.font()
         font.setPointSize(12)
         infoText.setFont(font)
-        infoText.setAlignment(Qt.AlignCenter)
+        infoText.setAlignment(Qt.AlignCenter) # type: ignore
         infoText.setText('Press button "Continue" to start')
         self._info_text = infoText
 
@@ -248,103 +242,92 @@ class AttributeTab(QtWidgets.QWidget):
         vLayout.addLayout(buttons)
 
         self.setLayout(vLayout)
-        self.continueButtonClicked()
 
-    def continueButtonClicked(self):
+        self._line = stepUntil(self._code, self._line, self._env.__dict__,
+                               '#! Attributes')
+        # print('Stopped at:', self._code[self._line])
+        self._line += 1
+        self.symbolTable.refresh()
+        self.productionTable.refresh()
+
+    def continueButtonClicked(self) -> None:
         self.nextLine()
         self.symbolTable.refresh()
         self.productionTable.refresh()
 
-    def finishButtonClicked(self):
+    def finishButtonClicked(self) -> None:
         self.finish()
         self.symbolTable.refresh()
         self.productionTable.refresh()
 
-    def nextButtonClicked(self):
-        self._lrwindow.requestNext(self._tag)
+    def nextButtonClicked(self) -> None:
+        items = [
+            'Recursive Descent', 'LL(1)', 'LR(0)', 'SLR(1)', 'LALR(1)', 'LR(1)'
+        ]
+        item, ok = QtWidgets.QInputDialog.getItem(
+            self, 'Parsers', 'Choose a parser from below:', items, 0, False)
+        if ok and item:
+            lrFamily = {
+                'LR(0)': 'lr0',
+                'SLR(1)': 'slr',
+                'LALR(1)': 'lalr',
+                'LR(1)': 'lr1'
+            }
+            if item in lrFamily.keys():
+                arg = lrFamily[item]
+                # print('User chose parser:', item)
+                self._opts.parser = arg
+                opts = self._opts.copy()
+                env = self._env.copy()
+                tab = TableTab(self._lrwindow, opts, env)
+                self._lrwindow.requestNext(tab, item)
+            else:
+                dialog = TextDialog(self, 'Not implemented')
+                dialog.show()
 
-    def finish(self):
-        # print('Finish')
-        line = self._exec_line
-        text = self._exec_content
-        leng = len(text)
-        info = ''
-        s = ''
-        while line < leng:
-            result = re.match('#\s*Done\s*\.?\s*', text[line])
-            if result:
-                info = text[line]
-                line += 1
+    def finish(self) -> None:
+        while True:
+            if self._line >= len(self._code):
                 break
-            s += text[line]
-            s += '\n'
-            line += 1
-        # print(s)
-        try:
-            exec(s, self._opts.env)
-        except:
-            print('Exception happens between line {} and line {}'.format(
-                self._exec_line, line))
-            raise
-        if not info.isspace():
-            result = re.match('#\s*(.*)', info)
-            if result:
-                s = result.group(1)
-                # print(s)
-                self._info_text.setText(s)
+            limitFlag = self.nextLine()
+            if limitFlag:
+                break
 
-        self._exec_line = line
-        self.prepareNextPart()
-
-    def prepareNextPart(self):
+    def prepareNextPart(self) -> None:
         self._continue_button.setDisabled(True)
         self._finish_button.setDisabled(True)
         self._button_layout.removeWidget(self._continue_button)
         self._button_layout.removeWidget(self._finish_button)
         self._continue_button.deleteLater()
         self._finish_button.deleteLater()
-        self._continue_button = None
-        self._finish_button = None
+        del self._continue_button
+        del self._finish_button
         button = QtWidgets.QPushButton('Next')
         button.setCheckable(False)
         button.setFixedWidth(100)
         button.clicked.connect(self.nextButtonClicked)
-
+        self._next_button = button
+        self._info_text.setText('Done.')
         # Two stretches still exist, so the index should be 1
         self._button_layout.insertWidget(1, button)
 
-    def nextLine(self):
-        line = self._exec_line
-        text = self._exec_content
-        leng = len(text)
-        info = ''
-        s = ''
-        while line < leng:
-            if re.match('#\s*Done\s*', text[line]):
-                info = text[line]
-                line = leng
-                break
-            elif str(text[line]).startswith('#'):
-                info = text[line]
+    # Returns if the stop is caused by limit.
+    def nextLine(self) -> bool:
+        line = stepNext(self._code, self._line, self._env.__dict__, '#!')
+        leng = len(self._code)
+        flag = False
+        if line < leng:
+            code = self._code[line]
+            if re.match('#!', code):
                 line += 1
-                break
-            s += text[line]
-            s += '\n'
-            line += 1
-        # print(s)
-        try:
-            exec(s, self._opts.env)
-        except:
-            print('Exception happens between line {} and line {}'.format(
-                self._exec_line, line))
-            raise
-        if not info.isspace():
-            result = re.match('#\s*(.*)', info)
-            if result:
-                s = result.group(1)
-                # print(s)
-                self._info_text.setText(s)
-
-        self._exec_line = line
-        if line >= leng:
+                flag = True
+            else:
+                result = re.match('#\s*(.*)', code)
+                if result:
+                    s = result.group(1)
+                    self._info_text.setText(s)
+                    line += 1
+        if line >= leng or flag:
             self.prepareNextPart()
+        self._line = line
+        return flag

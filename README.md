@@ -116,7 +116,7 @@ Input queue : Front ->| $
 > Success
 ```
 
-Automatons in graphviz language format are generated in the result directory (default: results) because they are difficult to display in the console. You need to invoke `dot` by yourself. The program used to provide generated `svg` files as well if you have `dot` installed, but invoking dot processes on Windows is too slow (in Linux it's just fast) and makes the tool a target of Windows Defender Anti-virus module because the tool invokes a lot of processes in such a short time. Later I tried to use graphviz as library in my code, but I found graphviz cgraph library had memory leaks and double free() bugs which I couldn't get right. So I dropped the support for directly generated svg files.
+Automatons in graphviz language format are generated in the result directory (default: `out`) because they are difficult to display in the console. You need to invoke `dot` by yourself. The program used to provide generated `svg` files as well if you have `dot` installed, but invoking dot processes on Windows is too slow (in Linux it's just fast) and makes the tool a target of Windows Defender Anti-virus module because the tool invokes a lot of processes in such a short time. Later I tried to use graphviz as library in my code, but I found graphviz cgraph library had memory leaks and double free() bugs which I couldn't get right. So I dropped the support for directly generated svg files.
 
 SLR NFA:
 
@@ -222,7 +222,7 @@ I found some resources really helpful in my learning. I compared my results with
 
 ### How to show `ε` correctly in console?
 
-On Windows, you can use `chcp 65001` to enable UTF-8 in cmd.exe, and use `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` when in PowerShell.
+On Windows, you can use `chcp 65001` to enable `UTF-8` in `cmd.exe,` and use `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` in `PowerShell`. On macOS and Linux platforms, this normally shouldn't be a problem.
 
 ### `#include <vcruntime.h>` causes compilation error.
 
@@ -230,8 +230,8 @@ Just remove those lines. My editor added those for me, but they are not needed. 
 
 ### For large inputs
 
-For very large test sequences, you can use `--step` flag to disable memory cache of all input characters. Use `--no-pda` to save time if you don't need PDA, or use `--no-pda-label` to hide details of nodes as well as saving time. Normally, just `--no-pda-label` is enough. I tested my tool against ANSI-C grammar (which is not a LALR1 grammar), and found hundreds of DFA states have been generated. Chances are that if you are trying to analyze a grammar that complex, `dot` will freeze when you try to visualize the graph.
+For very large test sequences, you can use `--step` flag to disable memory cache of all input characters (, which is normally unnecessary given the purpose of this tool). For very large grammars, the result is almost impossible to observe. I tested my tool against ANSI-C grammar (which is not a LALR(1) grammar), and found hundreds of DFA states have been generated. Chances are that `dot` will freeze when you try to visualize the graph.
 
 ### State differences from Bison
 
-It seems that Bison defines an augmented production for each grammar. For example, for simple grammar `S -> a`, bison sees two grammars: `S' -> S; S -> a`. So it may have a few more states than some online tools. Besides, when state `S' -> S •` is reached, Bison has to shift the pseudo end token, as if the state is `S' -> S • <end>`, so bison has one more state. Since my tool uses an augmented grammar as well, the LALR push-down automaton should have exactly one less state than Bison.
+It seems that Bison defines an augmented production for each grammar. For example, for simple grammar `S -> a`, Bison sees two productions: `S' -> S; S -> a`. So it may have a few more states than some online tools. Besides, when state `S' -> S •` is reached, Bison has to shift the pseudo end token, as if the state is `S' -> S • <end>`. Since my tool uses an augmented grammar, but does not have a pseudo end token, the LALR push-down automaton should have exactly one less state than Bison.
