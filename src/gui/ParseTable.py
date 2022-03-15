@@ -1,3 +1,4 @@
+from getopt import error
 import tempfile
 import sys
 import os
@@ -106,13 +107,14 @@ class ParseTableView(QtWidgets.QTableView):
 
 class InputDialog(QtWidgets.QDialog):
     def __init__(self, parent, opts: LRParserOptions,
-                 onStepsGenerated: Callable[[List[str]], None]) -> None:
+                 submitText: Callable[[str], bool]) -> None:
         super().__init__(parent)
 
         self.setModal(True)
         self.resize(400, 300)
         self._opts = opts
-        self._onStepsGenerated = onStepsGenerated
+        # Returns whether the dialog should be closed.
+        self._submitText = submitText 
 
         layout = QtWidgets.QVBoxLayout()
         label = QtWidgets.QLabel()
@@ -155,16 +157,11 @@ class InputDialog(QtWidgets.QDialog):
         self._buttonStack.setCurrentIndex(index)
 
     def testButtonPressed(self):
-        print(self._opts.__dict__)
+        # print(self._opts.__dict__)
         text = self._textEdit.toPlainText()
         text += ' $'
-        code, err = getLRSteps(self._opts, test=text)
-        if not err:
-            self._onStepsGenerated(code)
+        if self._submitText(text):
             self.close()
-        else:
-            dialog = TextDialog(self, 'Error: {}'.format(err))
-            dialog.show()
 
     def convertButtonPressed(self):
         text = self._textEdit.toPlainText()
@@ -192,6 +189,8 @@ class BottomUpDequeView(QtWidgets.QGraphicsView):
         self.setAlignment(Qt.AlignBottom)  # type: ignore
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
+        # self.setTransformationAnchor(QtWidgets.QGraphicsView.NoAnchor)
+
     def appendText(self, text: str) -> None:
         textItem = self._scene.addText(text)
         index = len(self._deq) + self._leftindex
@@ -204,6 +203,7 @@ class BottomUpDequeView(QtWidgets.QGraphicsView):
         index = self._leftindex
         textItem.setPos(*self.getPos(index))
         self._deq.appendleft(textItem)
+        # self.verticalScrollBar().setValue(self.verticalScrollBar().value() - 24);
 
     def popText(self) -> str:
         item = self._deq.pop()
@@ -216,10 +216,17 @@ class BottomUpDequeView(QtWidgets.QGraphicsView):
         self._leftindex += 1
         text = item.toPlainText()
         self._scene.removeItem(item)
+        # self.verticalScrollBar().setValue(self.verticalScrollBar().value() + 24);
         return text
 
-    def getPos(self, index) -> Tuple:
+    def getPos(self, index) -> Tuple[int, int]:
         return (0, -24 * index)
+
+    def clear(self) -> None:
+        for item in self._deq:
+            self._scene.removeItem(item)
+        self._deq.clear()
+        self._leftindex = 0
 
 
 class MappedBottomUpDequeView(BottomUpDequeView):
@@ -253,6 +260,9 @@ class TableTab(QtWidgets.QWidget):
         self._lrwindow = parent
         self._opts = opts
         self._env = env  # Everything except parser states are used.
+        self._symset = set()
+        for sym in self._env.symbol:
+            self._symset.add(sym.name)
 
         code, err = getLRSteps(self._opts)
         if err:
@@ -270,6 +280,14 @@ class TableTab(QtWidgets.QWidget):
         hLayout.addLayout(self.createStacksLayout(), 1)
         hLayout.addSpacing(16)
 
+        infoLabel = QtWidgets.QLabel()
+        font = infoLabel.font()
+        font.setPointSize(12)
+        infoLabel.setFont(font)
+        infoLabel.setAlignment(Qt.AlignCenter) # type: ignore
+        self._info_label = infoLabel
+        self._info_label.setText('Click "Start/Reset" button to start a test.')
+
         buttons = QtWidgets.QHBoxLayout()
         buttons.addStretch(1)
         button = QtWidgets.QPushButton('Start/Reset')
@@ -278,10 +296,12 @@ class TableTab(QtWidgets.QWidget):
         buttons.addWidget(button)
         self._reset_button = button
         button = QtWidgets.QPushButton('Continue')
+        button.clicked.connect(self.continueButtonClicked)
         button.setFixedWidth(100)
         buttons.addWidget(button)
         self._continue_button = button
         button = QtWidgets.QPushButton('Finish')
+        button.clicked.connect(self.finishButtonClicked)
         button.setFixedWidth(100)
         buttons.addWidget(button)
         self._finish_button = button
@@ -293,24 +313,69 @@ class TableTab(QtWidgets.QWidget):
 
         layout = QtWidgets.QVBoxLayout()
         layout.addLayout(hLayout)
+        layout.addSpacing(24)
+        layout.addWidget(infoLabel)
         layout.addSpacing(16)
         layout.addLayout(buttons)
-        layout.addSpacing(16)
+        # layout.addSpacing(16)
 
         self.setLayout(layout)
-        # self._line = stepUntil(self._code, 0, self._opts.env, '#!!')
-
-        # self._table.emitLayoutChanged()
 
     def resetButtonClicked(self) -> None:
-        dialog = InputDialog(self, self._opts, self.reset)
+        dialog = InputDialog(self, self._opts, self.submitTest)
         dialog.show()
 
-    def reset(self, steps: List[str]) -> None:
-        # TODO: reset stack view states
+    def continueButtonClicked(self) -> None:
+        print('Current line:', self._line)
+        line = stepNext(self._code, self._line, self._env.__dict__, '#!')
+        if line < len(self._code) and not re.match('#!', self._code[line]):
+            result = re.match('#\s*(.*)', self._code[line])
+            if result:
+                info = result.group(1)
+                self._info_label.setText(info)
+        self._line = line + 1
+        if self._line >= len(self._code):
+            self._continue_button.setEnabled(False)
+            self._finish_button.setEnabled(False)
+
+    def finishButtonClicked(self) -> None:
+        line = stepUntil(self._code, self._line, self._env.__dict__, '#!')
+        self._line = line + 1
+        if self._line >= len(self._code):
+            self._continue_button.setEnabled(False)
+            self._finish_button.setEnabled(False)
+
+    def submitTest(self, test: str) -> bool:
+        # Check test string
+        for token in test.strip().split():
+            if token not in self._symset:
+                dialog = TextDialog(self, 'Unknown token: {}'.format(token))
+                dialog.show()
+                return False
+
+        steps, err = getLRSteps(self._opts, test)
+        if err:
+            dialog = TextDialog(self, 'Error: {}'.format(err))
+            dialog.show()
+            return False
+
+        # Reset widget states
+        assert self._env.symbol_stack
+        assert self._env.state_stack
+        assert self._env.input_queue
+        self._env.symbol_stack.clear()
+        self._env.state_stack.clear()
+        self._env.input_queue.clear()
+        self._info_label.setText('Click "Continue" button to begin the test.')
+
         line = skipUntil(steps, 0, '#! Test')
         line = stepUntil(steps, line + 1, self._env.__dict__, '#! Init Test')
         self._line = line + 1
+        self._code = steps
+
+        self._finish_button.setEnabled(True)
+        self._continue_button.setEnabled(True)
+        return True
 
     def createTableLayout(self) -> QtWidgets.QVBoxLayout:
         layout = QtWidgets.QVBoxLayout()

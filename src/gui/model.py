@@ -131,6 +131,9 @@ class DequeProtocol(Protocol):
     def popleft(self) -> Any:
         raise NotImplementedError
 
+    def clear(self) -> Any:
+        raise NotImplementedError
+
 
 class ParsingEnv():
     def __init__(self) -> None:
@@ -229,7 +232,7 @@ def getLRSteps(opts: LRParserOptions,
 
     with open(os.path.join(opts.out, 'steps.py'), mode='r',
               encoding='utf-8') as f:
-        steps = f.read().split(sep='\n')
+        steps = f.read().strip().split(sep='\n')
 
     return (steps, None)
 

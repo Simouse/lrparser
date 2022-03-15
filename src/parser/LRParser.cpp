@@ -337,12 +337,12 @@ void LRParser::readSymbol(util::TokenReader &reader) {
             inputFlag = false;
         }
         InputQueue.push_back(symbol.id);
-        stepPrintf("input_queue.append(%d)\n", symbol.id);
+        stepPrintf("input_queue.appendleft(%d)\n", symbol.id);
     } else {
         inputFlag = false;
         auto EOI = gram.getEndOfInputSymbol().id;
         InputQueue.push_back(EOI);
-        stepPrintf("input_queue.append(%d)\n", EOI);
+        stepPrintf("input_queue.appendleft(%d)\n", EOI);
     }
 }
 
@@ -374,7 +374,6 @@ bool LRParser::test(std::istream &stream) {
 
         display(PARSE_STATES, INFO, "Parser states", this);
         stepPrintf("#! Init Test.\n");
-        stepPrintf("# Parser states are initialized.\n");
 
         if (!launchArgs.exhaustInput) {
             display(LOG, INFO,
@@ -418,7 +417,7 @@ bool LRParser::test(std::istream &stream) {
                 symbolStack.push_back(InputQueue.front());
                 stepPrintf("symbol_stack.append(%d)\n", InputQueue.front());
                 InputQueue.pop_front();
-                stepPrintf("input_queue.popleft()\n");
+                stepPrintf("input_queue.pop()\n");
                 if (decision.type == ParseAction::GOTO) {
                     display(LOG, VERBOSE, "Apply GOTO rule");
                     stepPrintf("# Apply goto rule.\n");
@@ -474,7 +473,7 @@ void LRParser::reduce(ProductionID prodID) {
         stepPrintf("state_stack.pop()\n");
     }
     InputQueue.push_front(prod.leftSymbol);
-    stepPrintf("input_queue.appendleft(%d)\n", prod.leftSymbol);
+    stepPrintf("input_queue.append(%d)\n", prod.leftSymbol);
     stepPrintf("# Apply reduce rule: %d.\n", prodID);
 }
 
