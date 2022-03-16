@@ -280,6 +280,7 @@ class AttributeTab(QtWidgets.QWidget):
                 opts = self._opts.copy()
                 env = self._env.copy()
                 tab = TableTab(self._lrwindow, opts, env)
+                # tab = Automaton(self._lrwindow, opts, env)
                 self._lrwindow.requestNext(tab, item)
             else:
                 dialog = TextDialog(self, 'Not implemented')

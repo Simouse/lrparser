@@ -325,8 +325,9 @@ class TableTab(QtWidgets.QWidget):
         dialog = InputDialog(self, self._opts, self.submitTest)
         dialog.show()
 
-    def continueButtonClicked(self) -> None:
-        print('Current line:', self._line)
+    # Returns line number of last line (returned by stepNext()).
+    def continueButtonClicked(self) -> int:
+        # print('Current line:', self._line)
         line = stepNext(self._code, self._line, self._env.__dict__, '#!')
         if line < len(self._code) and not re.match('#!', self._code[line]):
             result = re.match('#\s*(.*)', self._code[line])
@@ -337,13 +338,14 @@ class TableTab(QtWidgets.QWidget):
         if self._line >= len(self._code):
             self._continue_button.setEnabled(False)
             self._finish_button.setEnabled(False)
+        return line
 
     def finishButtonClicked(self) -> None:
-        line = stepUntil(self._code, self._line, self._env.__dict__, '#!')
-        self._line = line + 1
-        if self._line >= len(self._code):
-            self._continue_button.setEnabled(False)
-            self._finish_button.setEnabled(False)
+        line = self._line
+        while line < len(self._code):
+            line = self.continueButtonClicked()
+            if line < len(self._code) and re.match('#!', self._code[line]):
+                break
 
     def submitTest(self, test: str) -> bool:
         # Check test string
