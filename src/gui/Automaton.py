@@ -6,7 +6,8 @@ from PySide6.QtCore import Qt
 import sys
 import random
 import math
-from Model import LRParserOptions, ParsingEnv, GrowingList
+from Model import *
+from ParseTable import *
 
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
@@ -73,15 +74,18 @@ class StateItem(QtWidgets.QGraphicsEllipseItem):
 
         if change == QtWidgets.QGraphicsItem.ItemPositionChange and self.scene(
         ):
+            self.prepareGeometryChange()
             for line in self.lines:
                 line.updatePath()
 
         return result
 
     def setFinal(self, final: bool = True) -> None:
+        self.prepareGeometryChange()
         self._final = final
 
     def setStart(self, start: bool = True) -> None:
+        self.prepareGeometryChange()
         self._start = start
         sign = self._start_sign
         pen = sign.pen()
@@ -97,20 +101,27 @@ class StateItem(QtWidgets.QGraphicsEllipseItem):
         if self._final:  # Draw double circle.
             painter.setBrush(self.brush())
             r = self.rect()
-            distance = 8  # Constant.
-            r0 = self._radius * 2.0 - distance
-            r.setSize(QtCore.QSizeF(r0, r0))
-            r.translate(QtCore.QPointF(distance / 2.0, distance / 2.0))
+            distance = 4.0  # Constant.
+            width = (self._radius - distance) * 2.0
+            r.setSize(QtCore.QSizeF(width, width))
+            r.translate(QtCore.QPointF(distance, distance))
             painter.drawEllipse(r)
+
+        # painter.setBrush(Qt.transparent)
+        # painter.drawRect(self.rect())
 
 
 class EdgeItem(QtWidgets.QGraphicsPathItem):
-    def __init__(self, src: StateItem, dest: StateItem, text: str='') -> None:
+    def __init__(self,
+                 src: StateItem,
+                 dest: StateItem,
+                 text: str = '') -> None:
         super().__init__()
         self.src = src
         self.dest = dest
         self.text = text
-        self.updatePath() 
+        self.label = QtWidgets.QGraphicsSimpleTextItem(self)
+        self.updatePath()
 
         src.lines.append(self)
         dest.lines.append(self)
@@ -126,7 +137,19 @@ class EdgeItem(QtWidgets.QGraphicsPathItem):
         self.text = text
         self.updatePath()
 
+    def boundingRect(self) -> PySide6.QtCore.QRectF:
+        # Include label.
+        r = super().boundingRect()
+        w = len(self.text) * 7.0
+        h = 20.0
+        r.setWidth(r.width() + w * 2)
+        r.setHeight(r.height() + h)
+        r.translate(-w, -h)
+        return r
+
     def updatePath(self) -> None:
+        self.prepareGeometryChange()
+
         path = QtGui.QPainterPath()
         center = self.src.center()
         pos = self.src.pos()
@@ -167,9 +190,8 @@ class EdgeItem(QtWidgets.QGraphicsPathItem):
         # Draw line label.
         x = (a.x() + b.x()) / 2.0
         y = (a.y() + b.y()) / 2.0
-        p = QtCore.QPointF(x, y)
-        font = QtGui.QFont()
-        path.addText(p, font, self.text)
+        self.label.setText(self.text)
+        self.label.setPos(x, y - 18.0)
 
         self.setPath(path)
 
@@ -178,8 +200,13 @@ class EdgeItem(QtWidgets.QGraphicsPathItem):
               option: QtWidgets.QStyleOptionGraphicsItem,
               widget: Optional[QtWidgets.QWidget] = None) -> None:
         painter.setPen(self.pen())
+        painter.setRenderHint(QtGui.QPainter.TextAntialiasing, True)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
         painter.setBrush(Qt.black)
         painter.drawPath(self.path())
+
+        # painter.setBrush(Qt.transparent)
+        # painter.drawRect(self.boundingRect())
 
 
 class AutomatonView(QtWidgets.QGraphicsView):
@@ -194,12 +221,16 @@ class AutomatonView(QtWidgets.QGraphicsView):
 
     def addState(self, index: int, description: str) -> int:
         radius = 22
-        x = random.uniform(radius, 600)
-        y = random.uniform(radius, 600)
+        x = random.uniform(radius, self.rect().width() - radius)
+        y = random.uniform(radius, self.rect().height() - radius)
         state = StateItem(x, y, radius, 's{}'.format(index), description)
         self._states[index] = state
         self.scene().addItem(state)
         return index
+
+    def updateState(self, index: int, description: str) -> None:
+        stateItem: StateItem = self._states[index]
+        stateItem.setToolTip(description)
 
     def addEdge(self, a: int, b: int, label: str) -> int:
         A = self._states[a]
@@ -218,13 +249,25 @@ class AutomatonView(QtWidgets.QGraphicsView):
         S = self._states[state]
         S.setStart(start)
 
+    def setDescription(self, state: int, tooltip: str) -> None:
+        stateItem: StateItem = self._states[state]
+        stateItem.setToolTip(tooltip)
+
+
 class AutomatonTab(QtWidgets.QWidget):
-    def __init__(self, parent: QtWidgets.QWidget, opts: LRParserOptions,
-                 env: ParsingEnv) -> None:
+    def __init__(self, parent: QtWidgets.QWidget, opts: LRParserOptions, env: ParsingEnv) -> None:
         super().__init__(parent)  # type: ignore
-        self._opts = opts
+        # self._opts = opts
         self._env = env
         self._parent = parent
+        self._section = ''
+        self._opts = opts
+
+        self._line = 0
+        self._code, err = getLRSteps(opts)
+        if err:
+            print(err)
+            raise Exception()
 
         automatonView = AutomatonView()
 
@@ -233,17 +276,23 @@ class AutomatonTab(QtWidgets.QWidget):
         font.setPointSize(12)
         label.setFont(font)
         label.setAlignment(Qt.AlignCenter)  # type: ignore
-        label.setText('Label')
+        label.setText('Press "Continue" button to start.')
+        self._label = label
 
         buttons = QtWidgets.QHBoxLayout()
         continueButton = QtWidgets.QPushButton('Continue')
+        self.continueButton = continueButton
+        continueButton.clicked.connect(self.continueButtonClicked)
         continueButton.setFixedWidth(100)
-        finishButton = QtWidgets.QPushButton('Next')
+        finishButton = QtWidgets.QPushButton('Finish')
         finishButton.setFixedWidth(100)
+        finishButton.clicked.connect(self.finishButtonClicked)
+        self.finishButton = finishButton
         buttons.addStretch(1)
         buttons.addWidget(continueButton)
         buttons.addWidget(finishButton)
         buttons.addStretch(1)
+        self.buttonsLayout = buttons
 
         layout = QtWidgets.QVBoxLayout()
         layout.addWidget(automatonView)
@@ -254,33 +303,48 @@ class AutomatonTab(QtWidgets.QWidget):
 
         self.setLayout(layout)
 
-        # Test
         m = automatonView
-        m.addState(0, 'exp\' -> . exp')
-        m.addState(1, 'exp\' -> exp .')
-        m.addEdge(0, 1, 'exp')
-        m.setStart(0)
-        m.setFinal(1)
+        self._env.addEdge = lambda a, b, s: m.addEdge(a, b, s)  # type: ignore
+        self._env.addState = lambda a, s: m.addState(a, s)  # type: ignore
+        self._env.updateState = lambda a, s: m.updateState(a, s)  # type: ignore
+        self._env.setFinal = lambda s: m.setFinal(s, True)
+        self._env.setStart = lambda s: m.setStart(s, True)
+        self._env.section = lambda s: self.setSection(s)
+        self._env.show = lambda s: label.setText(s)
 
-if __name__ == "__main__":
-    app = QtWidgets.QApplication(sys.argv)
+        while self._line < len(self._code) and self._section != 'DFA':
+            self._line = skipSection(self._code, self._line, self._env.__dict__)
+            self._line += 1
+        
+    def setSection(self, section) -> None:
+        self._section = section
 
-    view = AutomatonTab(None, None, None)
-    view.resize(800, 600)
-    view.show()
+    def continueButtonClicked(self) -> None:
+        if self._line < len(self._code):
+            self._line = execNext(self._code, self._line, self._env.__dict__)
+            self._line += 1
+        if self._line >= len(self._code) or self._section != 'DFA':
+            self.finish()
 
-    # view = QtWebEngineWidgets.QWebEngineView()
-    # view.setHtml("""<p>Hello, world</p><p><b>Yes?</b></p><button type='button' onclick='alert(11)'>Click Me!</button>""")
-    # view.setContextMenuPolicy(Qt.NoContextMenu)
+    def finishButtonClicked(self) -> None:
+        while self._line < len(self._code) and self._section == 'DFA':
+            self._line = execSection(self._code, self._line, self._env.__dict__)
+            self._line += 1
+        self.finish()
 
-    # layout = QtWidgets.QVBoxLayout()
-    # button = QtWidgets.QPushButton('Push me')
-    # button.clicked.connect(lambda : layout.addWidget(view))
-    # layout.addWidget(button)
+    def finish(self) -> None:
+        self.continueButton.setDisabled(True)
+        self.finishButton.setDisabled(True)
+        self.buttonsLayout.removeWidget(self.continueButton)
+        self.buttonsLayout.removeWidget(self.finishButton)
+        self.continueButton.deleteLater()
+        self.finishButton.deleteLater()
+        next = QtWidgets.QPushButton('Next')
+        next.setFixedWidth(100)
+        next.clicked.connect(self.nextButtonPressed)
+        self.buttonsLayout.insertWidget(1, next)
+        self._label.setText('DFA is built.')
 
-    # widget = QtWidgets.QWidget()
-    # widget.setLayout(layout)
-    # widget.resize(800, 600)
-    # widget.show()
-
-    sys.exit(app.exec())
+    def nextButtonPressed(self) -> None:
+        tab = TableTab(self._parent, self._opts.copy(), self._env.copy())
+        self._parent.requestNext(tab, self._opts.parser + ' Table')

@@ -13,6 +13,7 @@
 #include "src/parser/LRParser.h"
 #include "src/parser/SLRParser.h"
 #include "src/util/Formatter.h"
+#include "src/display/steps.h"
 
 using namespace gram;
 
@@ -51,9 +52,12 @@ void lrMain() {
     parser->buildNFA();
     reportTime("NFA built");
 
+    step::section("DFA");
     parser->buildDFA();
     reportTime("DFA built");
+    // step::show("DFA is built.");
     
+    step::section("Parse Table");
     parser->buildParseTable();
     reportTime("Parse table built");
 

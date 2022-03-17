@@ -30,24 +30,13 @@ class ParserWindow(QtWidgets.QTabWidget):
         self.setMovable(False)
         self.setWindowTitle('Grammar')
         self.resize(900, 600)
-        # self._tab_classes = [GrammarTab, AttributeTab, ParserTab]
-        # self._tab_titles = ['Editor', 'Attributes', 'Parsing']
-        # self._tab_classes = [GrammarTab, AttributeTab, TableTab]
-        # self._tab_titles = ['Editor', 'Attributes', 'Test']
-        # self._tab_count = 0
         self._tabs: List[QtWidgets.QWidget] = []
-        # self._opts = LRParserOptions(tempfile.mkdtemp(), './build/lrparser',
-        #                              grammar=None, parser='slr')
-
-        # print(self._opts.__dict__)
-        # sys.exit(0)
 
         self.setTabsClosable(True)
         self.tabBar().tabCloseRequested.connect(self.closeTab)
         opts = LRParserOptions(tempfile.mkdtemp(),
                                './build/lrparser',
-                               grammar='',
-                               parser='slr')
+                               grammar='')
         # self.createTab(0, opts)
         tab = GrammarTab(self, opts)
         self.requestNext(tab, 'Grammar', False)

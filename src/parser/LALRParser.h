@@ -6,6 +6,7 @@
 #include "src/grammar/Grammar.h"
 #include "src/parser/LRParser.h"
 #include "src/util/BitSet.h"
+#include "src/display/steps.h"
 #include <cassert>
 #include <cstddef>
 #include <optional>
@@ -141,11 +142,16 @@ class LALRParser : public LRParser {
         // Prepare the first closure
         auto const &startState = lr0States.front();
         LALRClosure startClosure;
-        startClosure.emplace(StateID{0}, *startState.constraint);
+        auto s0 = M.addPseudoState();
+        M.markStartState(s0);
+        startClosure.emplace(s0, *startState.constraint);
         makeClosure(lr0States, startClosure);
-        // Add the first closure
-        M.addPseudoState();
-        M.markStartState(StateID{0});
+
+        step::addState(s0, "");
+        step::setStart(s0);
+        step::show("Add start state.");
+        util::Formatter f;
+
         queue.push(closureIndexMap.emplace(std::move(startClosure), 0).first);
 
         while (!queue.empty()) {
@@ -177,23 +183,39 @@ class LALRParser : public LRParser {
                     // Add link to this closure
                     M.addTransition(StateID{closureIter->second}, closureID,
                                     actionID);
+
+                    step::addState(closureID, "");
+                    step::addEdge(closureIter->second, closureID,
+                                  M.actions[actionID]);
+                    auto sv = f.formatView("Trans(s%d, %s) = s%d",
+                                           closureIter->second,
+                                           M.actions[actionID], closureID);
+                    step::show(sv);
                 } else {
                     // Merge closures.
                     // Now number of elements in two maps should be the same.
-                    bool effectFlag = false;
+                    bool flag = false;
                     auto i1 = iter->first.begin(), e1 = iter->first.end();
                     auto i2 = newClosure.begin();
                     for (; i1 != e1; (void)++i1, (void)++i2) {
                         auto before = i1->second;
                         *const_cast<Constraint *>(&i1->second) |= i2->second;
                         if (i1->second != before)
-                            effectFlag = true;
+                            flag = true;
                     }
                     M.addTransition(StateID{closureIter->second},
                                     StateID{iter->second}, actionID);
                     // The merged state should be checked again
-                    if (effectFlag)
+                    if (flag)
                         queue.push(iter);
+
+                    // step::updateState(iter->second, M.dumpClosureString(
+                    //                                     StateID{iter->second}));
+                    step::addEdge(closureIter->second, iter->second, M.actions[actionID]);
+                    auto sv = f.formatView("Trans(s%d, %s) = s%d",
+                                           closureIter->second,
+                                           M.actions[actionID], iter->second);
+                    step::show(sv);
                 }
             }
         }
@@ -244,7 +266,12 @@ class LALRParser : public LRParser {
             M.closures[closureIndex] = std::move(closure);
         }
 
-        display(AUTOMATON, INFO, "DFA is built", &dfa, (void *)"build_dfa");
+        display(AUTOMATON, INFO, "DFA is built", &dfa, (void *)"DFA");
+
+        int sz = (int)M.closures.size();
+        for (int i = 0; i < sz; ++i) {
+            step::updateState(i, M.dumpClosureString(StateID{i}));
+        }
     }
 
   protected:

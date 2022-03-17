@@ -110,7 +110,7 @@ std::string Grammar::dump() const {
             s += ",START";
         }
         s += "]\n";
-        stepSymbol(i, vec[i].name.c_str(), vec[i].type == SymbolType::TERM,
+        step::symbol(i, vec[i].name.c_str(), vec[i].type == SymbolType::TERM,
                    vec[i].id == getStartSymbol().id);
     }
 
@@ -133,7 +133,7 @@ std::string Grammar::dump() const {
             s += ' ';
             s += Constants::epsilon;
         }
-        stepProduction(i, table[i].leftSymbol,
+        step::production(i, table[i].leftSymbol,
                        (const int *)table[i].rightSymbols.data(),
                        table[i].rightSymbols.size());
     }
@@ -147,8 +147,6 @@ auto Grammar::fromFile(const char *fileName) -> Grammar {
         throw std::runtime_error(std::string("File not found: ") + fileName);
     }
     auto g = GrammarReader::parse(stream);
-    stepPrepare((int)g.getAllSymbols().size(),
-                (int)g.getProductionTable().size());
     display(GRAMMAR_RULES, INFO, "Grammar rules has been parsed", &g);
     g.resolveSymbolAttributes();
     return g;
@@ -200,7 +198,7 @@ bool Grammar::resolveNullable(Symbol &sym) {
     // Epsilon is nullable
     if (sym.id == epsilon) {
         sym.nullable.emplace(true);
-        stepNullable(sym.id, true, "Epsilon is nullable.");
+        step::nullable(sym.id, true, "Epsilon is nullable.");
         return true;
     }
 
@@ -209,7 +207,7 @@ bool Grammar::resolveNullable(Symbol &sym) {
 
     // For t in T, t is not nullable
     if (sym.type == SymbolType::TERM) {
-        stepNullable(sym.id, false,
+        step::nullable(sym.id, false,
                      "Terminals other than epsilon are not nullable.");
         return false;
     }
@@ -220,7 +218,7 @@ bool Grammar::resolveNullable(Symbol &sym) {
         // This symbol has epsilon production
         if (production.rightSymbols.empty()) {
             sym.nullable.emplace(true);
-            stepNullable(sym.id, true, "The symbol has an epsilon production.");
+            step::nullable(sym.id, true, "The symbol has an epsilon production.");
             return true;
         }
         bool prodNullable = true;
@@ -232,7 +230,7 @@ bool Grammar::resolveNullable(Symbol &sym) {
         }
         if (prodNullable) {
             sym.nullable.emplace(true);
-            stepNullable(
+            step::nullable(
                 sym.id, true,
                 "All components in a production of the symbol are nullable.");
             return true;
@@ -240,7 +238,7 @@ bool Grammar::resolveNullable(Symbol &sym) {
         // No luck, process the next production
     }
 
-    stepNullable(sym.id, false, "All productions of the symbol are not nullable.");
+    step::nullable(sym.id, false, "All productions of the symbol are not nullable.");
     return false;
 }
 
@@ -265,7 +263,7 @@ void Grammar::resolveFirstSet(vector<int> &visit, Symbol &curSymbol) {
             for (auto sid : rightSymbol.firstSet) {
                 if (sid != epsilon) {
                     curSymbol.firstSet.insert(sid);
-                    stepFirstAdd(
+                    step::addFirst(
                         curSymbol.id, sid,
                         "For A -> ab…x…, x's first set is a subset "
                         "of A's when ab…x are all nullable.");
@@ -278,7 +276,7 @@ void Grammar::resolveFirstSet(vector<int> &visit, Symbol &curSymbol) {
         }
         if (allNullable) {
             curSymbol.firstSet.insert(epsilon);
-            stepFirstAdd(
+            step::addFirst(
                 curSymbol.id, epsilon,
                 "The first set of a nullable symbol contains epsilon.");
         }
@@ -305,7 +303,7 @@ void Grammar::resolveFollowSet(
         auto const &parentFollowSet = symbolVector[parent].followSet;
         auto &followSet = symbolVector[dependency.first].followSet;
         followSet |= parentFollowSet;
-        stepFollowMerge(dependency.first, parent,
+        step::mergeFollow(dependency.first, parent,
                         "For A -> …ab…z, if b…z are all nullable, A's "
                         "follow set is a subset of a's.");
     }
@@ -316,7 +314,7 @@ Grammar &Grammar::resolveSymbolAttributes() {
     collectNonterminals();
 
     // stepPrintf("# Grammar file is read.\n");
-    stepPrintf("#! Attributes\n");
+    step::section("Attributes");
 
     // Nullable
     // Epsilon is nullable // This is done in resolveNullable
@@ -339,7 +337,7 @@ Grammar &Grammar::resolveSymbolAttributes() {
         if (symbol.type == SymbolType::TERM) {
             symbol.firstSet.insert(symbol.id);
             visit[symbol.id] = 1;
-            stepFirstAdd(symbol.id, symbol.id,
+            step::addFirst(symbol.id, symbol.id,
                          "The first set of a terminal contains itself.");
         }
     }
@@ -348,7 +346,7 @@ Grammar &Grammar::resolveSymbolAttributes() {
     for (auto &symbol : symbolVector) {
         if (symbol.nullable.value()) {
             symbol.firstSet.insert(epsilon);
-            stepFirstAdd(
+            step::addFirst(
                 symbol.id, epsilon,
                 "The first set of any nullable symbol contains epsilon.");
         }
@@ -365,7 +363,7 @@ Grammar &Grammar::resolveSymbolAttributes() {
 
     // Add $ to Follow set of the start symbol
     symbolVector[start].followSet.insert(endOfInput);
-    stepFollowAdd(start, endOfInput,
+    step::addFollow(start, endOfInput,
                   "The follow set of start symbol contains end-of-input.");
 
     // Get symbols from the next symbol's First set, and generate
@@ -402,7 +400,7 @@ Grammar &Grammar::resolveSymbolAttributes() {
                 for (auto first : nextSymbol.firstSet) {
                     if (first != epsilon) {
                         thisSymbol.followSet.insert(first);
-                        stepFollowAdd(
+                        step::addFollow(
                             thisSymbol.id, first,
                             "For A -> …ab…, all non-epsilon symbols "
                             "in b's first set appear in a's follow set.");

@@ -79,4 +79,65 @@ struct Constants {
     constexpr static const char *end_of_input = "$";
 };
 
+// 6. Format
+template<class OutIter>
+OutIter escape_all(std::string_view const& s, OutIter out, char quote) {
+  if (quote)
+    *out++ = quote;
+
+  for (auto i = s.begin(), end = s.end(); i != end; ++i) {
+    unsigned char c = *i;
+    if (' ' <= c && c <= '~' && c != '\\' && c != '"') {
+      *out++ = c;
+    } 
+    else {
+      *out++ = '\\';
+      switch(c) {
+      case '"':  *out++ = '"';  break;
+      case '\\': *out++ = '\\'; break;
+      case '\t': *out++ = 't';  break;
+      case '\r': *out++ = 'r';  break;
+      case '\n': *out++ = 'n';  break;
+      case '\'': *out++ = '\''; break;
+      default:
+        char const* const hexdig = "0123456789ABCDEF";
+        *out++ = 'x';
+        *out++ = hexdig[c >> 4];
+        *out++ = hexdig[c & 0xF];
+      }
+    }
+  }
+
+  if (quote)
+    *out++ = quote;
+
+  return out;
+}
+
+template<class OutIter>
+OutIter escape_ascii(std::string_view const& s, OutIter out, char quote) {
+  if (quote)
+    *out++ = quote;
+  for (auto i = s.begin(), end = s.end(); i != end; ++i) {
+    unsigned char c = *i;
+    if (' ' <= c && c <= '~' && c != '\\' && c != '"') {
+      *out++ = c;
+    } 
+    else {
+      switch(c) {
+      case '"':  *out++ = '\\'; *out++ = '"';  break;
+      case '\\': *out++ = '\\'; *out++ = '\\'; break;
+      case '\t': *out++ = '\\'; *out++ = 't';  break;
+      case '\r': *out++ = '\\'; *out++ = 'r';  break;
+      case '\n': *out++ = '\\'; *out++ = 'n';  break;
+      case '\'': *out++ = '\\'; *out++ = '\''; break;
+      default:   *out++ = c;
+      }
+    }
+  }
+  if (quote)
+    *out++ = quote;
+  return out;
+}
+
 #endif

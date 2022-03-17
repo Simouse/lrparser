@@ -1,90 +1,19 @@
+#include "src/common.h"
+#include "src/display/steps.h"
+#include <algorithm>
+#include <iomanip>
+#include <iostream>
 #include <stdarg.h>
 #include <string>
-#include <algorithm>
-#include <iostream>
-#include "src/display/steps.h"
+
 
 extern FILE *stepFile;
 
-const char *bool_str[2] = {"False", "True"};
+static const char *bool_str[2] = {"False", "True"};
 
-const int N_STATES = 2048;
+namespace step {
 
-template<class OutIter>
-OutIter escape_unicode(std::string const& s, OutIter out, char quote) {
-  if (quote)
-    *out++ = quote;
-
-  for (std::string::const_iterator i = s.begin(), end = s.end(); i != end; ++i) {
-    unsigned char c = *i;
-    if (' ' <= c && c <= '~' && c != '\\' && c != '"') {
-      *out++ = c;
-    } 
-    else {
-      *out++ = '\\';
-      switch(c) {
-      case '"':  *out++ = '"';  break;
-      case '\\': *out++ = '\\'; break;
-      case '\t': *out++ = 't';  break;
-      case '\r': *out++ = 'r';  break;
-      case '\n': *out++ = 'n';  break;
-      case '\'': *out++ = '\''; break;
-      default:
-        char const* const hexdig = "0123456789ABCDEF";
-        *out++ = 'x';
-        *out++ = hexdig[c >> 4];
-        *out++ = hexdig[c & 0xF];
-      }
-    }
-  }
-
-  if (quote)
-    *out++ = quote;
-
-  return out;
-}
-
-template<class OutIter>
-OutIter escape_ascii(std::string const& s, OutIter out, char quote) {
-  if (quote)
-    *out++ = quote;
-  for (std::string::const_iterator i = s.begin(), end = s.end(); i != end; ++i) {
-    unsigned char c = *i;
-    if (' ' <= c && c <= '~' && c != '\\' && c != '"') {
-      *out++ = c;
-    } 
-    else {
-      switch(c) {
-      case '"':  *out++ = '\\'; *out++ = '"';  break;
-      case '\\': *out++ = '\\'; *out++ = '\\'; break;
-      case '\t': *out++ = '\\'; *out++ = 't';  break;
-      case '\r': *out++ = '\\'; *out++ = 'r';  break;
-      case '\n': *out++ = '\\'; *out++ = 'n';  break;
-      case '\'': *out++ = '\\'; *out++ = '\''; break;
-      default:   *out++ = c;
-      }
-    }
-  }
-  if (quote)
-    *out++ = quote;
-  return out;
-}
-
-void stepPrepare(int nsym, int nprod) {
-//   fprintf(stepFile, 1 + R"(
-// #!nsym=%d,nprod=%d
-
-// )", nsym, nprod);
-}
-
-void stepFinish() {
-//     fprintf(stepFile, R"(
-// print(to_json(symbol))
-// print(to_json(production))
-// )");
-}
-
-void stepSymbol(int id, const char *name, bool is_term, bool is_start) {
+void symbol(int id, const char *name, bool is_term, bool is_start) {
     std::string escaped_name;
     escape_ascii(name, std::back_inserter(escaped_name), '\'');
     fprintf(stepFile, "symbol[%d].name=%s\n", id, escaped_name.c_str());
@@ -92,52 +21,76 @@ void stepSymbol(int id, const char *name, bool is_term, bool is_start) {
     fprintf(stepFile, "symbol[%d].is_start=%s\n", id, bool_str[is_start]);
 }
 
-void stepProduction(int id, int head, const int *body, size_t body_size) {
+void production(int id, int head, const int *body, size_t body_size) {
     fprintf(stepFile, "production[%d].head = %d\n", id, head);
     fprintf(stepFile, "production[%d].body = [", id);
     for (size_t index = 0; index < body_size; ++index) {
-      fprintf(stepFile, index ? ", %d" : "%d", body[index]);
+        fprintf(stepFile, index ? ", %d" : "%d", body[index]);
     }
     fprintf(stepFile, "]\n");
     fprintf(stepFile, "symbol[%d].productions.append(%d)\n", head, id);
-    
 }
 
-void stepNullable(int symbol, bool nullable, const char *explain) {
-    fprintf(stepFile, "symbol[%d].nullable = %-5s \n# %s\n", symbol,
-            bool_str[nullable], explain);
+void nullable(int symbol, bool nullable, const char *explain) {
+    fprintf(stepFile, "symbol[%d].nullable = %-5s\n", symbol,
+            bool_str[nullable]);
+    show(explain);
 }
 
-void stepFirstAdd(int symbol, int component, const char *explain) {
-    fprintf(stepFile, "symbol[%d].first.add(%d) \n# %s\n", symbol,
-            component, explain);
+void addFirst(int symbol, int component, const char *explain) {
+    fprintf(stepFile, "symbol[%d].first.add(%d)\n", symbol, component);
+    show(explain);
 }
 
-void stepFollowAdd(int symbol, int component, const char *explain) {
-    fprintf(stepFile, "symbol[%d].follow.add(%d) \n# %s\n", symbol, component,
-            explain);
+void addFollow(int symbol, int component, const char *explain) {
+    fprintf(stepFile, "symbol[%d].follow.add(%d)\n", symbol, component);
+    show(explain);
 }
 
-void stepFollowMerge(int dest, int src, const char *explain) {
-    fprintf(stepFile,
-            "symbol[%d].follow.update(symbol[%d].follow) \n# %s\n", dest,
-            src, explain);
+void mergeFollow(int dest, int src, const char *explain) {
+    fprintf(stepFile, "symbol[%d].follow.update(symbol[%d].follow)\n", dest,
+            src);
+    show(explain);
 }
 
-void stepTableAdd(int state, int look_ahead, const char *action) {
+void addTableEntry(int state, int look_ahead, const char *action) {
     fprintf(stepFile, "table[%d][%d].add('%s')\n", state, look_ahead, action);
 }
 
-void stepTestInit() {
-//     fprintf(stepFile, R"(
-// symbol_stack = deque()
-// state_stack = deque()
-// input_queue = deque()
-// )");
+void printf(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stepFile, fmt, ap);
 }
 
-void stepPrintf(const char *fmt, ...) {
-  va_list ap;
-  va_start(ap, fmt);
-  vfprintf(stepFile, fmt, ap);  
+void addState(int state, std::string_view description) {
+    std::string s;
+    escape_ascii(description, std::back_inserter(s), '\"');
+    fprintf(stepFile, "addState(%d, %s)\n", state, s.c_str());
 }
+
+void updateState(int state, std::string_view description) {
+    std::string s;
+    escape_ascii(description, std::back_inserter(s), '\"');
+    fprintf(stepFile, "updateState(%d, %s)\n", state, s.c_str());
+}
+
+void addEdge(int s1, int s2, std::string_view label) {
+    std::string s;
+    escape_ascii(label, std::back_inserter(s), '\"');
+    fprintf(stepFile, "addEdge(%d, %d, %s)\n", s1, s2, s.c_str());
+}
+
+void setStart(int state) { fprintf(stepFile, "setStart(%d)\n", state); }
+
+void setFinal(int state) { fprintf(stepFile, "setFinal(%d)\n", state); }
+
+void show(std::string_view message) {
+    fprintf(stepFile, "show(\"\"\"%s\"\"\")\n", message.data());
+}
+
+void section(std::string_view title) {
+    fprintf(stepFile, "section(\"\"\"%s\"\"\")\n", title.data());
+}
+
+} // namespace step

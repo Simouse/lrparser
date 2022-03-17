@@ -259,7 +259,7 @@ class TableTab(QtWidgets.QWidget):
 
         self._lrwindow = parent
         self._opts = opts
-        self._env = env  # Everything except parser states are used.
+        self._env = env
         self._symset = set()
         for sym in self._env.symbol:
             self._symset.add(sym.name)
@@ -269,7 +269,8 @@ class TableTab(QtWidgets.QWidget):
             print(err)
             raise Exception()
         self._code = code
-        self._line = stepUntil(self._code, 0, self._env.__dict__, '#! Test')
+        self._line = 0
+        self._section = ''
 
         hLayout = QtWidgets.QHBoxLayout()
         hLayout.addSpacing(16)
@@ -287,7 +288,21 @@ class TableTab(QtWidgets.QWidget):
         infoLabel.setAlignment(Qt.AlignCenter) # type: ignore
         self._info_label = infoLabel
         self._info_label.setText('Click "Start/Reset" button to start a test.')
+        self._env.show = lambda s: self._info_label.setText(s)
+        self._env.section = lambda s: self.setSection(s)
 
+        # self._line = stepUntil(self._code, 0, self._env.__dict__, '#! Test')
+        while self._line < len(self._code) and self._section != 'Parse Table':
+            self._line = skipSection(self._code, self._line, self._env.__dict__)
+            # codeLine = self._code[self._line]
+            # if codeLine.startswith('section(') and 'Test' in codeLine:
+            #     break
+            self._line += 1
+        while self._line < len(self._code) and self._section != 'Test':
+            self._line = execSection(self._code, self._line, self._env.__dict__)
+            self._line += 1
+        self._table.emitLayoutChanged()
+        
         buttons = QtWidgets.QHBoxLayout()
         buttons.addStretch(1)
         button = QtWidgets.QPushButton('Start/Reset')
@@ -321,6 +336,9 @@ class TableTab(QtWidgets.QWidget):
 
         self.setLayout(layout)
 
+    def setSection(self, section: str) -> None:
+        self._section = section
+
     def resetButtonClicked(self) -> None:
         dialog = InputDialog(self, self._opts, self.submitTest)
         dialog.show()
@@ -328,12 +346,12 @@ class TableTab(QtWidgets.QWidget):
     # Returns line number of last line (returned by stepNext()).
     def continueButtonClicked(self) -> int:
         # print('Current line:', self._line)
-        line = stepNext(self._code, self._line, self._env.__dict__, '#!')
-        if line < len(self._code) and not re.match('#!', self._code[line]):
-            result = re.match('#\s*(.*)', self._code[line])
-            if result:
-                info = result.group(1)
-                self._info_label.setText(info)
+        line = execNext(self._code, self._line, self._env.__dict__)
+        # if line < len(self._code) and not re.match('#!', ):
+        #     result = re.match('#\s*(.*)', self._code[line])
+        #     if result:
+        #         info = result.group(1)
+        #         self._info_label.setText(info)
         self._line = line + 1
         if self._line >= len(self._code):
             self._continue_button.setEnabled(False)
@@ -341,11 +359,16 @@ class TableTab(QtWidgets.QWidget):
         return line
 
     def finishButtonClicked(self) -> None:
-        line = self._line
-        while line < len(self._code):
-            line = self.continueButtonClicked()
-            if line < len(self._code) and re.match('#!', self._code[line]):
-                break
+        # line = self._line
+        # while line < len(self._code):
+        #     line = self.continueButtonClicked()
+        #     if line < len(self._code) and re.match('#!', self._code[line]):
+        #         break
+        line = execSection(self._code, self._line, self._env.__dict__)
+        self._line = line + 1
+        if self._line >= len(self._code):
+            self._continue_button.setEnabled(False)
+            self._finish_button.setEnabled(False)
 
     def submitTest(self, test: str) -> bool:
         # Check test string
@@ -370,9 +393,14 @@ class TableTab(QtWidgets.QWidget):
         self._env.input_queue.clear()
         self._info_label.setText('Click "Continue" button to begin the test.')
 
-        line = skipUntil(steps, 0, '#! Test')
-        line = stepUntil(steps, line + 1, self._env.__dict__, '#! Init Test')
-        self._line = line + 1
+        line = 0
+        while line < len(steps) and self._section != 'Test':
+            line = skipSection(steps, line, self._env.__dict__)
+            line += 1
+        while line < len(steps) and self._section != 'Init Test':
+            line = execSection(steps, line, self._env.__dict__)
+            line += 1
+        self._line = line
         self._code = steps
 
         self._finish_button.setEnabled(True)

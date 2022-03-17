@@ -154,9 +154,14 @@ class PushDownAutomaton {
     // state can be final.
     [[nodiscard]] bool dumpState(FILE *stream, StateID stateID) const;
 
+    [[nodiscard]] std::string dumpStateString(StateID stateID) const;
+
     // Dump StateClosure in human-readable string. Returns a flag indicating if
     // this state can be final.
     [[nodiscard]] bool dumpClosure(FILE *stream, StateID closureID) const;
+    [[nodiscard]] std::string dumpClosureString(StateID closureID) const;
+    // [[nodiscard]] bool isFinalState(StateID id) const;
+    // [[nodiscard]] bool isFinalClosure(StateID id) const;
 
     // This error is thrown when current state is illegal. This may
     // be caused by not setting start state.

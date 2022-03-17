@@ -143,6 +143,13 @@ class ParsingEnv():
         self.state_stack: Optional[DequeProtocol] = None
         self.symbol_stack: Optional[DequeProtocol] = None
         self.input_queue: Optional[DequeProtocol] = None
+        self.show = lambda s: None
+        self.section = lambda s: None
+        self.addState = lambda a, s: None
+        self.updateState = lambda a, s: None
+        self.addEdge = lambda a, b, s: None
+        self.setStart = lambda s: None
+        self.setFinal = lambda s: None
 
     def copy(self) -> 'ParsingEnv':
         env = ParsingEnv()
@@ -160,7 +167,7 @@ class LRParserOptions:
                  out: str,
                  bin: str,
                  grammar: str,
-                 parser: str = 'slr') -> None:
+                 parser: str = 'SLR(1)') -> None:
         self.out = out  # Temporary directory
         self.bin = bin  # Executable file location
         self.grammar = grammar  # Grammar file path
@@ -208,7 +215,14 @@ class TextDialog(QtWidgets.QDialog):
 # Returns (steps, err)
 def getLRSteps(opts: LRParserOptions,
                test: str = '') -> Tuple[List[str], Optional[str]]:
-    cmd = [opts.bin, '-t', opts.parser, '-o', opts.out, '-g', opts.grammar]
+    parser = {
+        'LR(0)': 'lr0',
+        'SLR(1)': 'slr',
+        'LALR(1)': 'lalr',
+        'LR(1)': 'lr1'
+    }[opts.parser]
+
+    cmd = [opts.bin, '-t', parser, '-o', opts.out, '-g', opts.grammar]
 
     if isspace(test):
         test = '$'
@@ -237,46 +251,49 @@ def getLRSteps(opts: LRParserOptions,
     return (steps, None)
 
 
-# Execute the code line by line until any of following predicates becomes true:
-# - A regular expression match of `limit` happens.
-# - `line >= len(code)`
-# - A comment is met.
-# Returns the line number where the stop happens.
-def stepNext(code: list, line: int, env: dict, limit: str) -> int:
+# Returns the line number at the stopping point.
+def execNext(code: list, line: int, env: dict) -> int:
     leng = len(code)
     while line < leng:
-        if re.match(limit, code[line]):
-            break
-        if str(code[line]).startswith('#'):
-            break
         exec(code[line], env)
+        if code[line].startswith('section('):
+            break
+        if code[line].startswith('show('):
+            break
         line += 1
     return line
 
 
-# Execute the code line by line until any of following predicates becomes true:
-# - A regular expression match of `limit` happens.
-# - `line >= len(code)`
-# Returns the line number where the stop happens.
-def stepUntil(code: list, line: int, env: dict, limit: str):
+# Returns the line number at the stopping point.
+def skipNext(code: list, line: int, env: dict) -> int:
     leng = len(code)
     while line < leng:
-        if re.match(limit, code[line]):
+        if code[line].startswith('section('):
+            exec(code[line], env)
             break
-        exec(code[line], env)
+        if code[line].startswith('show('):
+            break
         line += 1
     return line
 
 
-# Scan the code line by line until any of following predicates becomes true:
-# - A regular expression match of `limit` happens.
-# - `line >= len(code)`
-# The scanning does not involve executing the code.
-# Returns the line number where the stop happens.
-def skipUntil(code: list, line: int, limit: str):
+# Returns the line number at the stopping point.
+def execSection(code: list, line: int, env: dict):
     leng = len(code)
     while line < leng:
-        if re.match(limit, code[line]):
+        exec(code[line], env)
+        if code[line].startswith('section('):
+            break
+        line += 1
+    return line
+
+
+# Returns the line number at the stopping point.
+def skipSection(code: list, line: int, env: dict):
+    leng = len(code)
+    while line < leng:
+        if code[line].startswith('section('):
+            exec(code[line], env)
             break
         line += 1
     return line

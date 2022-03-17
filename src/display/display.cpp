@@ -66,7 +66,6 @@ void lrCleanUp() {
     if (!launchArgs.launchSuccess) {
         return;
     }
-    stepFinish();
     std::fclose(stepFile);
 }
 

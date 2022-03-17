@@ -82,7 +82,6 @@ void LRParser::buildNFA() {
     const auto &symbols = gram.getAllSymbols();
     auto const &productionTable = gram.getProductionTable();
     util::Formatter f;
-    constexpr const char *outFilePrefix = "build_nfa";
 
     buildKernel();
 
@@ -196,13 +195,13 @@ void LRParser::buildNFA() {
         }
     }
 
-    display(AUTOMATON, INFO, "NFA is built", &M, (void *)outFilePrefix);
+    display(AUTOMATON, INFO, "NFA is built", &M, (void *)"NFA");
 }
 
 void LRParser::buildDFA() {
     // Dump flag is inherited from NFA, no need to set again.
     dfa = nfa.toDFA();
-    display(AUTOMATON, INFO, "DFA is built", &dfa, (void *)"build_dfa");
+    display(AUTOMATON, INFO, "DFA is built", &dfa, (void *)"DFA");
 }
 
 void LRParser::buildParseTable() {
@@ -212,8 +211,6 @@ void LRParser::buildParseTable() {
     auto endOfInput = static_cast<ActionID>(gram.getEndOfInputSymbol().id);
     auto stateCount = static_cast<int>(states.size());
     auto const &auxStates = dfa.getAuxStates();
-
-    stepPrintf("#! Parse Table\n");
 
     for (int i = 0; i < stateCount; ++i) {
         auto stateID = static_cast<StateID>(i);
@@ -307,7 +304,7 @@ void LRParser::addParseTableEntry(StateID state, ActionID act,
         parseTableConflicts.emplace(state, act);
     }
     auto entry = singleParseTableEntry(pact);
-    stepTableAdd(state, act, entry.c_str());
+    step::addTableEntry(state, act, entry.c_str());
 }
 
 std::string LRParser::dumpParseTableEntry(StateID state,
@@ -337,26 +334,26 @@ void LRParser::readSymbol(util::TokenReader &reader) {
             inputFlag = false;
         }
         InputQueue.push_back(symbol.id);
-        stepPrintf("input_queue.appendleft(%d)\n", symbol.id);
+        step::printf("input_queue.appendleft(%d)\n", symbol.id);
     } else {
         inputFlag = false;
         auto EOI = gram.getEndOfInputSymbol().id;
         InputQueue.push_back(EOI);
-        stepPrintf("input_queue.appendleft(%d)\n", EOI);
+        step::printf("input_queue.appendleft(%d)\n", EOI);
     }
 }
 
 // Test given stream with parsed results
 bool LRParser::test(std::istream &stream) {
-    stepPrintf("#! Test\n"); 
+    // stepPrintf("#! Test\n"); 
+    step::section("Test");
     try {
         inputFlag = true;
         stateStack.clear();
         symbolStack.clear();
         InputQueue.clear();
         stateStack.push_back(dfa.getStartState());
-        stepTestInit();
-        stepPrintf("state_stack.append(%d)\n", dfa.getStartState());
+        step::printf("state_stack.append(%d)\n", dfa.getStartState());
 
         // Only one of them is used
         GrammarReader grammarReader(stream);
@@ -373,7 +370,8 @@ bool LRParser::test(std::istream &stream) {
         }
 
         display(PARSE_STATES, INFO, "Parser states", this);
-        stepPrintf("#! Init Test.\n");
+        // stepPrintf("#! Init Test.\n");
+        step::section("Init Test");
 
         if (!launchArgs.exhaustInput) {
             display(LOG, INFO,
@@ -396,12 +394,14 @@ bool LRParser::test(std::istream &stream) {
 
             auto choices = tableEntry.size();
             if (choices <= 0) {
-                stepPrintf("# Error: No viable actions for this input.\n");
+                // stepPrintf("# Error: No viable actions for this input.\n");
+                step::show("Error: No viable actions for this input.");
                 throw std::runtime_error(
                     "No viable action in parse table for this input");
             }
             if (choices > 1) {
-                stepPrintf("# Error: Action conflicts.\n");
+                // stepPrintf("# Error: Action conflicts.\n");
+                step::show("Error: Action conflicts.");
                 throw std::runtime_error(
                     "Multiple viable choices. Cannot decide which action "
                     "to take");
@@ -413,17 +413,19 @@ bool LRParser::test(std::istream &stream) {
             case ParseAction::GOTO:
             case ParseAction::SHIFT:
                 stateStack.push_back(decision.dest);
-                stepPrintf("state_stack.append(%d)\n", decision.dest);
+                step::printf("state_stack.append(%d)\n", decision.dest);
                 symbolStack.push_back(InputQueue.front());
-                stepPrintf("symbol_stack.append(%d)\n", InputQueue.front());
+                step::printf("symbol_stack.append(%d)\n", InputQueue.front());
                 InputQueue.pop_front();
-                stepPrintf("input_queue.pop()\n");
+                step::printf("input_queue.pop()\n");
                 if (decision.type == ParseAction::GOTO) {
                     display(LOG, VERBOSE, "Apply GOTO rule");
-                    stepPrintf("# Apply goto rule.\n");
+                    // stepPrintf("# Apply goto rule.\n");
+                    step::show("Apply goto rule.");
                 } else {
                     display(LOG, VERBOSE, "Apply SHIFT rule");
-                    stepPrintf("# Apply shift rule.\n");
+                    // stepPrintf("# Apply shift rule.\n");
+                    step::show("Apply shift rule.");
                 }
                 break;
             case ParseAction::REDUCE:
@@ -435,7 +437,8 @@ bool LRParser::test(std::istream &stream) {
                 break;
             case ParseAction::SUCCESS:
                 display(LOG, INFO, "Success");
-                stepPrintf("# Success.\n");
+                // stepPrintf("# Success.\n");
+                step::show("Success.");
                 return true;
             }
 
@@ -469,12 +472,17 @@ void LRParser::reduce(ProductionID prodID) {
     for (size_t i = 0; i < bodySize; ++i) {
         symbolStack.pop_back();
         stateStack.pop_back();
-        stepPrintf("symbol_stack.pop()\n");
-        stepPrintf("state_stack.pop()\n");
+        step::printf("symbol_stack.pop()\n");
+        step::printf("state_stack.pop()\n");
     }
     InputQueue.push_front(prod.leftSymbol);
-    stepPrintf("input_queue.append(%d)\n", prod.leftSymbol);
-    stepPrintf("# Apply reduce rule: %d.\n", prodID);
+    step::printf("input_queue.append(%d)\n", prod.leftSymbol);
+    // stepPrintf("# Apply reduce rule: %d.\n", prodID);
+
+    std::string s = "Apply reduce rule: ";
+    s += std::to_string(prodID);
+    s += ".";
+    step::show(s);
 }
 
 } // namespace gram

@@ -4,6 +4,7 @@ from PySide6 import QtCore, QtWidgets, QtGui
 from PySide6.QtCore import Qt
 from ParseTable import *
 from Model import *
+from Automaton import AutomatonTab
 
 
 class SymbolTableModel(QtCore.QAbstractTableModel):
@@ -114,11 +115,6 @@ class SymbolTable(QtWidgets.QWidget):
         table = QtWidgets.QTableView()
         table.setModel(self._model)
         header = table.horizontalHeader()
-        # header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
-        # header.setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
-        # header.setSectionResizeMode(2, QtWidgets.QHeaderView.Stretch)
-        # header.setSectionResizeMode(3, QtWidgets.QHeaderView.Stretch)
-        # header.setSectionResizeMode(4, QtWidgets.QHeaderView.Stretch)
         header.setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         table.setHorizontalHeader(header)
 
@@ -146,7 +142,8 @@ class SymbolTable(QtWidgets.QWidget):
 
 
 class ProductionTable(QtWidgets.QWidget):
-    def __init__(self, symvec: List[Symbol], prods: List[Production], *args) -> None:
+    def __init__(self, symvec: List[Symbol], prods: List[Production],
+                 *args) -> None:
         super().__init__(*args)
         # self._data = (symvec, prods)
         self._model = ProductionTableModel(symvec, prods)
@@ -154,8 +151,6 @@ class ProductionTable(QtWidgets.QWidget):
         table = QtWidgets.QTableView()
         table.setModel(self._model)
         header = table.horizontalHeader()
-        # header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
-        # header.setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
         header.setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         table.setHorizontalHeader(header)
 
@@ -184,18 +179,20 @@ class ProductionTable(QtWidgets.QWidget):
 
 
 class AttributeTab(QtWidgets.QWidget):
-    def __init__(self, parent: QtWidgets.QWidget, opts: LRParserOptions) -> None:
+    def __init__(self, parent: QtWidgets.QWidget,
+                 opts: LRParserOptions) -> None:
         super().__init__()
 
         # self._tag = tag
         self._opts = opts
-        self._lrwindow = parent
+        self._parent = parent
 
         code, err = getLRSteps(self._opts)
         if err:
             raise Exception(err)
         self._code = code
         self._line = 0
+        self._section = None
 
         # print(self._code)
 
@@ -230,9 +227,11 @@ class AttributeTab(QtWidgets.QWidget):
         font = infoText.font()
         font.setPointSize(12)
         infoText.setFont(font)
-        infoText.setAlignment(Qt.AlignCenter) # type: ignore
+        infoText.setAlignment(Qt.AlignCenter)  # type: ignore
         infoText.setText('Press button "Continue" to start')
         self._info_text = infoText
+        self._env.show = lambda s: self._info_text.setText(s)
+        self._env.section = lambda s: self.setSection(s)
 
         vLayout = QtWidgets.QVBoxLayout()
         vLayout.addLayout(hLayout)
@@ -243,10 +242,16 @@ class AttributeTab(QtWidgets.QWidget):
 
         self.setLayout(vLayout)
 
-        self._line = stepUntil(self._code, self._line, self._env.__dict__,
-                               '#! Attributes')
-        # print('Stopped at:', self._code[self._line])
-        self._line += 1
+        # self._line = stepUntil(self._code, self._line, self._env.__dict__,
+        #                        '#! Attributes')
+        # # print('Stopped at:', self._code[self._line])
+        # self._line += 1
+
+        while self._line < len(self._code) and self._section != 'Attributes':
+            self._line = execSection(self._code, self._line,
+                                     self._env.__dict__)
+            self._line += 1
+
         self.symbolTable.refresh()
         self.productionTable.refresh()
 
@@ -260,6 +265,9 @@ class AttributeTab(QtWidgets.QWidget):
         self.symbolTable.refresh()
         self.productionTable.refresh()
 
+    def setSection(self, section) -> None:
+        self._section = section
+
     def nextButtonClicked(self) -> None:
         items = [
             'Recursive Descent', 'LL(1)', 'LR(0)', 'SLR(1)', 'LALR(1)', 'LR(1)'
@@ -267,21 +275,19 @@ class AttributeTab(QtWidgets.QWidget):
         item, ok = QtWidgets.QInputDialog.getItem(
             self, 'Parsers', 'Choose a parser from below:', items, 0, False)
         if ok and item:
-            lrFamily = {
-                'LR(0)': 'lr0',
-                'SLR(1)': 'slr',
-                'LALR(1)': 'lalr',
-                'LR(1)': 'lr1'
-            }
-            if item in lrFamily.keys():
-                arg = lrFamily[item]
+            if item in [
+                'LR(0)',
+                'SLR(1)',
+                'LALR(1)',
+                'LR(1)',
+            ]:
                 # print('User chose parser:', item)
-                self._opts.parser = arg
+                self._opts.parser = item
                 opts = self._opts.copy()
                 env = self._env.copy()
-                tab = TableTab(self._lrwindow, opts, env)
-                # tab = Automaton(self._lrwindow, opts, env)
-                self._lrwindow.requestNext(tab, item)
+                # tab = TableTab(self._lrwindow, opts, env)
+                tab = AutomatonTab(self._parent, opts, env)
+                self._parent.requestNext(tab, item + ' DFA')
             else:
                 dialog = TextDialog(self, 'Not implemented')
                 dialog.show()
@@ -314,21 +320,21 @@ class AttributeTab(QtWidgets.QWidget):
 
     # Returns if the stop is caused by limit.
     def nextLine(self) -> bool:
-        line = stepNext(self._code, self._line, self._env.__dict__, '#!')
+        line = execNext(self._code, self._line, self._env.__dict__)
         leng = len(self._code)
-        flag = False
-        if line < leng:
-            code = self._code[line]
-            if re.match('#!', code):
-                line += 1
-                flag = True
-            else:
-                result = re.match('#\s*(.*)', code)
-                if result:
-                    s = result.group(1)
-                    self._info_text.setText(s)
-                    line += 1
-        if line >= leng or flag:
+        flag = line >= leng or self._section != 'Attributes'
+        # if line < leng:
+        #     code = self._code[line]
+        #     if re.match('#!', code):
+        #         line += 1
+        #         flag = True
+        #     else:
+        #         result = re.match('#\s*(.*)', code)
+        #         if result:
+        #             s = result.group(1)
+        #             self._info_text.setText(s)
+        #             line += 1
+        if flag:
             self.prepareNextPart()
-        self._line = line
+        self._line = line + 1
         return flag
