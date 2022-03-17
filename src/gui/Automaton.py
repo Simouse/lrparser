@@ -19,7 +19,7 @@ class StateItem(QtWidgets.QGraphicsEllipseItem):
             centerY: float,
             radius: float,
             text: str,
-            tooltip: Optional[str] = None,
+            description: Optional[str] = None,
             brush: Union[PySide6.QtGui.QBrush, PySide6.QtCore.Qt.BrushStyle,
                          PySide6.QtCore.Qt.GlobalColor, PySide6.QtGui.QColor,
                          PySide6.QtGui.QGradient, PySide6.QtGui.QImage,
@@ -38,7 +38,7 @@ class StateItem(QtWidgets.QGraphicsEllipseItem):
         self.setFlag(QtWidgets.QGraphicsItem.ItemIsMovable, True)
         self.setFlag(QtWidgets.QGraphicsItem.ItemSendsGeometryChanges, True)
         self.setBrush(brush)
-        self.setToolTip(tooltip)  # type: ignore
+        self.setDescription(description)  # type: ignore
         self.setAcceptDrops(True)
 
         label = QtWidgets.QGraphicsSimpleTextItem(parent=self)
@@ -60,6 +60,11 @@ class StateItem(QtWidgets.QGraphicsEllipseItem):
         pen = sign.pen()
         pen.setColor(Qt.transparent)
         sign.setPen(pen)
+
+    def setDescription(self, description: str) -> None:
+        tooltip = description.splitlines()
+        tooltip = sorted(tooltip)
+        self.setToolTip('\n'.join(tooltip))
 
     def radius(self) -> float:
         return self._radius
@@ -249,9 +254,9 @@ class AutomatonView(QtWidgets.QGraphicsView):
         S = self._states[state]
         S.setStart(start)
 
-    def setDescription(self, state: int, tooltip: str) -> None:
+    def setDescription(self, state: int, description: str) -> None:
         stateItem: StateItem = self._states[state]
-        stateItem.setToolTip(tooltip)
+        stateItem.setDescription(description)
 
 
 class AutomatonTab(QtWidgets.QWidget):

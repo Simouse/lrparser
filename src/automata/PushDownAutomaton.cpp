@@ -244,13 +244,15 @@ std::string PushDownAutomaton::dumpStateString(StateID stateID) const {
     escape_ascii((*kernelLabelMap)[state.productionID][state.rhsIndex],
                  std::back_inserter(s), 0);
 
-    s += ", ";
-    bool slash = false;
-    for (auto actionID : *constraint) {
-        if (slash)
-            s += "/";
-        escape_ascii(actions[actionID], std::back_inserter(s), 0);
-        slash = true;
+    if (this->includeConstraints) {
+        s += ", ";
+        bool slash = false;
+        for (auto actionID : *constraint) {
+            if (slash)
+                s += "/";
+            escape_ascii(actions[actionID], std::back_inserter(s), 0);
+            slash = true;
+        }
     }
     return s;
 }
@@ -316,27 +318,21 @@ std::string PushDownAutomaton::dumpClosureString(StateID closureID) const {
             finalFlag = true;
         }
 
-        s += ", ";
-        bool slash = false;
-        for (auto actionID : *constraint) {
-            if (slash)
-                s += "/";
-            escape_ascii(actions[actionID], std::back_inserter(s), 0);
-            slash = true;
+        if (this->includeConstraints) {
+            s += ", ";
+            bool slash = false;
+            for (auto actionID : *constraint) {
+                if (slash)
+                    s += "/";
+                escape_ascii(actions[actionID], std::back_inserter(s), 0);
+                slash = true;
+            }
         }
 
         newLineFlag = true;
     }
     return s;
 }
-
-// bool PushDownAutomaton::isFinalState(StateID id) const {
-
-// }
-
-// bool PushDownAutomaton::isFinalClosure(StateID id) const {
-
-// }
 
 PushDownAutomaton PushDownAutomaton::toDFA() {
     PushDownAutomaton dfa{this->transitionSetProvider, this->kernelLabelMap};

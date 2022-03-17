@@ -391,7 +391,6 @@ class TableTab(QtWidgets.QWidget):
         self._env.symbol_stack.clear()
         self._env.state_stack.clear()
         self._env.input_queue.clear()
-        self._info_label.setText('Click "Continue" button to begin the test.')
 
         line = 0
         while line < len(steps) and self._section != 'Test':
@@ -405,6 +404,9 @@ class TableTab(QtWidgets.QWidget):
 
         self._finish_button.setEnabled(True)
         self._continue_button.setEnabled(True)
+
+        # execSection() may change the label. So we reset label text here.
+        self._info_label.setText('Click "Continue" button to begin the test.')
         return True
 
     def createTableLayout(self) -> QtWidgets.QVBoxLayout:
