@@ -116,7 +116,7 @@ Input queue : Front ->| $
 > Success
 ```
 
-Automatons in graphviz language format are generated in the result directory (default: `out`) because they are difficult to display in the console. You need to invoke `dot` by yourself. The program used to provide generated `svg` files as well if you have `dot` installed, but invoking dot processes on Windows is too slow (in Linux it's just fast) and makes the tool a target of Windows Defender Anti-virus module because the tool invokes a lot of processes in such a short time. Later I tried to use graphviz as library in my code, but I found graphviz cgraph library had memory leaks and double free() bugs which I couldn't get right. So I dropped the support for directly generated svg files.
+Automatons in graphviz language format are generated in the result directory (default: `.`) because they are difficult to display in the console. You need to invoke `dot` by yourself. The program used to provide generated `svg` files as well if you have `dot` installed, but invoking dot processes on Windows is too slow (in Linux it's just fast) and makes the tool a target of Windows Defender Anti-virus module because the tool invokes a lot of processes in such a short time. Later I tried to use graphviz as library in my code, but I found graphviz cgraph library had memory leaks and double free() bugs which I couldn't get right. So I dropped the support for directly generated svg files.
 
 SLR NFA:
 
