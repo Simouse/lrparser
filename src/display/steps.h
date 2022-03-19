@@ -20,6 +20,9 @@ void updateState(int state, std::string_view description);
 void addEdge(int s1, int s2, std::string_view label);
 void setStart(int state);
 void setFinal(int state);
+void astAddNode(int index, std::string_view label);
+void astSetParent(int child, int parent);
+// void astSetRoot(int root);
 void show(std::string_view message);
 void section(std::string_view title);
 

@@ -6,6 +6,7 @@
 #include "src/grammar/Grammar.h"
 #include "src/parser/LRParser.h"
 #include "src/util/BitSet.h"
+#include "src/util/Formatter.h"
 #include "src/display/steps.h"
 #include <cassert>
 #include <cstddef>

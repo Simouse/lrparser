@@ -1,15 +1,13 @@
 from getopt import error
 import tempfile
+import signal
 import sys
 import os
 import re
-from typing import Any, Callable, Dict, Tuple
+from typing import Any, Callable, Dict, Set, Tuple
 from PySide6 import QtCore, QtWidgets, QtGui
 from PySide6.QtCore import Qt
-import subprocess
 from Model import *
-
-# TODO: Change all "Python3" titles to approperate ones.
 
 
 class ParseTableModel(QtCore.QAbstractTableModel):
@@ -114,7 +112,9 @@ class InputDialog(QtWidgets.QDialog):
         self.resize(400, 300)
         self._opts = opts
         # Returns whether the dialog should be closed.
-        self._submitText = submitText 
+        self._submitText = submitText
+
+        self.setWindowTitle('Dialog')
 
         layout = QtWidgets.QVBoxLayout()
         label = QtWidgets.QLabel()
@@ -182,51 +182,67 @@ class BottomUpDequeView(QtWidgets.QGraphicsView):
         font.setPointSize(11)
         self._font = font
 
-        self._leftindex = 0
+        self._leftIndex = 0
         self._deq: deque = deque()
+        self._itemHeight = 24
 
         self.setScene(scene)
-        self.setAlignment(Qt.AlignBottom)  # type: ignore
+        self.setAlignment(Qt.AlignBottom | Qt.AlignHCenter)  # type: ignore
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
-        # self.setTransformationAnchor(QtWidgets.QGraphicsView.NoAnchor)
+    def shrink(self) -> None:
+        self.setSceneRect(self._scene.itemsBoundingRect())
+
+    def newLabel(self, text: str) -> QtWidgets.QLabel:
+        label = QtWidgets.QLabel(text=text)
+        w = self.width()
+        label.setFixedWidth(w)
+        label.setFixedHeight(self._itemHeight)
+        label.setAlignment(Qt.AlignCenter)  # type: ignore
+        return label
 
     def appendText(self, text: str) -> None:
-        textItem = self._scene.addText(text)
-        index = len(self._deq) + self._leftindex
-        textItem.setPos(*self.getPos(index))
+        textItem = self._scene.addWidget(self.newLabel(text))
+        index = len(self._deq) + self._leftIndex
+        textItem.setPos(-textItem.widget().width() / 2.0, self.getPosY(index))
         self._deq.append(textItem)
+        self.shrink()
 
     def appendleftText(self, text: str) -> None:
-        textItem = self._scene.addText(text)
-        self._leftindex -= 1
-        index = self._leftindex
-        textItem.setPos(*self.getPos(index))
+        textItem = self._scene.addWidget(self.newLabel(text))
+        self._leftIndex -= 1
+        index = self._leftIndex
+        textItem.setPos(-textItem.widget().width() / 2.0, self.getPosY(index))
         self._deq.appendleft(textItem)
-        # self.verticalScrollBar().setValue(self.verticalScrollBar().value() - 24);
+        self.shrink()
 
     def popText(self) -> str:
         item = self._deq.pop()
-        text = item.toPlainText()
+        # text = item.toPlainText()
+        label: QtWidgets.QLabel = item.widget()
+        text = label.text()
         self._scene.removeItem(item)
+        self.shrink()
         return text
 
     def popleftText(self) -> str:
         item = self._deq.popleft()
-        self._leftindex += 1
-        text = item.toPlainText()
+        self._leftIndex += 1
+        label: QtWidgets.QLabel = item.widget()
+        text = label.text()
         self._scene.removeItem(item)
-        # self.verticalScrollBar().setValue(self.verticalScrollBar().value() + 24);
+        self.shrink()
         return text
 
-    def getPos(self, index) -> Tuple[int, int]:
-        return (0, -24 * index)
+    def getPosY(self, index) -> float:
+        return -self._itemHeight * index
 
     def clear(self) -> None:
         for item in self._deq:
             self._scene.removeItem(item)
         self._deq.clear()
-        self._leftindex = 0
+        self._leftIndex = 0
+        self._scene.clear()
 
 
 class MappedBottomUpDequeView(BottomUpDequeView):
@@ -253,16 +269,57 @@ class MappedBottomUpDequeView(BottomUpDequeView):
         return self._rmapper(item)
 
 
+# Only used inside TableTab.
+class ASTWindow(QtSvgWidgets.QSvgWidget):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+        self.offset: Optional[QtCore.QPointF] = None
+        
+        self.setWindowFlag(Qt.FramelessWindowHint, True)
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
+        self.setMouseTracking(True)
+
+    def svgWidget(self) -> QtSvgWidgets.QSvgWidget:
+        # return self._svgWidget
+        return self
+
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
+        if event.spontaneous():
+            event.ignore()
+        else:
+            super().closeEvent(event)
+
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
+        self.offset = event.position()
+        event.accept()
+
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
+        if self.offset:
+            pos = event.globalPosition()
+            x = self.offset.x()
+            y = self.offset.y()
+            # Does not work on WSLg.
+            self.move(int(pos.x() - x), int(pos.y() - y))
+        event.accept()
+
+    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
+        self.offset = None
+        event.accept()
+
+
 class TableTab(QtWidgets.QWidget):
     def __init__(self, parent, opts: LRParserOptions, env: ParsingEnv) -> None:
         super().__init__()
 
-        self._lrwindow = parent
+        self._parent = parent
         self._opts = opts
         self._env = env
-        self._symset = set()
+        self._ast = Forest()
+
+        self._symdict: Dict[str, Symbol] = {}
         for sym in self._env.symbol:
-            self._symset.add(sym.name)
+            self._symdict[sym.name] = sym
 
         code, err = getLRSteps(self._opts)
         if err:
@@ -271,6 +328,8 @@ class TableTab(QtWidgets.QWidget):
         self._code = code
         self._line = 0
         self._section = ''
+
+        self._ast_view = ASTWindow()
 
         hLayout = QtWidgets.QHBoxLayout()
         hLayout.addSpacing(16)
@@ -285,24 +344,22 @@ class TableTab(QtWidgets.QWidget):
         font = infoLabel.font()
         font.setPointSize(12)
         infoLabel.setFont(font)
-        infoLabel.setAlignment(Qt.AlignCenter) # type: ignore
+        infoLabel.setAlignment(Qt.AlignCenter)  # type: ignore
         self._info_label = infoLabel
         self._info_label.setText('Click "Start/Reset" button to start a test.')
         self._env.show = lambda s: self._info_label.setText(s)
         self._env.section = lambda s: self.setSection(s)
 
-        # self._line = stepUntil(self._code, 0, self._env.__dict__, '#! Test')
         while self._line < len(self._code) and self._section != 'Parse Table':
-            self._line = skipSection(self._code, self._line, self._env.__dict__)
-            # codeLine = self._code[self._line]
-            # if codeLine.startswith('section(') and 'Test' in codeLine:
-            #     break
+            self._line = skipSection(self._code, self._line,
+                                     self._env.__dict__)
             self._line += 1
         while self._line < len(self._code) and self._section != 'Test':
-            self._line = execSection(self._code, self._line, self._env.__dict__)
+            self._line = execSection(self._code, self._line,
+                                     self._env.__dict__)
             self._line += 1
         self._table.emitLayoutChanged()
-        
+
         buttons = QtWidgets.QHBoxLayout()
         buttons.addStretch(1)
         button = QtWidgets.QPushButton('Start/Reset')
@@ -336,6 +393,11 @@ class TableTab(QtWidgets.QWidget):
 
         self.setLayout(layout)
 
+        self._env.astAddNode = lambda index, label: self._ast.addNode(
+            index, label)
+        self._env.astSetParent = lambda child, parent: self._ast.setParent(
+            child, parent)
+
     def setSection(self, section: str) -> None:
         self._section = section
 
@@ -343,38 +405,58 @@ class TableTab(QtWidgets.QWidget):
         dialog = InputDialog(self, self._opts, self.submitTest)
         dialog.show()
 
+    def refreshAST(self) -> None:
+        def onSvgPrepared(svg: bytes):
+            self._ast_view.svgWidget().renderer().load(svg)
+            self._ast_view.svgWidget().adjustSize()
+            self._ast_view.show()
+
+        self._ast.toSvg(onSvgPrepared)
+
     # Returns line number of last line (returned by stepNext()).
     def continueButtonClicked(self) -> int:
-        # print('Current line:', self._line)
         line = execNext(self._code, self._line, self._env.__dict__)
-        # if line < len(self._code) and not re.match('#!', ):
-        #     result = re.match('#\s*(.*)', self._code[line])
-        #     if result:
-        #         info = result.group(1)
-        #         self._info_label.setText(info)
         self._line = line + 1
         if self._line >= len(self._code):
             self._continue_button.setEnabled(False)
             self._finish_button.setEnabled(False)
+        # print(self._ast.toJson())
+        self.refreshAST()
         return line
 
+    # Called by ParserWindow.
+    def onTabClosed(self) -> None:
+        # print('TableTab: onTabClosed()')
+        self._ast_view.close()
+        self._ast_view.deleteLater()
+
+    # If this widget is in an individual window, this is called.
+    # So it will be easier to test...
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
+        self.onTabClosed()
+        return super().closeEvent(event)
+
     def finishButtonClicked(self) -> None:
-        # line = self._line
-        # while line < len(self._code):
-        #     line = self.continueButtonClicked()
-        #     if line < len(self._code) and re.match('#!', self._code[line]):
-        #         break
         line = execSection(self._code, self._line, self._env.__dict__)
         self._line = line + 1
         if self._line >= len(self._code):
             self._continue_button.setEnabled(False)
             self._finish_button.setEnabled(False)
+        self.refreshAST()
 
     def submitTest(self, test: str) -> bool:
         # Check test string
         for token in test.strip().split():
-            if token not in self._symset:
-                dialog = TextDialog(self, 'Unknown token: {}'.format(token))
+            if token not in self._symdict.keys():
+                msg = 'Error: Unknown token: {}.'.format(token)
+                dialog = TextDialog(self, msg)
+                dialog.show()
+                return False
+            sym = self._symdict[token]
+            if not sym.is_term:
+                msg = 'Error: {} is not terminal, and cannot be in input sequence.'.format(
+                    token)
+                dialog = TextDialog(self, msg)
                 dialog.show()
                 return False
 
@@ -407,6 +489,8 @@ class TableTab(QtWidgets.QWidget):
 
         # execSection() may change the label. So we reset label text here.
         self._info_label.setText('Click "Continue" button to begin the test.')
+        self._ast.clear()
+        self._ast_view.hide()
         return True
 
     def createTableLayout(self) -> QtWidgets.QVBoxLayout:
@@ -459,16 +543,19 @@ class TableTab(QtWidgets.QWidget):
         symbolStack, subLayout = self.createStackView(
             'Symbol Stack', lambda i: self._env.symbol[i].name)
         self._env.symbol_stack = symbolStack
+        self.symbolStackView = symbolStack
         layout.addLayout(subLayout)
         layout.addSpacing(8)
         stateStack, subLayout = self.createStackView('State Stack',
                                                      lambda i: str(i))
         self._env.state_stack = stateStack
+        self.stateStackView = stateStack
         layout.addLayout(subLayout)
         layout.addSpacing(8)
         inputQueue, subLayout = self.createStackView(
             'Input Queue', lambda i: self._env.symbol[i].name)
         self._env.input_queue = inputQueue
+        self.inputQueueView = inputQueue
         layout.addLayout(subLayout)
         layout.addSpacing(-4)
         layout.addLayout(self.createQueueIndicators())
@@ -507,3 +594,39 @@ class TableTab(QtWidgets.QWidget):
         layout.addWidget(label)
 
         return layout
+
+
+if __name__ == '__main__':
+    # For faster debugging
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    app = QtWidgets.QApplication([])
+
+    opts = LRParserOptions(out=tempfile.mkdtemp(),
+                           bin='./build/lrparser',
+                           grammar='./grammar.txt',
+                           parser='SLR(1)')
+    env = ParsingEnv()
+
+    class Section:
+        def __init__(self) -> None:
+            self.section = ''
+
+        def setSection(self, newSection) -> None:
+            self.section = newSection
+
+    section = Section()
+    env.section = lambda s: section.setSection(s)
+
+    steps, err = getLRSteps(opts)
+    if err:
+        raise Exception(err)
+    line = 0
+    while line < len(steps) and section.section != 'Parse Table':
+        line = execSection(steps, line, env.__dict__)
+        line += 1
+
+    window = TableTab(parent=None, opts=opts, env=env)
+    window.resize(900, 600)
+    window.show()
+
+    sys.exit(app.exec())

@@ -4,7 +4,7 @@
 #include <cstdio>
 #include <optional>
 #include <stack>
-#include <stdio.h>
+#include <queue>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -362,17 +362,19 @@ PushDownAutomaton PushDownAutomaton::toDFA() {
 
     // States that need to be processed.
     // We need to ensure that for S in `stack`, makeClosure(S) == S.
-    std::stack<StateID> stack;
+    // std::stack<StateID> stack;
+    std::queue<StateID> queue;
     std::unordered_map<Closure, StateID> closureIDMap;
     // std::vector<Closure> closureVec;
 
-    auto addNewState = [&closureIDMap, &dfa, &stack](Closure &&c) {
+    auto addNewState = [&closureIDMap, &dfa, &queue](Closure &&c) {
         auto stateIndex = static_cast<StateID>(dfa.closures.size());
         dfa.closures.push_back(std::move(c));
         closureIDMap.emplace(dfa.closures.back(), stateIndex);
         // Cannot decide label now. Constraints are of no use to minial DFA.
         dfa.addPseudoState();
-        stack.push(stateIndex);
+        // stack.push(stateIndex);
+        queue.push(stateIndex);
         return stateIndex;
     };
 
@@ -388,9 +390,9 @@ PushDownAutomaton PushDownAutomaton::toDFA() {
     step::show("Add start state.");
     util::Formatter f;
 
-    while (!stack.empty()) {
-        auto stateID = stack.top();
-        stack.pop();
+    while (!queue.empty()) {
+        auto stateID = queue.front();
+        queue.pop();
 
         for (size_t i = 0; i < actions.size(); ++i) {
             auto actionID = static_cast<ActionID>(i);
@@ -428,11 +430,7 @@ PushDownAutomaton PushDownAutomaton::toDFA() {
         }
     }
 
-    // dfa.closures = std::move(closureVec); // Move closures
-
     // TODO: set final
-
-
     return dfa;
 }
 

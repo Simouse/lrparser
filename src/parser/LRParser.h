@@ -97,6 +97,7 @@ class LRParser : public util::ResourceProvider<TransitionSet> {
     std::deque<SymbolID> InputQueue;
     std::vector<StateID> stateStack;
     std::vector<SymbolID> symbolStack;
+    std::vector<int> astNodeStack;
     // Fetch kernel label by productionID and rhsIndex.
     // The shape of this map (not square) is important to the following process.
     // The last production is S' -> S, which is added automatically.
@@ -176,7 +177,7 @@ class LRParser : public util::ResourceProvider<TransitionSet> {
 
     // Try to apply reduction by production with the given ID. Throws an error
     // if reduction fails.
-    void reduce(ProductionID prodID);
+    void reduce(ProductionID prodID, int astNodeIndex);
 };
 
 } // namespace gram

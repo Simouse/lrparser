@@ -85,9 +85,8 @@ OutIter escape_all(std::string_view const& s, OutIter out, char quote) {
   if (quote)
     *out++ = quote;
 
-  for (auto i = s.begin(), end = s.end(); i != end; ++i) {
-    unsigned char c = *i;
-    if (' ' <= c && c <= '~' && c != '\\' && c != '"') {
+  for (unsigned char c : s) {
+     if (' ' <= c && c <= '~' && c != '\\' && c != '"') {
       *out++ = c;
     } 
     else {
@@ -118,9 +117,8 @@ template<class OutIter>
 OutIter escape_ascii(std::string_view const& s, OutIter out, char quote) {
   if (quote)
     *out++ = quote;
-  for (auto i = s.begin(), end = s.end(); i != end; ++i) {
-    unsigned char c = *i;
-    if (' ' <= c && c <= '~' && c != '\\' && c != '"') {
+  for (unsigned char c : s) {
+     if (' ' <= c && c <= '~' && c != '\\' && c != '"') {
       *out++ = c;
     } 
     else {

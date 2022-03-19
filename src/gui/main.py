@@ -13,16 +13,6 @@ from Editor import *
 # For faster debugging
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-# opts = LRParserOptions(tempfile.mkdtemp(), './build/lrparser', grammar='grammar.txt')
-# # code = open('out/steps.py', encoding='utf-8').read()
-# # exec(code, opts.env)
-# app = QtWidgets.QApplication([])
-# window = TableTab(None, opts)
-# window.resize(900, 600)
-# window.show()
-# sys.exit(app.exec())
-
-
 class ParserWindow(QtWidgets.QTabWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -31,24 +21,26 @@ class ParserWindow(QtWidgets.QTabWidget):
         self.setWindowTitle('Grammar')
         self.resize(900, 600)
         self._tabs: List[QtWidgets.QWidget] = []
-
         self.setTabsClosable(True)
         self.tabBar().tabCloseRequested.connect(self.closeTab)
+        self.window().setAttribute(Qt.WA_AlwaysShowToolTips, True)
+
         opts = LRParserOptions(tempfile.mkdtemp(),
                                './build/lrparser',
                                grammar='')
-        # self.createTab(0, opts)
         tab = GrammarTab(self, opts)
         self.requestNext(tab, 'Grammar', False)
 
     def closeTab(self, index: int) -> None:
-        # print('Trying to close tab', index)
         widget = self.widget(index)
         if widget:
             widget.deleteLater()
         self.removeTab(index)
-        # self._tab_count -= 1
-        self._tabs.pop(index)
+        tab = self._tabs.pop(index)
+        try:
+            tab.onTabClosed()
+        except AttributeError:
+            pass # ignore
 
     def requestNext(self, tab: QtWidgets.QWidget, title: str, withCloseButton: bool = True) -> None:
         self.addTab(tab, title)
@@ -66,11 +58,21 @@ class ParserWindow(QtWidgets.QTabWidget):
         except AttributeError:
             pass  # Ignore it
 
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
+        print('ParserWindow: closeEvent() called')
+        
+        for tab in self._tabs:
+            try:
+                tab.onTabClosed()
+            except AttributeError:
+                pass # ignore
+
+        return super().closeEvent(event)
+
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        # self._prevent_gc = []
         self.setWindowTitle('Home')
 
         self._windows: Set[QtWidgets.QWidget] = set()

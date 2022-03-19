@@ -35,7 +35,7 @@ class SymbolTableModel(QtCore.QAbstractTableModel):
         if role == Qt.BackgroundRole:
             sym = self._symvec[index.row()]
             if index.column() == len(self._colheader) - 1 and sym.is_term:
-                return QtGui.QColor(216, 216, 216)
+                return QtGui.QColor(240, 240, 240)
 
     def rowCount(self, index):
         return len(self._symvec)
@@ -241,11 +241,6 @@ class AttributeTab(QtWidgets.QWidget):
         vLayout.addLayout(buttons)
 
         self.setLayout(vLayout)
-
-        # self._line = stepUntil(self._code, self._line, self._env.__dict__,
-        #                        '#! Attributes')
-        # # print('Stopped at:', self._code[self._line])
-        # self._line += 1
 
         while self._line < len(self._code) and self._section != 'Attributes':
             self._line = execSection(self._code, self._line,

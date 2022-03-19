@@ -11,12 +11,12 @@
 
 #include "src/automata/PushDownAutomaton.h"
 #include "src/common.h"
+#include "src/display/steps.h"
 #include "src/grammar/Grammar.h"
 #include "src/grammar/GrammarReader.h"
 #include "src/util/BitSet.h"
 #include "src/util/Formatter.h"
 #include "src/util/TokenReader.h"
-#include "src/display/steps.h"
 
 namespace gram {
 
@@ -59,10 +59,10 @@ void LRParser::buildKernel() {
     // For "S' -> S".
     std::vector<const char *> augLabelVec(2);
     const auto &startName = gram.getStartSymbol().name;
-    augLabelVec[0] = newString(startName + "' -> " + Constants::dot +
-                               " " + startName);
-    augLabelVec[1] = newString(startName + "' -> " + startName + " " +
-                               Constants::dot);
+    augLabelVec[0] =
+        newString(startName + "' -> " + Constants::dot + " " + startName);
+    augLabelVec[1] =
+        newString(startName + "' -> " + startName + " " + Constants::dot);
     kernelLabelMap[productionTable.size()] = std::move(augLabelVec);
 
     // Build `allTermConstraint`
@@ -290,9 +290,6 @@ void LRParser::addParseTableEntry(StateID state, ActionID act,
                                   ParseAction pact) {
     using std::set;
     using std::vector;
-    // if (!canAddParseTableEntry(state, act, pact, subState)) {
-    //     return;
-    // }
     if (parseTable.empty()) {
         parseTable = vector<vector<set<ParseAction>>>(
             dfa.getAllStates().size(),
@@ -344,114 +341,116 @@ void LRParser::readSymbol(util::TokenReader &reader) {
 }
 
 // Test given stream with parsed results
-bool LRParser::test(std::istream &stream) {
-    // stepPrintf("#! Test\n"); 
-    step::section("Test");
-    try {
-        inputFlag = true;
-        stateStack.clear();
-        symbolStack.clear();
-        InputQueue.clear();
-        stateStack.push_back(dfa.getStartState());
-        step::printf("state_stack.append(%d)\n", dfa.getStartState());
+bool LRParser::test(std::istream &stream) try {
 
-        // Only one of them is used
-        GrammarReader grammarReader(stream);
-        util::TokenReader tokenReader(stream);
-        util::TokenReader &reader =
-            launchArgs.strict ? grammarReader : tokenReader;
+    inputFlag = true;
+    stateStack.clear();
+    symbolStack.clear();
+    InputQueue.clear();
+    astNodeStack.clear();
+    stateStack.push_back(dfa.getStartState());
+    step::printf("state_stack.append(%d)\n", dfa.getStartState());
 
-        if (launchArgs.exhaustInput) {
-            display(LOG, INFO,
-                    "Please input symbols for test (Use '$' to end the input)");
-            while (inputFlag) {
-                readSymbol(reader);
+    // Only one of them is used
+    GrammarReader grammarReader(stream);
+    util::TokenReader tokenReader(stream);
+    util::TokenReader &reader = launchArgs.strict ? grammarReader : tokenReader;
+
+    if (launchArgs.exhaustInput) {
+        display(LOG, INFO,
+                "Please input symbols for test (Use '$' to end the input)");
+        while (inputFlag) {
+            readSymbol(reader);
+        }
+    }
+
+    display(PARSE_STATES, INFO, "Parser states", this);
+    step::section("Init Test");
+
+    if (!launchArgs.exhaustInput) {
+        display(LOG, INFO,
+                "Please input symbols for test (Use '$' to end the input)");
+    }
+
+    util::Formatter f;
+    int astNodeIndex = 0;
+
+    while (true) {
+        if (InputQueue.empty() && inputFlag) {
+            readSymbol(reader);
+        }
+
+        if (InputQueue.empty())
+            throw std::logic_error(
+                "No next symbol to use, this shouldn't be possible");
+
+        auto const &tableEntry =
+            parseTable[stateStack.back()][InputQueue.front()];
+
+        auto choices = tableEntry.size();
+        if (choices <= 0) {
+            step::show("Error: No viable actions for this input.");
+            throw std::runtime_error(
+                "No viable action in parse table for this input");
+        }
+        if (choices > 1) {
+            step::show("Error: Action conflicts.");
+            throw std::runtime_error(
+                "Multiple viable choices. Cannot decide which action "
+                "to take");
+        }
+
+        // Take action
+        auto const &decision = *tableEntry.begin();
+        switch (decision.type) {
+        case ParseAction::GOTO:
+            throw std::logic_error("Goto item should be processed by reduce()");
+        case ParseAction::SHIFT: {
+            stateStack.push_back(decision.dest);
+            step::printf("state_stack.append(%d)\n", decision.dest);
+
+            auto front = InputQueue.front();
+            symbolStack.push_back(front);
+            step::printf("symbol_stack.append(%d)\n", front);
+            step::astAddNode(astNodeIndex,
+                             getGrammar().getAllSymbols()[front].name);
+            astNodeStack.push_back(astNodeIndex);
+            astNodeIndex++;
+
+            InputQueue.pop_front();
+            step::printf("input_queue.pop()\n");
+
+            if (decision.type == ParseAction::GOTO) {
+                display(LOG, VERBOSE, "Apply GOTO rule");
+                step::show("Apply goto rule.");
+            } else {
+                display(LOG, VERBOSE, "Apply SHIFT rule");
+                step::show("Apply shift rule.");
             }
+            break;
+        }
+        case ParseAction::REDUCE:
+            reduce(decision.productionID, astNodeIndex++);
+            display(LOG, VERBOSE,
+                    f.formatView("Apply REDUCE by production: %d",
+                                 decision.productionID)
+                        .data());
+            break;
+        case ParseAction::SUCCESS:
+            display(LOG, INFO, "Success");
+            step::show("Success.");
+            return true;
         }
 
         display(PARSE_STATES, INFO, "Parser states", this);
-        // stepPrintf("#! Init Test.\n");
-        step::section("Init Test");
-
-        if (!launchArgs.exhaustInput) {
-            display(LOG, INFO,
-                    "Please input symbols for test (Use '$' to end the input)");
-        }
-
-        util::Formatter f;
-
-        while (true) {
-            if (InputQueue.empty() && inputFlag) {
-                readSymbol(reader);
-            }
-
-            if (InputQueue.empty())
-                throw std::logic_error(
-                    "No next symbol to use, this shouldn't be possible");
-
-            auto const &tableEntry =
-                parseTable[stateStack.back()][InputQueue.front()];
-
-            auto choices = tableEntry.size();
-            if (choices <= 0) {
-                // stepPrintf("# Error: No viable actions for this input.\n");
-                step::show("Error: No viable actions for this input.");
-                throw std::runtime_error(
-                    "No viable action in parse table for this input");
-            }
-            if (choices > 1) {
-                // stepPrintf("# Error: Action conflicts.\n");
-                step::show("Error: Action conflicts.");
-                throw std::runtime_error(
-                    "Multiple viable choices. Cannot decide which action "
-                    "to take");
-            }
-
-            // Take action
-            auto const &decision = *tableEntry.begin();
-            switch (decision.type) {
-            case ParseAction::GOTO:
-            case ParseAction::SHIFT:
-                stateStack.push_back(decision.dest);
-                step::printf("state_stack.append(%d)\n", decision.dest);
-                symbolStack.push_back(InputQueue.front());
-                step::printf("symbol_stack.append(%d)\n", InputQueue.front());
-                InputQueue.pop_front();
-                step::printf("input_queue.pop()\n");
-                if (decision.type == ParseAction::GOTO) {
-                    display(LOG, VERBOSE, "Apply GOTO rule");
-                    // stepPrintf("# Apply goto rule.\n");
-                    step::show("Apply goto rule.");
-                } else {
-                    display(LOG, VERBOSE, "Apply SHIFT rule");
-                    // stepPrintf("# Apply shift rule.\n");
-                    step::show("Apply shift rule.");
-                }
-                break;
-            case ParseAction::REDUCE:
-                reduce(decision.productionID);
-                display(LOG, VERBOSE,
-                        f.formatView("Apply REDUCE by production: %d",
-                                     decision.productionID)
-                            .data());
-                break;
-            case ParseAction::SUCCESS:
-                display(LOG, INFO, "Success");
-                // stepPrintf("# Success.\n");
-                step::show("Success.");
-                return true;
-            }
-
-            display(PARSE_STATES, INFO, "Parser states", this);
-        }
-    } catch (std::runtime_error const &e) {
-        display(LOG, ERR, e.what());
-        return false;
     }
+} catch (std::runtime_error const &e) {
+    display(LOG, ERR, e.what());
+    return false;
 }
 
 // May throw errors
-void LRParser::reduce(ProductionID prodID) {
+void LRParser::reduce(ProductionID prodID, int astNodeIndex) {
     auto const &prod = gram.getProductionTable()[prodID];
     auto bodySize = prod.rightSymbols.size();
     if (symbolStack.size() < bodySize) {
@@ -468,16 +467,50 @@ void LRParser::reduce(ProductionID prodID) {
                 "Stack's symbols cannot fit production body for reduction");
         }
     }
+    auto head = prod.leftSymbol;
+    step::astAddNode(astNodeIndex, getGrammar().getAllSymbols()[head].name);
+
     // Pop those states by production
-    for (size_t i = 0; i < bodySize; ++i) {
-        symbolStack.pop_back();
-        stateStack.pop_back();
+    for (int i = 0; i < (int)bodySize; ++i) {
+        // symbolStack.pop_back();
+        // stateStack.pop_back();
+        // int node = astNodeStack.back();
+        // astNodeStack.pop_back();
+        int node = astNodeStack[astNodeStack.size() - bodySize + i];
+        step::astSetParent(node, astNodeIndex);
         step::printf("symbol_stack.pop()\n");
         step::printf("state_stack.pop()\n");
     }
-    InputQueue.push_front(prod.leftSymbol);
-    step::printf("input_queue.append(%d)\n", prod.leftSymbol);
-    // stepPrintf("# Apply reduce rule: %d.\n", prodID);
+    symbolStack.resize(symbolStack.size() - bodySize);
+    stateStack.resize(stateStack.size() - bodySize);
+    astNodeStack.resize(astNodeStack.size() - bodySize);
+    // InputQueue.push_front(head);
+    // step::printf("input_queue.append(%d)\n", head);
+    symbolStack.push_back(head);
+    step::printf("symbol_stack.append(%d)\n", head);
+
+    // Process goto.
+    auto const &entry = parseTable[stateStack.back()][head];
+    if (entry.size() > 1) {
+        step::show("Error: Goto conflicts.");
+        throw std::runtime_error(
+            "Multiple viable choices. Cannot decide which action "
+            "to take");
+    } else if (entry.empty()) {
+        step::show("Error: No viable actions for this input.");
+        throw std::runtime_error(
+            "No viable action in parse table for this input");
+    }
+    auto pact = *entry.begin();
+    if (pact.type != ParseAction::GOTO) {
+        step::show("Error: Invalid item");
+        throw std::runtime_error(
+            "No viable action in parse table for this input");
+    }
+    auto next = pact.dest;
+    stateStack.push_back(next);
+    astNodeStack.push_back(astNodeIndex);
+    step::printf("state_stack.append(%d)\n", next);
 
     std::string s = "Apply reduce rule: ";
     s += std::to_string(prodID);

@@ -1,14 +1,13 @@
-from copy import copy, deepcopy
+from copy import deepcopy
 from typing_extensions import Protocol
-from typing import Any, Generic, List, Optional, Tuple, TypeVar
-from PySide6 import QtCore, QtWidgets, QtGui, QtStateMachine
+from typing import Any, Callable, Deque, Dict, List, Optional, Set, Tuple
+from PySide6 import QtCore, QtWidgets, QtGui, QtSvgWidgets
 from PySide6.QtCore import Qt
 from collections import deque
 import sys
 import subprocess
 import os
-import re
-
+import graphviz
 
 class Symbol:
     def __init__(self, name: str, is_term: Optional[bool],
@@ -73,50 +72,172 @@ class GrowingList(list):
         return list.__getitem__(self, index)
 
 
-# class DequeMapper:
-#     def __init__(self,
-#                  proxy=None,
-#                  mapMethod=lambda x: x,
-#                  rmapMethod=lambda x: x) -> None:
-#         self.proxy = proxy
-#         self.mapMethod = mapMethod
-#         self.rmapMethod = rmapMethod
+class TreeNode:
+    def __init__(self, label: str) -> None:
+        self.label = label
+        self.children: Deque[TreeNode] = deque()
 
-#     def reset(self, proxy):
-#         self.proxy = proxy
+    @staticmethod
+    def toJsonNode(obj: 'TreeNode', indentLevel: int, step: int) -> str:
+        identStr = indentLevel * step * ' '
+        s = identStr + '"{}" : {{'.format(obj.label)
+        if len(obj.children) > 0:
+            s += '\n'
+            sub = map(
+                lambda node: TreeNode.toJsonNode(node, indentLevel + 1, step),
+                obj.children)
+            s += (', \n').join(sub)
+            s += '\n' + identStr
+        s += '}'
+        return s
 
-#     def append(self, item):
-#         item = self.mapMethod(item)
-#         return self.proxy.append(item)
+    def toJson(self, indentLevel: int = 0, step: int = 4) -> str:
+        outterIdent = indentLevel * step * ' '
+        return '{}{{\n{}\n{}}}'.format(
+            outterIdent, TreeNode.toJsonNode(self, indentLevel + 1, step),
+            outterIdent)
 
-#     def appendleft(self, item):
-#         item = self.mapMethod(item)
-#         return self.proxy.appendleft(item)
 
-#     def pop(self):
-#         item = self.proxy.pop()
-#         return self.rmapMethod(item)
+class Forest:
+    def __init__(self) -> None:
+        self.nodes = GrowingList()
+        self.trees: Set[TreeNode] = set()
+        # self.labels: Dict[int, str] = {} # Used by networkx
+        self._threadPool = QtCore.QThreadPool()
 
-#     def popleft(self):
-#         item = self.proxy.popleft()
-#         return self.rmapMethod(item)
+    def addNode(self, index: int, label: str) -> None:
+        if self.nodes[index]:
+            raise Exception('Node with index {} already exists'.format(index))
+        node = TreeNode(label)
+        self.nodes[index] = node
+        self.trees.add(node)
+        # self.labels[index] = label
+        # node.index = index
 
-# def createEnv():
-#     symbol = GrowingList(Symbol.new)
-#     production = GrowingList(Production.new)
+    def setParent(self, child: int, parent: int) -> None:
+        parentNode = self.nodes[parent]
+        childNode = self.nodes[child]
+        assert parentNode != None and isinstance(parentNode, TreeNode)
+        assert childNode != None and isinstance(childNode, TreeNode)
+        parentNode.children.append(childNode)
+        self.trees.discard(childNode)
 
-#     # table can only be accessed after symbol is established fully.
-#     table = GrowingList(lambda: GrowingList(lambda: set()))
+    def clear(self) -> None:
+        self.nodes.clear()
+        self.trees.clear()
 
-#     return {
-#         'symbol': symbol,
-#         'production': production,
-#         'table': table,
-#         'state_stack': None,
-#         'symbol_stack': None,
-#         'input_queue': None,
-#     }
+    def toJson(self, indent: int = 4) -> str:
+        return '[\n{}\n]'.format(',\n'.join(
+            map(lambda node: node.toJson(1, indent),
+                self.trees))) if len(self.trees) > 0 else '[]'
 
+    def toSvgSync(self) -> bytes:
+        g = graphviz.Digraph()
+        deq: Deque[TreeNode] = deque(self.trees)
+        while len(deq) > 0:
+            node = deq.popleft()
+            g.node(str(id(node)), node.label)
+            for child in node.children:
+                deq.append(child)
+                g.edge(str(id(node)), str(id(child)))
+        g.node_attr['shape'] = 'circle'
+
+        # Slow. 160 ~ 240 ms.
+        # This is because graphviz on Windows is slow. On *unix, it should take
+        # ~30 ms.
+        data = g.pipe('svg') 
+        return data
+
+    def toSvg(self, callback: Callable[[bytes], None]) -> None:
+        worker = Forest.Worker(self.toSvgSync)
+        worker.signal.result.connect(callback)
+        self._threadPool.start(worker)
+
+    class WorkerSignal(QtCore.QObject):
+        result = QtCore.Signal(bytes)
+
+    class Worker(QtCore.QRunnable):
+        def __init__(self, func, *args, **kwargs) -> None:
+            super().__init__()
+            self.func = func
+            self.args = args
+            self.kwargs = kwargs
+            self.signal = Forest.WorkerSignal()
+
+        @QtCore.Slot()
+        def run(self) -> None:
+            data = self.func(*self.args, **self.kwargs)
+            self.signal.result.emit(data)
+
+
+if __name__ == '__main__':
+    forest = Forest()
+    astAddNode = lambda index, label: forest.addNode(index, label)
+    astSetParent = lambda child, parent: forest.setParent(child, parent)
+    astAddNode(0, "ID")
+    astAddNode(1, "fac")
+    astSetParent(0, 1)
+    astAddNode(2, "term")
+    astSetParent(1, 2)
+    astAddNode(3, "*")
+    astAddNode(4, "ID")
+    astAddNode(5, "fac")
+    astSetParent(4, 5)
+    astAddNode(6, "term")
+    astSetParent(5, 6)
+    astSetParent(3, 6)
+    astSetParent(2, 6)
+    astAddNode(7, "*")
+    astAddNode(8, "(")
+    astAddNode(9, "ID")
+    astAddNode(10, "fac")
+    astSetParent(9, 10)
+    astAddNode(11, "term")
+    astSetParent(10, 11)
+    astAddNode(12, "exp")
+    astSetParent(11, 12)
+    astAddNode(13, "+")
+    astAddNode(14, "ID")
+    astAddNode(15, "fac")
+    astSetParent(14, 15)
+    astAddNode(16, "term")
+    astSetParent(15, 16)
+    astAddNode(17, "exp")
+    astSetParent(16, 17)
+    astSetParent(13, 17)
+    astSetParent(12, 17)
+    astAddNode(18, ")")
+    astAddNode(19, "fac")
+    astSetParent(18, 19)
+    astSetParent(17, 19)
+    astSetParent(8, 19)
+    astAddNode(20, "term")
+    astSetParent(19, 20)
+    astSetParent(7, 20)
+    astSetParent(6, 20)
+    astAddNode(21, "exp")
+    astSetParent(20, 21)
+    astAddNode(22, "+")
+    astAddNode(23, "ID")
+    astAddNode(24, "fac")
+    astSetParent(23, 24)
+    astAddNode(25, "term")
+    astSetParent(24, 25)
+    astAddNode(26, "exp")
+    astSetParent(25, 26)
+    astSetParent(22, 26)
+    astSetParent(21, 26)
+    print(forest.toJson(4))
+
+    # forest.showImage()
+    app = QtWidgets.QApplication([])
+    svg = forest.toSvgSync()
+    svgItem = QtSvgWidgets.QSvgWidget()
+    svgItem.renderer().load(svg)
+    svgItem.show()
+
+    sys.exit(app.exec())
+    
 
 class DequeProtocol(Protocol):
     def append(self, x: int) -> None:
@@ -150,6 +271,9 @@ class ParsingEnv():
         self.addEdge = lambda a, b, s: None
         self.setStart = lambda s: None
         self.setFinal = lambda s: None
+        self.astAddNode = lambda index, label: None
+        self.astSetParent = lambda child, parent: None
+        # self.astSetRoot = lambda index: None
 
     def copy(self) -> 'ParsingEnv':
         env = ParsingEnv()

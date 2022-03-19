@@ -6,7 +6,6 @@
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
-#include <vcruntime.h>
 #include <vector>
 
 #include "src/common.h"

@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <stdarg.h>
+#include <stdio.h>
 #include <string>
 
 
@@ -84,6 +86,16 @@ void addEdge(int s1, int s2, std::string_view label) {
 void setStart(int state) { fprintf(stepFile, "setStart(%d)\n", state); }
 
 void setFinal(int state) { fprintf(stepFile, "setFinal(%d)\n", state); }
+
+void astAddNode(int index, std::string_view label) {
+    std::string s;
+    escape_ascii(label, std::back_inserter(s), '\"');
+    fprintf(stepFile, "astAddNode(%d, %s)\n", index, s.c_str());
+}
+
+void astSetParent(int child, int parent) {
+    fprintf(stepFile, "astSetParent(%d, %d)\n", child, parent);
+}
 
 void show(std::string_view message) {
     fprintf(stepFile, "show(\"\"\"%s\"\"\")\n", message.data());

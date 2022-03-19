@@ -55,13 +55,13 @@ void lrMain() {
     step::section("DFA");
     parser->buildDFA();
     reportTime("DFA built");
-    // step::show("DFA is built.");
     
     step::section("Parse Table");
     parser->buildParseTable();
     reportTime("Parse table built");
 
     if (!launchArgs.noTest) {
+        step::section("Test");
         parser->test(std::cin);
         reportTime("Test finished");
     }
