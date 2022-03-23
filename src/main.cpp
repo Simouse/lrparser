@@ -118,8 +118,9 @@ void lrParseArgs(int argc, char **argv) {
             launchArgs.exhaustInput = false;
         } else if (strcmp("--no-test", argv[i]) == 0) {
             launchArgs.noTest = true;
-        } else if (strncmp("--sep=", argv[i], 13) == 0) {
-            launchArgs.sep = argv[i] + 13;
+        } else if (auto prefixlen = strlen("--sep="); 
+                        strncmp("--sep=", argv[i], prefixlen) == 0) {
+            launchArgs.sep = argv[i] + prefixlen;
             // Check if arg is space
             auto const &s = launchArgs.sep;
             bool hasSpace = s.empty();

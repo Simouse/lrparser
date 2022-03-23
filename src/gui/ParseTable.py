@@ -97,6 +97,7 @@ class ParseTableView(QtWidgets.QTableView):
 
         header = self.horizontalHeader()
         header.setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
+        header.setMinimumSectionSize(40)
         self.setHorizontalHeader(header)
 
     def emitLayoutChanged(self):

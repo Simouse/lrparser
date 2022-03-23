@@ -116,17 +116,19 @@ Input queue : Front ->| $
 > Success
 ```
 
-Automatons in graphviz language format are generated in the result directory (default: `.`) because they are difficult to display in the console. You need to invoke `dot` by yourself. The program used to provide generated `svg` files as well if you have `dot` installed, but invoking dot processes on Windows is too slow (in Linux it's just fast) and makes the tool a target of Windows Defender Anti-virus module because the tool invokes a lot of processes in such a short time. Later I tried to use graphviz as library in my code, but I found graphviz cgraph library had memory leaks and double free() bugs which I couldn't get right. So I dropped the support for directly generated svg files.
+Automatons in graphviz language format are generated in the result directory (default: `.`) because they are difficult to display in the console. You need to invoke `dot` by yourself. The program used to provide generated `svg` files as well if you have `dot` installed, but invoking dot processes on Windows is too slow (in Linux it's just fast) and makes the tool a target of Windows Defender Anti-virus module because the tool invokes a lot of processes in such a short time. Later I tried to use graphviz as library in my code, but I have double free() bugs which I couldn't get right. So I dropped the support for directly generated svg files.
 
 SLR NFA:
 
-![](res/build_nfa.1.svg)
+<img src="assets/build_nfa.1.svg" style="zoom:67%;" />
 
 SLR DFA:
 
-![](res/build_dfa.2.svg)
+<img src="assets/build_dfa.2.svg" style="zoom:67%;" />
 
 ## Usage
+
+### lrparser executable
 
 ```txt
 This program reads a possibly LR grammar from <Grammar file>, takes test
@@ -196,6 +198,40 @@ The grammar is not compatible with Bison's. It's because Bison has a semicolon a
    6. Replace epsilons with `\e`.
    7. Pass argument `--strict` to enable limited quoting support.
 
+I provide a script named `run.sh` for format conversion. It provides an easier way to pass arguments as well. The function is minimal. If you want to change the grammar type, you can edit the script directly.
+
+### GUI
+
+Following packages are required:
+- graphviz
+- PySide6
+
+And graphviz should be installed so `dot` command appears in `PATH`. 
+
+Run the program with: (use `/` in *unix shells)
+
+```bash
+python3 .\src\gui\main.py
+```
+
+Some screenshots:
+
+<img src="assets/image-20220323183019448.png" alt="image-20220323183019448" style="zoom:67%;" />
+
+<img src="assets/image-20220323183059797.png" alt="image-20220323183059797" style="zoom:67%;" />
+
+<img src="assets/image-20220323183122807.png" alt="image-20220323183122807" style="zoom:67%;" />
+
+**Only LR family is implemented.**
+
+<img src="assets/image-20220323183333509.png" alt="image-20220323183333509" style="zoom:67%;" />
+
+Those nodes can be dragged. States' descriptions pop up when mouse is hovering on them. e.g.
+
+<img src="assets/image-20220323183736973.png" alt="image-20220323183736973" style="zoom:67%;" />
+
+<img src="assets/image-20220323183537125.png" alt="image-20220323183537125" style="zoom:67%;" />
+
 ## Build
 
 ```bash
@@ -206,10 +242,6 @@ cmake -G Ninja .. # Or "cmake .." if you do not have Ninja
 cmake --build .
 ```
 
-This tool has some parts relying on `pthread` library (only if you are on Linux), so you may have to install it. Windows platform does not have this requirement. (Multi-threading was used for `svg` output. The feature was dropped, but utility functions stayed in code.)
-
-The code relies on C++ STL much. You may consider enabling `-O2` optimization or set build variant to `Release` if possible.
-
 ## Resources
 
 I found some resources really helpful in my learning. I compared my results with their programs' to detect my bugs and the reasons causing them. I didn't use their code though.
@@ -217,6 +249,8 @@ I found some resources really helpful in my learning. I compared my results with
 [jsmachines](http://jsmachines.sourceforge.net/machines/) supports ll1/lr1/lalr/slr/turing, etc. It's lightweight and fast.
 
 [Context Free Grammar Tool (ucalgary.ca)](http://smlweb.cpsc.ucalgary.ca/start.html) is a website providing colorful parse tables for grammars. It does not support very long grammar due to the length limit of URL.
+
+[SilverScar/C-Language-Parser](https://github.com/SilverScar/C-Language-Parser) provides a C89 grammar in yacc.
 
 ## Questions and some explanations
 
@@ -230,8 +264,12 @@ Just remove those lines. My editor added those for me, but they are not needed. 
 
 ### For large inputs
 
-For very large test sequences, you can use `--step` flag to disable memory cache of all input characters (, which is normally unnecessary given the purpose of this tool). For very large grammars, the result is almost impossible to observe. I tested my tool against ANSI-C grammar (which is not a LALR(1) grammar), and found hundreds of DFA states have been generated. Chances are that `dot` will freeze when you try to visualize the graph.
+This tool is not a suitable choice for extremely large inputs, for the result can not be easily observed. If you still want to use it against large inputs, continue reading.
 
-### State differences from Bison
+For very large test sequences, you can use `--step` flag to disable memory cache of all input characters (, which is normally unnecessary given the purpose of this tool). 
 
-It seems that Bison defines an augmented production for each grammar. For example, for simple grammar `S -> a`, Bison sees two productions: `S' -> S; S -> a`. So it may have a few more states than some online tools. Besides, when state `S' -> S •` is reached, Bison has to shift the pseudo end token, as if the state is `S' -> S • <end>`. Since my tool uses an augmented grammar, but does not have a pseudo end token, the LALR push-down automaton should have exactly one less state than Bison.
+For very large grammars, the result is almost impossible to observe. I tested my tool against C89 grammar, and found hundreds of DFA states had been generated. Chances are that `dot` will freeze when you try to visualize the graph. And for C89 grammar on my machine, it takes the LR(1) parser about 3 seconds to finish. This is because the program generates gv files and a step file, along with stdout. Although you can redirect the output to `/dev/null` (In ` cmd.exe` on Windows, use `> nul` instead), these strings are still calculated, so it won't save much time (but it will be faster than displaying the output in console).  Compared with the LR(1) parser, other parsers are much faster.
+
+### Why does your program detect conflicts in C language (ANSI-89) ?
+
+You probably used one of yacc files online and test it with `bison`. Those yacc files define extra rules to gain conflict resolutions, so they are not pure LR. After removing those rules, `bison` will find conflicts as well.

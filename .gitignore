@@ -7,7 +7,9 @@ results
 release
 build
 wsl_build
+linux
 bin
 contains
 test
-src/third-party/graphviz/lib/*
+*.y
+out

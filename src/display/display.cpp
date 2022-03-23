@@ -14,16 +14,16 @@
 #include "src/parser/LRParser.h"
 #include "src/parser/SLRParser.h"
 #include "src/util/Formatter.h"
-#include "src/util/Process.h"
+// #include "src/util/Process.h"
 #include "src/display/steps.h"
 
 namespace fs = std::filesystem;
 using namespace gram;
-using proc = util::Process;
+// using proc = util::Process;
 
 // Log strings
 static std::array<const char *, LOG_LEVELS_COUNT> logs = {nullptr};
-static int automatonCounter = 0;
+// static int automatonCounter = 0;
 static std::chrono::steady_clock globalClock;
 static decltype(globalClock.now()) startUpTime;
 FILE *stepFile;
@@ -51,7 +51,7 @@ void lrInit() {
     logs[DisplayLogLevel::DEBUG] = "DEBUG";
     logs[DisplayLogLevel::ERR] = "ERROR";
 
-    util::Process::prevent_zombie();
+    // util::Process::prevent_zombie();
 
     fs::path outPath = launchArgs.resultsDir;
     if (!fs::exists(outPath))
@@ -143,6 +143,12 @@ static void handleParseTable(const char *description, DisplayLogLevel logLevel,
 
     outputString += generateLogLine(description, logLevel);
 
+    // if (parseTableRowNumber > 200 || symbols.size() > 30) {
+    //     outputString += "Parse Table is huge and cannot be displayed in console.\n";
+    //     printf("%s", outputString.c_str());
+    //     return;
+    // }
+
     // Split symbols into terminals and non-terminals:
     // 1. Do not add epsilon.
     // 2. `$` must be included, but it's already in `symbols` so there's
@@ -201,7 +207,7 @@ static void handleParseTable(const char *description, DisplayLogLevel logLevel,
 }
 
 static void handleAutomaton(const char *description, DisplayLogLevel logLevel,
-                            const char *prefix,
+                            const char *basename,
                             PushDownAutomaton const *automaton) {
     util::Formatter f;
     handleLog(description, logLevel);
@@ -210,7 +216,8 @@ static void handleAutomaton(const char *description, DisplayLogLevel logLevel,
     //     return;
 
     fs::path gvFilePath = launchArgs.resultsDir;
-    gvFilePath /= f.formatView("%s.%d.gv", prefix, ++automatonCounter);
+    // gvFilePath /= f.formatView("%s.%d.gv", prefix, ++automatonCounter);
+    gvFilePath /= f.formatView("%s.gv", basename);
     std::string gvFileName = gvFilePath.string();
 
     FILE *file = std::fopen(gvFileName.c_str(), "w");
