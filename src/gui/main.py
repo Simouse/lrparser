@@ -1,17 +1,22 @@
 # Tested on Python 3.7
 import sys
 from typing import Set
-from PySide6 import QtCore, QtWidgets, QtGui
-from PySide6.QtCore import Qt
+# from PySide6 import QtCore, QtWidgets, QtGui
+# from PySide6.QtCore import Qt
+from PyQt5 import QtCore, QtWidgets, QtGui
+from PyQt5.QtCore import Qt
 import tempfile
 import signal
 from Attribute import *
 from ParseTable import *
 from Model import *
 from Editor import *
+from GuiConfig import *
 
 # For faster debugging
 signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+lrparser_path = './build/lrparser'
 
 class ParserWindow(QtWidgets.QTabWidget):
     def __init__(self) -> None:
@@ -19,14 +24,14 @@ class ParserWindow(QtWidgets.QTabWidget):
         self.setTabPosition(QtWidgets.QTabWidget.North)
         self.setMovable(False)
         self.setWindowTitle('Grammar')
-        self.resize(900, 600)
+        self.resize(config.win.width, config.win.height)
         self._tabs: List[QtWidgets.QWidget] = []
         self.setTabsClosable(True)
         self.tabBar().tabCloseRequested.connect(self.closeTab)
         self.window().setAttribute(Qt.WA_AlwaysShowToolTips, True)
 
         opts = LRParserOptions(tempfile.mkdtemp(),
-                               './build/lrparser',
+                               lrparser_path,
                                grammar='')
         tab = GrammarTab(self, opts)
         self.requestNext(tab, 'Grammar', False)
@@ -110,6 +115,38 @@ class MainWindow(QtWidgets.QMainWindow):
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication([])
+
+    fontpath_list = [
+        './src/gui/resources/Lato-Black.ttf',
+        './src/gui/resources/Lato-BlackItalic.ttf',
+        './src/gui/resources/Lato-Bold.ttf',
+        './src/gui/resources/Lato-BoldItalic.ttf',
+        './src/gui/resources/Lato-Italic.ttf',
+        './src/gui/resources/Lato-Light.ttf',
+        './src/gui/resources/Lato-LightItalic.ttf',
+        './src/gui/resources/Lato-Regular.ttf',
+        './src/gui/resources/Lato-Thin.ttf',
+        './src/gui/resources/Lato-ThinItalic.ttf',
+    ]
+    for fontpath in fontpath_list:
+        QtGui.QFontDatabase.addApplicationFont(fontpath)
+
+    font_extra_small = QtGui.QFont('Lato')
+    font_extra_small.setPointSize(config.font.size.extrasmall)
+    font_small = QtGui.QFont('Lato')
+    font_small.setPointSize(config.font.size.small)
+    font_normal = QtGui.QFont('Lato')
+    font_normal.setPointSize(config.font.size.normal)
+    font_large = QtGui.QFont('Lato')
+    font_large.setPointSize(config.font.size.large)
+    app.setFont(font_extra_small)
+    app.setFont(font_small, "QLabel")
+    # app.setFont(font_extra_small, 'QPushButton')
+    # app.setFont(font_extra_small, 'QComboBox')
+    app.setFont(font_small, 'QGraphicsSimpleTextItem')
+
+    # label = QtWidgets.QLabel('label')
+    # label.show()
 
     window = MainWindow()
     window.show()

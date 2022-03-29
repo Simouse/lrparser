@@ -1,5 +1,6 @@
 #include "Grammar.h"
 
+#include <algorithm>
 #include <array>
 #include <fstream>
 #include <iostream>
@@ -354,6 +355,13 @@ Grammar &Grammar::resolveSymbolAttributes() {
     // For n in T, check production chain
     for (auto &symbol : symbolVector) {
         resolveFirstSet(visit, symbol);
+    }
+
+    // Ambiguous grammar may have dependency circles. Resolve attributes again.
+    // I'm not sure if resolving first sets twice can fully solve the problem...
+    std::fill(visit.begin(), visit.end(), 0);
+    for (int N : this->nonterminals) {
+        resolveFirstSet(visit, symbolVector[N]);
     }
 
     // display(SYMBOL_TABLE, INFO, "Calculate first set", this);

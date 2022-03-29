@@ -1,22 +1,12 @@
-% exp   -> term exp1
-% exp1  -> '+' term exp1 | \epsilon    
-% term  -> fac term1
-% term1 -> '*' fac term1 | \epsilon
-% fac   -> '(' exp ')'   | ID
-
-% exp   -> exp '+' term  | term
-% term  -> term '*' fac
-%        | fac
-% fac   -> ID
-% fac   -> "(" exp ')'
-
 exp   -> exp + term  | term
-term  -> term * fac
-       | fac
+term  -> term * fac  | fac
 fac   -> ID
 fac   -> ( exp )
 
-% a -> \e
+% S -> C D
+% C -> D c
+% D -> C d
+% D -> \e
 
 % S ->	id | V assign E
 % V ->	id
@@ -29,8 +19,8 @@ fac   -> ( exp )
 % S -> C C
 % C -> c C | d
 
-%  S	->	L '=' R
+%  S	->	L = R
 %  S	->	R
-%  L	->	'*' R
+%  L	->	* R
 %  L	->	id
 %  R	->	L

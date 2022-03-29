@@ -5,9 +5,12 @@ import sys
 import os
 import re
 from typing import Any, Callable, Dict, Set, Tuple
-from PySide6 import QtCore, QtWidgets, QtGui
-from PySide6.QtCore import Qt
+# from PySide6 import QtCore, QtWidgets, QtGui
+# from PySide6.QtCore import Qt
+from PyQt5 import QtCore, QtWidgets, QtGui
+from PyQt5.QtCore import Qt
 from Model import *
+from GuiConfig import *
 
 
 class ParseTableModel(QtCore.QAbstractTableModel):
@@ -97,7 +100,7 @@ class ParseTableView(QtWidgets.QTableView):
 
         header = self.horizontalHeader()
         header.setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
-        header.setMinimumSectionSize(40)
+        header.setMinimumSectionSize(config.table.cell.minwidth)
         self.setHorizontalHeader(header)
 
     def emitLayoutChanged(self):
@@ -120,6 +123,9 @@ class InputDialog(QtWidgets.QDialog):
         layout = QtWidgets.QVBoxLayout()
         label = QtWidgets.QLabel()
         label.setText('Choose input mode from below:')
+        font = label.font()
+        font.setPointSize(config.font.size.small)
+        label.setFont(font)
         layout.addWidget(label)
         combo = QtWidgets.QComboBox(self)
         combo.addItems(['Tokens', 'Source'])
@@ -134,12 +140,12 @@ class InputDialog(QtWidgets.QDialog):
         button = QtWidgets.QPushButton('Test')
         button.clicked.connect(self.testButtonPressed)
         button.setCheckable(False)
-        button.setFixedWidth(100)
+        button.setFixedWidth(config.button.width)
         buttonStack.addWidget(button)
         button = QtWidgets.QPushButton('Convert')
         button.clicked.connect(self.convertButtonPressed)
         button.setCheckable(False)
-        button.setFixedWidth(100)
+        button.setFixedWidth(config.button.width)
         buttonStack.addWidget(button)
         buttonStack.setCurrentIndex(0)
 
@@ -180,7 +186,7 @@ class BottomUpDequeView(QtWidgets.QGraphicsView):
         self._scene = scene
 
         font = QtGui.QFont()
-        font.setPointSize(11)
+        font.setPointSize(config.font.size.normal)
         self._font = font
 
         self._leftIndex = 0
@@ -271,17 +277,17 @@ class MappedBottomUpDequeView(BottomUpDequeView):
 
 
 # Only used inside TableTab.
-class ASTWindow(QtSvgWidgets.QSvgWidget):
+class ASTWindow(QSvgWidget):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-        self.offset: Optional[QtCore.QPointF] = None
+        self.offset: Optional[QtCore.QPoint] = None
         
         self.setWindowFlag(Qt.FramelessWindowHint, True)
         self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
         self.setMouseTracking(True)
 
-    def svgWidget(self) -> QtSvgWidgets.QSvgWidget:
+    def svgWidget(self) -> QSvgWidget:
         # return self._svgWidget
         return self
 
@@ -292,16 +298,17 @@ class ASTWindow(QtSvgWidgets.QSvgWidget):
             super().closeEvent(event)
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
-        self.offset = event.position()
+        # self.offset = event.position() # PySide 6
+        self.offset = event.pos()
         event.accept()
 
     def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
         if self.offset:
-            pos = event.globalPosition()
+            pos = event.globalPos()
             x = self.offset.x()
             y = self.offset.y()
             # Does not work on WSLg.
-            self.move(int(pos.x() - x), int(pos.y() - y))
+            self.move(pos.x() - x, pos.y() - y)
         event.accept()
 
     def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
@@ -343,7 +350,7 @@ class TableTab(QtWidgets.QWidget):
 
         infoLabel = QtWidgets.QLabel()
         font = infoLabel.font()
-        font.setPointSize(12)
+        font.setPointSize(config.font.size.normal)
         infoLabel.setFont(font)
         infoLabel.setAlignment(Qt.AlignCenter)  # type: ignore
         self._info_label = infoLabel
@@ -365,17 +372,17 @@ class TableTab(QtWidgets.QWidget):
         buttons.addStretch(1)
         button = QtWidgets.QPushButton('Start/Reset')
         button.clicked.connect(self.resetButtonClicked)
-        button.setFixedWidth(100)
+        button.setFixedWidth(config.button.width)
         buttons.addWidget(button)
         self._reset_button = button
         button = QtWidgets.QPushButton('Continue')
         button.clicked.connect(self.continueButtonClicked)
-        button.setFixedWidth(100)
+        button.setFixedWidth(config.button.width)
         buttons.addWidget(button)
         self._continue_button = button
         button = QtWidgets.QPushButton('Finish')
         button.clicked.connect(self.finishButtonClicked)
-        button.setFixedWidth(100)
+        button.setFixedWidth(config.button.width)
         buttons.addWidget(button)
         self._finish_button = button
         buttons.addStretch(1)
@@ -511,7 +518,7 @@ class TableTab(QtWidgets.QWidget):
         label.setText(title)
         font = label.font()
         font.setBold(True)
-        font.setPointSize(10)
+        font.setPointSize(config.font.size.small)
         label.setFont(font)
         label.setAlignment(Qt.AlignCenter)  # type: ignore
         return label

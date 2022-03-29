@@ -1,9 +1,12 @@
 from typing import Tuple
 import tempfile
-from PySide6 import QtCore, QtWidgets, QtGui
-from PySide6.QtCore import Qt
+# from PySide6 import QtCore, QtWidgets, QtGui
+# from PySide6.QtCore import Qt
+from PyQt5 import QtCore, QtWidgets, QtGui
+from PyQt5.QtCore import Qt
 from Attribute import AttributeTab
 from Model import *
+from GuiConfig import *
 
 class ProductionEditorModel(QtCore.QAbstractTableModel):
     def __init__(self, data) -> None:
@@ -11,7 +14,7 @@ class ProductionEditorModel(QtCore.QAbstractTableModel):
         self._data = data
         self._header = ['Head', '', 'Body']
         self._item_font = QtGui.QFont()
-        self._item_font.setPointSize(14)
+        self._item_font.setPointSize(config.font.size.large)
         self._disabled = False
 
     def rowCount(self, index):
@@ -59,7 +62,7 @@ class CenterDelegate(QtWidgets.QStyledItemDelegate):
     def __init__(self) -> None:
         super().__init__()
         self._item_font = QtGui.QFont()
-        self._item_font.setPointSize(14)
+        self._item_font.setPointSize(config.font.size.large)
 
     def createEditor(self, parent, option, index):
         editor = QtWidgets.QStyledItemDelegate.createEditor(
@@ -102,7 +105,7 @@ class EditorTable(QtWidgets.QWidget):
         button.clicked.connect(self.addButtonClicked)
         self._add_button = button
         font = button.font()
-        font.setPointSize(14)
+        font.setPointSize(config.font.size.large)
         button.setFont(font)
         button.setFixedWidth(28)
         button.setFixedHeight(28)
@@ -113,7 +116,7 @@ class EditorTable(QtWidgets.QWidget):
 
         button.clicked.connect(self.removeButtonClicked)
         font = button.font()
-        font.setPointSize(14)
+        font.setPointSize(config.font.size.large)
         button.setFont(font)
         button.setFixedWidth(28)
         button.setFixedHeight(28)
@@ -203,7 +206,7 @@ class GrammarTab(QtWidgets.QWidget):
         button = QtWidgets.QPushButton('Start')
         button.setCheckable(False)
         button.clicked.connect(self.startButtonClicked)
-        button.setFixedWidth(100)
+        button.setFixedWidth(config.button.width)
         buttonLayout.addStretch(1)
         buttonLayout.addWidget(button)
         buttonLayout.addStretch(1)
@@ -214,7 +217,7 @@ class GrammarTab(QtWidgets.QWidget):
         self._disabled_info = 'Grammar is locked for further procedures.\nNow it is read-only.'
         info.setText(self._normal_info)
         font = info.font()
-        font.setPointSize(12)
+        font.setPointSize(config.font.size.normal)
         info.setFont(font)
         info.setAlignment(Qt.AlignCenter) # type: ignore
         self._info = info
@@ -250,7 +253,7 @@ class GrammarTab(QtWidgets.QWidget):
                 # self._lrwindow.requestNext(self._tag)
         else:
             # print('Error:', err)
-            dialog = TextDialog(self._lrwindow, 'Error:{}'.format(err))
+            dialog = TextDialog(self._lrwindow, 'Error: {}'.format(err))
             dialog.show()
 
     # Should be called only once.

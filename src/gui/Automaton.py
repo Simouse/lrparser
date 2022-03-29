@@ -1,13 +1,15 @@
 import signal
 from typing import Any, List, Optional, Union
-from PySide6 import QtWidgets, QtCore, QtGui
-import PySide6
-from PySide6.QtCore import Qt
+# from PySide6 import QtWidgets, QtCore, QtGui
+# from PySide6.QtCore import Qt
+from PyQt5 import QtWidgets, QtCore, QtGui
+from PyQt5.QtCore import Qt
 import sys
 import random
 import math
 from Model import *
 from ParseTable import *
+from GuiConfig import *
 
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
@@ -20,11 +22,11 @@ class StateItem(QtWidgets.QGraphicsEllipseItem):
             radius: float,
             text: str,
             description: Optional[str] = None,
-            brush: Union[PySide6.QtGui.QBrush, PySide6.QtCore.Qt.BrushStyle,
-                         PySide6.QtCore.Qt.GlobalColor, PySide6.QtGui.QColor,
-                         PySide6.QtGui.QGradient, PySide6.QtGui.QImage,
-                         PySide6.QtGui.QPixmap] = Qt.yellow,
-            parent: Optional[PySide6.QtWidgets.QGraphicsItem] = None) -> None:
+            brush: Union[QtGui.QBrush, QtCore.Qt.BrushStyle,
+                         QtCore.Qt.GlobalColor, QtGui.QColor,
+                         QtGui.QGradient, QtGui.QImage,
+                         QtGui.QPixmap] = Qt.yellow,
+            parent: Optional[QtWidgets.QGraphicsItem] = None) -> None:
         super().__init__(centerX - radius, centerY - radius, radius * 2.0,
                          radius * 2.0, parent)
         # pos is initialized to (0, 0).
@@ -43,14 +45,23 @@ class StateItem(QtWidgets.QGraphicsEllipseItem):
 
         label = QtWidgets.QGraphicsSimpleTextItem(parent=self)
         label.setText(text)
-        charW, charH = 7, 13  # An estimate of default font size
-        label.setPos(centerX - len(text) / 2.0 * charW, centerY - charH / 2.0)
+        font = label.font()
+        font.setPointSize(config.font.size.small)
+        font.setFamily('Lato')
+        label.setFont(font)
+        metrics = QtGui.QFontMetrics(font)
+        w = metrics.width(text)
+        h = metrics.height()
+        # charW, charH = 7, 13  # An estimate of default font size
+        # label.setPos(centerX - len(text) / 2.0 * charW, centerY - charH / 2.0)
+        label.setPos(centerX - w / 2, centerY - h / 2)
 
-        self._start_sign = QtWidgets.QGraphicsPathItem(parent=self)
+        self._start_sign = QtWidgets.QGraphicsPathItem(parent=self) # ⊳
         sign = self._start_sign
         a = QtCore.QPointF(centerX - radius, centerY)
-        b = QtCore.QPointF(a.x() - 10, a.y() + 10)
-        c = QtCore.QPointF(a.x() - 10, a.y() - 10)
+        off = radius * 0.6
+        b = QtCore.QPointF(a.x() - off, a.y() + off)
+        c = QtCore.QPointF(a.x() - off, a.y() - off)
         path = QtGui.QPainterPath()
         path.moveTo(a)
         path.lineTo(b)
@@ -73,7 +84,7 @@ class StateItem(QtWidgets.QGraphicsEllipseItem):
         return self._center
 
     def itemChange(self,
-                   change: PySide6.QtWidgets.QGraphicsItem.GraphicsItemChange,
+                   change: QtWidgets.QGraphicsItem.GraphicsItemChange,
                    value: Any) -> Any:
         result = super().itemChange(change, value)
 
@@ -125,7 +136,12 @@ class EdgeItem(QtWidgets.QGraphicsPathItem):
         self.src = src
         self.dest = dest
         self.text = text
-        self.label = QtWidgets.QGraphicsSimpleTextItem(self)
+        label = QtWidgets.QGraphicsSimpleTextItem(self)
+        font = label.font()
+        font.setPointSize(config.font.size.small)
+        font.setFamily('Lato')
+        label.setFont(font)
+        self.label = label
         self.updatePath()
 
         src.lines.append(self)
@@ -142,7 +158,7 @@ class EdgeItem(QtWidgets.QGraphicsPathItem):
         self.text = text
         self.updatePath()
 
-    def boundingRect(self) -> PySide6.QtCore.QRectF:
+    def boundingRect(self) -> QtCore.QRectF:
         # Include label.
         r = super().boundingRect()
         w = len(self.text) * 7.0
@@ -225,7 +241,7 @@ class AutomatonView(QtWidgets.QGraphicsView):
         self._edges: List[EdgeItem] = []
 
     def addState(self, index: int, description: str) -> int:
-        radius = 22
+        radius = config.state.radius
         x = random.uniform(radius, self.rect().width() - radius)
         y = random.uniform(radius, self.rect().height() - radius)
         state = StateItem(x, y, radius, 's{}'.format(index), description)
@@ -278,7 +294,7 @@ class AutomatonTab(QtWidgets.QWidget):
 
         label = QtWidgets.QLabel()
         font = label.font()
-        font.setPointSize(12)
+        font.setPointSize(config.font.size.normal)
         label.setFont(font)
         label.setAlignment(Qt.AlignCenter)  # type: ignore
         label.setText('Press "Continue" button to start.')
@@ -288,9 +304,9 @@ class AutomatonTab(QtWidgets.QWidget):
         continueButton = QtWidgets.QPushButton('Continue')
         self.continueButton = continueButton
         continueButton.clicked.connect(self.continueButtonClicked)
-        continueButton.setFixedWidth(100)
+        continueButton.setFixedWidth(config.button.width)
         finishButton = QtWidgets.QPushButton('Finish')
-        finishButton.setFixedWidth(100)
+        finishButton.setFixedWidth(config.button.width)
         finishButton.clicked.connect(self.finishButtonClicked)
         self.finishButton = finishButton
         buttons.addStretch(1)
@@ -345,7 +361,7 @@ class AutomatonTab(QtWidgets.QWidget):
         self.continueButton.deleteLater()
         self.finishButton.deleteLater()
         next = QtWidgets.QPushButton('Next')
-        next.setFixedWidth(100)
+        next.setFixedWidth(config.button.width)
         next.clicked.connect(self.nextButtonPressed)
         self.buttonsLayout.insertWidget(1, next)
         self._label.setText('DFA is built.')

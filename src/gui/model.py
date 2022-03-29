@@ -1,9 +1,13 @@
 from copy import deepcopy
 from typing_extensions import Protocol
 from typing import Any, Callable, Deque, Dict, List, Optional, Set, Tuple
-from PySide6 import QtCore, QtWidgets, QtGui, QtSvgWidgets
-from PySide6.QtCore import Qt
+# from PySide6 import QtCore, QtWidgets, QtGui, QtSvgWidgets
+# from PySide6.QtCore import Qt
+from PyQt5 import QtCore, QtWidgets, QtGui
+from PyQt5.QtCore import Qt
+from PyQt5.QtSvg import QSvgWidget
 from collections import deque
+from GuiConfig import *
 import sys
 import subprocess
 import os
@@ -132,7 +136,7 @@ class Forest:
                 self.trees))) if len(self.trees) > 0 else '[]'
 
     def toSvgSync(self) -> bytes:
-        g = graphviz.Digraph()
+        g = graphviz.Graph()
         deq: Deque[TreeNode] = deque(self.trees)
         while len(deq) > 0:
             node = deq.popleft()
@@ -154,7 +158,7 @@ class Forest:
         self._threadPool.start(worker)
 
     class WorkerSignal(QtCore.QObject):
-        result = QtCore.Signal(bytes)
+        result = QtCore.pyqtSignal(bytes)
 
     class Worker(QtCore.QRunnable):
         def __init__(self, func, *args, **kwargs) -> None:
@@ -164,7 +168,7 @@ class Forest:
             self.kwargs = kwargs
             self.signal = Forest.WorkerSignal()
 
-        @QtCore.Slot()
+        # @QtCore.Slot()
         def run(self) -> None:
             data = self.func(*self.args, **self.kwargs)
             self.signal.result.emit(data)
@@ -232,7 +236,7 @@ if __name__ == '__main__':
     # forest.showImage()
     app = QtWidgets.QApplication([])
     svg = forest.toSvgSync()
-    svgItem = QtSvgWidgets.QSvgWidget()
+    svgItem = QSvgWidget()
     svgItem.renderer().load(svg)
     svgItem.show()
 
@@ -317,7 +321,7 @@ class TextDialog(QtWidgets.QDialog):
         button = QtWidgets.QPushButton('OK')
         button.setCheckable(False)
         button.clicked.connect(self.close)
-        button.setFixedWidth(100)
+        button.setFixedWidth(config.button.width)
 
         buttonLayout = QtWidgets.QHBoxLayout()
         buttonLayout.addStretch(1)
@@ -334,6 +338,7 @@ class TextDialog(QtWidgets.QDialog):
         self.setLayout(layout)
         self.setModal(True)
         self.setWindowTitle('Dialog')
+        # self.resize(config.dialog.width, config.dialog.height)
 
 
 # Returns (steps, err)

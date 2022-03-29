@@ -2,7 +2,7 @@
 
 This is a grammar parser which can read grammar files in our format, analyze attributes (nullable, first set, and follow set) of symbols, generate push-down automatons and parse tables. It aims at learning/teaching LR parsing algorithms and does not have the functionalities to actually translate languages to intermediate code.
 
-Compile the code online: [replit: lrparser](https://replit.com/@SimonSmith12/lrparser#.replit). Currently, the GUI version cannot be run on Replit.
+Compile the code online: [replit: lrparser](https://replit.com/@SimonSmith12/lrparser#.replit). Currently, the GUI version cannot be run on repl.it.
 
 ## Output
 
@@ -206,7 +206,7 @@ I provide a script named `run.sh` for format conversion. It provides an easier w
 
 Following packages are required:
 - graphviz
-- PySide6
+- PyQt5
 
 And graphviz should be installed so `dot` command appears in `PATH`. 
 
@@ -270,7 +270,9 @@ This tool is not a suitable choice for extremely large inputs, for the result ca
 
 For very large test sequences, you can use `--step` flag to disable memory cache of all input characters (, which is normally unnecessary given the purpose of this tool). 
 
-For very large grammars, the result is almost impossible to observe. I tested my tool against C89 grammar, and found hundreds of DFA states had been generated. Chances are that `dot` will freeze when you try to visualize the graph. And for C89 grammar on my machine, it takes the LR(1) parser about 3 seconds to finish. This is because the program generates gv files and a step file, along with stdout. Although you can redirect the output to `/dev/null` (In ` cmd.exe` on Windows, use `> nul` instead), these strings are still calculated, so it won't save much time (but it will be faster than displaying the output in console).  Compared with the LR(1) parser, other parsers are much faster.
+For very large grammars, the result is almost impossible to observe. I tested my tool against C89 grammar, and found hundreds of DFA states had been generated. Chances are that `dot` will freeze when you try to visualize the graph. 
+
+As for performance, for C89 grammar (You can find it with the url stored in `c89.url.txt` and use run.sh to convert the file format) on WSL2 of my machine, it takes the LR(1) parser about 2.6 seconds to finish. This is because the program generates gv files and a step file, along with stdout. Although you can redirect the output to `/dev/null` (In ` cmd.exe` on Windows, use `> nul` instead), these strings are still calculated, so it won't save much time (but it will be faster than displaying the output in console). Besides, all sets used in the program are based on bitset, which is less efficient when set is sparse and large. The tool assumes grammars to be small because a large grammar is difficult to analyze and study. However, if you intend to test the performance, well, a large grammar should be used. I think I made a mistake here, cause optimizing for small grammars whose analysis is fast enough seems pointless. Compared with the LR(1) parser, other parsers are much faster.
 
 ### Why does your program detect conflicts in C language (ANSI-89) ?
 

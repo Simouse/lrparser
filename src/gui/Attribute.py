@@ -1,11 +1,12 @@
 import re
 from typing import List
-from PySide6 import QtCore, QtWidgets, QtGui
-from PySide6.QtCore import Qt
+# from PySide6 import QtCore, QtWidgets, QtGui
+# from PySide6.QtCore import Qt
+from PyQt5 import QtCore, QtWidgets, QtGui
 from ParseTable import *
 from Model import *
 from Automaton import AutomatonTab
-
+from GuiConfig import *
 
 class SymbolTableModel(QtCore.QAbstractTableModel):
     def __init__(self, symvec: List[Symbol]) -> None:
@@ -123,7 +124,7 @@ class SymbolTable(QtWidgets.QWidget):
         label.setText('Symbols')
         font = label.font()
         font.setBold(True)
-        font.setPointSize(10)
+        font.setPointSize(config.font.size.small)
         label.setFont(font)
         layout.addStretch(1)
         layout.addWidget(label)
@@ -159,7 +160,7 @@ class ProductionTable(QtWidgets.QWidget):
         label.setText('Productions')
         font = label.font()
         font.setBold(True)
-        font.setPointSize(10)
+        font.setPointSize(config.font.size.small)
         label.setFont(font)
         layout.addStretch(1)
         layout.addWidget(label)
@@ -208,11 +209,11 @@ class AttributeTab(QtWidgets.QWidget):
         button = QtWidgets.QPushButton('Continue')
         button.clicked.connect(self.continueButtonClicked)
         button.setCheckable(False)
-        button.setFixedWidth(100)
+        button.setFixedWidth(config.button.width)
         self._continue_button = button
         button = QtWidgets.QPushButton('Finish')
         button.setCheckable(False)
-        button.setFixedWidth(100)
+        button.setFixedWidth(config.button.width)
         button.clicked.connect(self.finishButtonClicked)
         self._finish_button = button
 
@@ -225,7 +226,7 @@ class AttributeTab(QtWidgets.QWidget):
 
         infoText = QtWidgets.QLabel()
         font = infoText.font()
-        font.setPointSize(12)
+        font.setPointSize(config.font.size.normal)
         infoText.setFont(font)
         infoText.setAlignment(Qt.AlignCenter)  # type: ignore
         infoText.setText('Press button "Continue" to start')
@@ -306,7 +307,7 @@ class AttributeTab(QtWidgets.QWidget):
         del self._finish_button
         button = QtWidgets.QPushButton('Next')
         button.setCheckable(False)
-        button.setFixedWidth(100)
+        button.setFixedWidth(config.button.width)
         button.clicked.connect(self.nextButtonClicked)
         self._next_button = button
         self._info_text.setText('Done.')
