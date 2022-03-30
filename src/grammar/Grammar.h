@@ -31,7 +31,8 @@ class Grammar;
 
 struct Symbol {
     using SymbolSet = util::BitSet<SymbolID>;
-    std::optional<bool> nullable;
+    // std::optional<bool> nullable;
+    bool nullable;
     SymbolType type;
     SymbolID id;
     std::string name;
@@ -57,11 +58,14 @@ class Grammar {
     SymbolID start{-1};
     SymbolID epsilon{-1};
     SymbolID endOfInput{-1};
-    symvec_t symbolVector;
+    symvec_t symbols;
     idtbl_t idTable;
     ProductionTable productionTable;
-    std::vector<int> nonterminals;
-    std::vector<int> attrTableLineMap;
+
+    // // Classification & Reorder
+    // std::vector<int> nonterminals;
+    // std::vector<int> terminals;
+    // std::vector<int> attrTableLineMap; // From symbol id to table line
 
     // Private constructor.
     // Grammar class is mostly private when building grammar, because we
@@ -89,21 +93,25 @@ class Grammar {
 
     // Recursively resolve Follow set dependency: a dependency table must be
     // built first.
-    void resolveFollowSet(
-        std::vector<int> &visit,
-        std::unordered_map<SymbolID, std::unordered_set<SymbolID>>
-            &dependencyTable,
-        std::pair<const SymbolID, std::unordered_set<SymbolID>> &dependency);
+    // void resolveFollowSet(
+    //     std::vector<int> &visit,
+    //     std::unordered_map<SymbolID, std::unordered_set<SymbolID>>
+    //         &dependencyTable,
+    //     std::pair<const SymbolID, std::unordered_set<SymbolID>> &dependency);
 
-    // Recursively resolve First set dependency
-    void resolveFirstSet(std::vector<int> &visit, Symbol &curSymbol);
+    // // Recursively resolve First set dependency
+    // void resolveFirstSet(std::vector<int> &visit, Symbol &curSymbol);
 
-    // Recursively resolve nullable dependency
-    bool resolveNullable(Symbol &sym);
+    // // Recursively resolve nullable dependency
+    // bool resolveNullable(Symbol &sym);
 
-    // Generate nonterminals vector and attrTableLineMap (Use for
+    // Generate nonterminals vector and attrTableLineMap (Used for
     // visualization)
-    void collectNonterminals();
+    // void classifySymbols();
+
+    void calNullable(); // Calculate nullable
+    void calFirst();    // Calculate First
+    void calFollow();   // Calculate Follow
 
   public:
     [[nodiscard]] symvec_t const &getAllSymbols() const;
@@ -115,7 +123,13 @@ class Grammar {
     [[nodiscard]] static std::string dumpNullable(const Symbol &symbol);
     [[nodiscard]] std::string dumpFirstSet(const Symbol &symbol) const;
     [[nodiscard]] std::string dumpFollowSet(const Symbol &symbol) const;
-    [[nodiscard]] std::string dumpProduction(ProductionID prodID) const;
+    [[nodiscard]] std::string dumpProduction(ProductionID id) const;
+    [[nodiscard]] std::string dumpProduction(const Production &p) const;
+    // If underline < 0 or underline > len(production), no effect.
+    // If underline == len(production), left symbol is underlined.
+    // Otherwise, a right symbol is underlined.
+    [[nodiscard]] std::string dumpProductionHtml(const Production &p, int underline) const;
+    [[nodiscard]] std::string dumpProductionHtml(ProductionID id, int underline) const;
 
     // std::unordered_map doesn't support heterogeneous lookup, so when
     // we pass a const char *, the string is copied. So we just use a string
@@ -123,7 +137,7 @@ class Grammar {
     [[nodiscard]] Symbol const &findSymbol(std::string const &s) const;
 
     // Fill symbol attributes: nullable, firstSet, followSet
-    Grammar &resolveSymbolAttributes();
+    Grammar &calAttributes();
 
     // Factories
     static auto fromFile(const char *fileName) -> Grammar;

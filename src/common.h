@@ -86,7 +86,7 @@ OutIter escape_all(std::string_view const& s, OutIter out, char quote) {
     *out++ = quote;
 
   for (unsigned char c : s) {
-     if (' ' <= c && c <= '~' && c != '\\' && c != '"') {
+     if (' ' <= c && c <= '~' && c != '\\' && c != '"' && c != '\'') {
       *out++ = c;
     } 
     else {
@@ -118,7 +118,7 @@ OutIter escape_ascii(std::string_view const& s, OutIter out, char quote) {
   if (quote)
     *out++ = quote;
   for (unsigned char c : s) {
-     if (' ' <= c && c <= '~' && c != '\\' && c != '"') {
+    if (' ' <= c && c <= '~' && c != '\\' && c != '"' && c != '\'') {
       *out++ = c;
     } 
     else {

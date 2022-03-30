@@ -44,6 +44,12 @@ void addFirst(int symbol, int component, const char *explain) {
     show(explain);
 }
 
+void mergeFirst(int dest, int src, const char *explain) {
+    fprintf(stepFile, "symbol[%d].first.update(symbol[%d].first)\n", dest,
+            src);
+    show(explain);
+}
+
 void addFollow(int symbol, int component, const char *explain) {
     fprintf(stepFile, "symbol[%d].follow.add(%d)\n", symbol, component);
     show(explain);
@@ -52,6 +58,14 @@ void addFollow(int symbol, int component, const char *explain) {
 void mergeFollow(int dest, int src, const char *explain) {
     fprintf(stepFile, "symbol[%d].follow.update(symbol[%d].follow)\n", dest,
             src);
+    show(explain);
+}
+
+void mergeFollowFromFirst(int dest, int src, int eps, const char *explain) {
+    fprintf(stepFile,
+            "symbol[%d].follow.update(symbol[%d].first)\n"
+            "symbol[%d].follow.discard(%d)\n",
+            dest, src, dest, eps);
     show(explain);
 }
 
@@ -97,12 +111,23 @@ void astSetParent(int child, int parent) {
     fprintf(stepFile, "astSetParent(%d, %d)\n", child, parent);
 }
 
+void show(const char *message) {
+    if (message)
+        show(std::string_view(message));
+    // else
+    //     fprintf(stepFile, "show(None)\n"); // Only refresh
+}
+
 void show(std::string_view message) {
-    fprintf(stepFile, "show(\"\"\"%s\"\"\")\n", message.data());
+    std::string s;
+    escape_ascii(message, std::back_inserter(s), 0);
+    fprintf(stepFile, "show('%s')\n", s.data());
 }
 
 void section(std::string_view title) {
-    fprintf(stepFile, "section(\"\"\"%s\"\"\")\n", title.data());
+    std::string s;
+    escape_ascii(title, std::back_inserter(s), 0);
+    fprintf(stepFile, "section('%s')\n", s.data());
 }
 
 } // namespace step

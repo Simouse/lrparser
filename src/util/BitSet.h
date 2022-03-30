@@ -5,6 +5,7 @@
 #ifndef LRPARSER_BITSET_H
 #define LRPARSER_BITSET_H
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstddef>
@@ -307,6 +308,33 @@ template <class T> class BitSet {
                 return true;
         }
         return false;
+    }
+
+    [[nodiscard]] bool supersetOf(BitSet const &other) const {
+        auto limit = std::min(this->m_size, other.m_size);
+        for (size_type i = 0; i < limit; ++i) {
+            block_type x = m_data[i];
+            block_type y = other.m_data[i];
+            if (y & ~x)
+                return false;
+        }
+        for (size_type i = limit; i < other.m_size; ++i) {
+            if (other.m_data[i])
+                return false;
+        }
+        return true;
+    }
+
+    [[nodiscard]] bool subsetOf(BitSet const &other) const {
+        auto limit = std::min(this->m_size, other.m_size);
+        // ensure(other.m_size * block_bits);
+        for (size_type i = 0; i < limit; ++i) {
+            block_type x = m_data[i];
+            block_type y = other.m_data[i];
+            if (x & ~y)
+                return false;
+        }
+        return true;
     }
 
     // Dump this bitset in human-readable format.

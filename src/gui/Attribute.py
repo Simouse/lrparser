@@ -28,6 +28,10 @@ class SymbolTableModel(QtCore.QAbstractTableModel):
                     s += self._symvec[v].name
                 value = s
 
+            if str(value).strip().lower() == 'false':
+                value = '×'
+            elif str(value).strip().lower() == 'true':
+                value = '✓'
             return value
 
         if role == Qt.TextAlignmentRole:

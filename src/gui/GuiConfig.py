@@ -19,6 +19,8 @@ class GuiConfig(dotdict):
 
         self.button = dotdict()
         self.button.width = 135
+        self.button.square = dotdict()
+        self.button.square.width = 36
 
         self.state = dotdict()
         self.state.radius = 28

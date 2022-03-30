@@ -56,7 +56,7 @@ class StateItem(QtWidgets.QGraphicsEllipseItem):
         # label.setPos(centerX - len(text) / 2.0 * charW, centerY - charH / 2.0)
         label.setPos(centerX - w / 2, centerY - h / 2)
 
-        self._start_sign = QtWidgets.QGraphicsPathItem(parent=self) # ⊳
+        self._start_sign = QtWidgets.QGraphicsPathItem(parent=self) # ▷
         sign = self._start_sign
         a = QtCore.QPointF(centerX - radius, centerY)
         off = radius * 0.6

@@ -3,6 +3,10 @@ term  -> term * fac  | fac
 fac   -> ID
 fac   -> ( exp )
 
+% S -> A B
+% B -> b B | b A
+% A -> \e  | a
+
 % S -> C D
 % C -> D c
 % D -> C d

@@ -43,7 +43,7 @@ class LR1Parser : public LRParser {
 
         bool allNullable = true;
         for (size_t i = rhsIndex + 1; allNullable && i < rhs.size(); ++i) {
-            if (!symbols[rhs[i]].nullable.value())
+            if (!symbols[rhs[i]].nullable)
                 allNullable = false;
             constraint |= symbols[rhs[i]].firstSet;
         }

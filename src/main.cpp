@@ -12,6 +12,7 @@
 #include "src/parser/LR1Parser.h"
 #include "src/parser/LRParser.h"
 #include "src/parser/SLRParser.h"
+#include "src/util/BitSet.h"
 #include "src/util/Formatter.h"
 #include "src/display/steps.h"
 
