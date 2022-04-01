@@ -16,9 +16,8 @@ static const char *bool_str[2] = {"False", "True"};
 namespace step {
 
 void symbol(int id, const char *name, bool is_term, bool is_start) {
-    std::string escaped_name;
-    escape_ascii(name, std::back_inserter(escaped_name), '\'');
-    fprintf(stepFile, "symbol[%d].name=%s\n", id, escaped_name.c_str());
+    std::string escaped_name = escape_ascii(name);
+    fprintf(stepFile, "symbol[%d].name=\"%s\"\n", id, escaped_name.c_str());
     fprintf(stepFile, "symbol[%d].is_term=%s\n", id, bool_str[is_term]);
     fprintf(stepFile, "symbol[%d].is_start=%s\n", id, bool_str[is_start]);
 }
@@ -80,21 +79,18 @@ void printf(const char *fmt, ...) {
 }
 
 void addState(int state, std::string_view description) {
-    std::string s;
-    escape_ascii(description, std::back_inserter(s), '\"');
-    fprintf(stepFile, "addState(%d, %s)\n", state, s.c_str());
+    std::string s = escape_ascii(description);
+    fprintf(stepFile, "addState(%d, \"%s\")\n", state, s.c_str());
 }
 
 void updateState(int state, std::string_view description) {
-    std::string s;
-    escape_ascii(description, std::back_inserter(s), '\"');
-    fprintf(stepFile, "updateState(%d, %s)\n", state, s.c_str());
+    std::string s = escape_ascii(description);
+    fprintf(stepFile, "updateState(%d, \"%s\")\n", state, s.c_str());
 }
 
 void addEdge(int s1, int s2, std::string_view label) {
-    std::string s;
-    escape_ascii(label, std::back_inserter(s), '\"');
-    fprintf(stepFile, "addEdge(%d, %d, %s)\n", s1, s2, s.c_str());
+    std::string s = escape_ascii(label);
+    fprintf(stepFile, "addEdge(%d, %d, \"%s\")\n", s1, s2, s.c_str());
 }
 
 void setStart(int state) { fprintf(stepFile, "setStart(%d)\n", state); }
@@ -102,9 +98,8 @@ void setStart(int state) { fprintf(stepFile, "setStart(%d)\n", state); }
 void setFinal(int state) { fprintf(stepFile, "setFinal(%d)\n", state); }
 
 void astAddNode(int index, std::string_view label) {
-    std::string s;
-    escape_ascii(label, std::back_inserter(s), '\"');
-    fprintf(stepFile, "astAddNode(%d, %s)\n", index, s.c_str());
+    std::string s = escape_ascii(label);
+    fprintf(stepFile, "astAddNode(%d, \"%s\")\n", index, s.c_str());
 }
 
 void astSetParent(int child, int parent) {
@@ -119,15 +114,13 @@ void show(const char *message) {
 }
 
 void show(std::string_view message) {
-    std::string s;
-    escape_ascii(message, std::back_inserter(s), 0);
-    fprintf(stepFile, "show('%s')\n", s.data());
+    std::string s = escape_ascii(message);
+    fprintf(stepFile, "show(\"%s\")\n", s.data());
 }
 
 void section(std::string_view title) {
-    std::string s;
-    escape_ascii(title, std::back_inserter(s), 0);
-    fprintf(stepFile, "section('%s')\n", s.data());
+    std::string s = escape_ascii(title);
+    fprintf(stepFile, "section(\"%s\")\n", s.data());
 }
 
 } // namespace step

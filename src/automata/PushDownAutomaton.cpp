@@ -240,9 +240,8 @@ std::string PushDownAutomaton::dumpStateString(StateID stateID) const {
     auto const &state = states[stateID];
     auto const &constraint = state.constraint;
 
-    std::string s;
-    escape_ascii((*kernelLabelMap)[state.productionID][state.rhsIndex],
-                 std::back_inserter(s), 0);
+    std::string s =
+        escape_ascii((*kernelLabelMap)[state.productionID][state.rhsIndex]);
 
     if (this->includeConstraints) {
         s += ", ";
@@ -250,7 +249,7 @@ std::string PushDownAutomaton::dumpStateString(StateID stateID) const {
         for (auto actionID : *constraint) {
             if (slash)
                 s += "/";
-            escape_ascii(actions[actionID], std::back_inserter(s), 0);
+            s += escape_ascii(actions[actionID]);
             slash = true;
         }
     }
@@ -308,9 +307,8 @@ std::string PushDownAutomaton::dumpClosureString(StateID closureID) const {
         auto const &auxState = auxStates[stateID];
         auto const &constraint = auxState.constraint;
 
-        escape_ascii(
-            (*kernelLabelMap)[auxState.productionID][auxState.rhsIndex],
-            std::back_inserter(s), 0);
+        s += escape_ascii(
+            (*kernelLabelMap)[auxState.productionID][auxState.rhsIndex]);
 
         if (!finalFlag && constraint->contains(endOfInputAction) &&
             (auxState.rhsIndex + 1 ==
@@ -324,7 +322,7 @@ std::string PushDownAutomaton::dumpClosureString(StateID closureID) const {
             for (auto actionID : *constraint) {
                 if (slash)
                     s += "/";
-                escape_ascii(actions[actionID], std::back_inserter(s), 0);
+                s += escape_ascii(actions[actionID]);
                 slash = true;
             }
         }

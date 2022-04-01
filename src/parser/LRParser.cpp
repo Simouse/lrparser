@@ -230,7 +230,7 @@ void LRParser::buildParseTable() {
             // Skip those which cannot be reduced.
             // prodID should be valid and not refer to the pseudo production
             // "S' -> S".
-            if (prodID < 0 || prodID + 1 >= kernelLabelMap.size() ||
+            if (prodID < 0 || prodID + 1 >= (int)kernelLabelMap.size() ||
                 auxState.rhsIndex + 1 != kernelLabelMap[prodID].size()) {
                 continue;
             }

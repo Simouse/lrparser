@@ -80,61 +80,51 @@ struct Constants {
 };
 
 // 6. Format
-template<class OutIter>
-OutIter escape_all(std::string_view const& s, OutIter out, char quote) {
-  if (quote)
-    *out++ = quote;
+// template<class OutIter>
+// OutIter escape_all(std::string_view const& s, OutIter out, char quote) {
+//   if (quote)
+//     *out++ = quote;
 
-  for (unsigned char c : s) {
-     if (' ' <= c && c <= '~' && c != '\\' && c != '"' && c != '\'') {
-      *out++ = c;
-    } 
-    else {
-      *out++ = '\\';
-      switch(c) {
-      case '"':  *out++ = '"';  break;
-      case '\\': *out++ = '\\'; break;
-      case '\t': *out++ = 't';  break;
-      case '\r': *out++ = 'r';  break;
-      case '\n': *out++ = 'n';  break;
-      case '\'': *out++ = '\''; break;
-      default:
-        char const* const hexdig = "0123456789ABCDEF";
-        *out++ = 'x';
-        *out++ = hexdig[c >> 4];
-        *out++ = hexdig[c & 0xF];
-      }
+//   for (unsigned char c : s) {
+//      if (' ' <= c && c <= '~' && c != '\\' && c != '"') {
+//       *out++ = c;
+//     } 
+//     else {
+//       *out++ = '\\';
+//       switch(c) {
+//       case '"':  *out++ = '"';  break;
+//       case '\\': *out++ = '\\'; break;
+//       case '\t': *out++ = 't';  break;
+//       case '\r': *out++ = 'r';  break;
+//       case '\n': *out++ = 'n';  break;
+//       default:
+//         char const* const hexdig = "0123456789ABCDEF";
+//         *out++ = 'x';
+//         *out++ = hexdig[c >> 4];
+//         *out++ = hexdig[c & 0xF];
+//       }
+//     }
+//   }
+
+//   if (quote)
+//     *out++ = quote;
+
+//   return out;
+// }
+
+// Use double quote.
+static inline std::string escape_ascii(std::string_view const& s) {
+  std::string out;
+  for (char c : s) {
+    switch(c) {
+    case '"':  out += '\\'; out += '"';  break;
+    case '\\': out += '\\'; out += '\\'; break;
+    case '\t': out += '\\'; out += 't';  break;
+    case '\r': out += '\\'; out += 'r';  break;
+    case '\n': out += '\\'; out += 'n';  break;
+    default:   out += c;
     }
   }
-
-  if (quote)
-    *out++ = quote;
-
-  return out;
-}
-
-template<class OutIter>
-OutIter escape_ascii(std::string_view const& s, OutIter out, char quote) {
-  if (quote)
-    *out++ = quote;
-  for (unsigned char c : s) {
-    if (' ' <= c && c <= '~' && c != '\\' && c != '"' && c != '\'') {
-      *out++ = c;
-    } 
-    else {
-      switch(c) {
-      case '"':  *out++ = '\\'; *out++ = '"';  break;
-      case '\\': *out++ = '\\'; *out++ = '\\'; break;
-      case '\t': *out++ = '\\'; *out++ = 't';  break;
-      case '\r': *out++ = '\\'; *out++ = 'r';  break;
-      case '\n': *out++ = '\\'; *out++ = 'n';  break;
-      case '\'': *out++ = '\\'; *out++ = '\''; break;
-      default:   *out++ = c;
-      }
-    }
-  }
-  if (quote)
-    *out++ = quote;
   return out;
 }
 
