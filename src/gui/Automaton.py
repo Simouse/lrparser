@@ -48,6 +48,7 @@ class StateItem(QtWidgets.QGraphicsEllipseItem):
         self._desctype = description_type
         self.setDescription(description)  # type: ignore
         self.setAcceptDrops(True)
+        self.setAcceptHoverEvents(True)
 
         label = QtWidgets.QGraphicsSimpleTextItem(parent=self)
         label.setText(text)
@@ -162,6 +163,29 @@ class StateItem(QtWidgets.QGraphicsEllipseItem):
                 line.updatePath()
         return super().itemChange(change, value)
 
+    def mousePressEvent(self, event: QtWidgets.QGraphicsSceneMouseEvent) -> None:
+        super().mousePressEvent(event)
+        QtWidgets.QToolTip.hideText()
+    
+    def mouseReleaseEvent(self, event: QtWidgets.QGraphicsSceneMouseEvent) -> None:
+        super().mouseReleaseEvent(event)
+        pos = event.screenPos()
+        QtWidgets.QToolTip.showText(pos, self.toolTip())
+
+    def hoverEnterEvent(self, event: QtWidgets.QGraphicsSceneHoverEvent) -> None:
+        event.accept()
+        pos = event.screenPos()
+        QtWidgets.QToolTip.showText(pos, self.toolTip())
+
+    # def hoverMoveEvent(self, event: QtWidgets.QGraphicsSceneHoverEvent) -> None:
+    #     event.accept()
+    #     pos = event.screenPos()
+    #     QtWidgets.QToolTip.showText(pos, self.toolTip())
+
+    def hoverLeaveEvent(self, event: QtWidgets.QGraphicsSceneHoverEvent) -> None:
+        super().hoverLeaveEvent(event)
+        QtWidgets.QToolTip.hideText()
+
     def setFinal(self, final: bool = True) -> None:
         self.prepareGeometryChange()
         self._final = final
@@ -189,8 +213,6 @@ class StateItem(QtWidgets.QGraphicsEllipseItem):
             r.translate(QtCore.QPointF(distance, distance))
             painter.drawEllipse(r)
 
-        # painter.setBrush(Qt.transparent)
-        # painter.drawRect(self.rect())
 
 class EdgeItem(QtWidgets.QGraphicsPathItem):
     def __init__(self,
