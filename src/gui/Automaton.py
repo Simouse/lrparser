@@ -6,6 +6,7 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtCore import Qt
 import sys
 import random
+from enum import Enum
 import math
 from Model import *
 from ParseTable import *
@@ -13,20 +14,24 @@ from GuiConfig import *
 
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
+class AutomatonType(Enum):
+    Plain = 0
+    LR0   = 1
+    LR1   = 2    
 
 class StateItem(QtWidgets.QGraphicsEllipseItem):
-    def __init__(
-            self,
-            centerX: float,
-            centerY: float,
-            radius: float,
-            text: str,
-            description: Optional[str] = None,
-            brush: Union[QtGui.QBrush, QtCore.Qt.BrushStyle,
-                         QtCore.Qt.GlobalColor, QtGui.QColor,
-                         QtGui.QGradient, QtGui.QImage,
-                         QtGui.QPixmap] = Qt.yellow,
-            parent: Optional[QtWidgets.QGraphicsItem] = None) -> None:
+    def __init__(self,
+                 centerX: float,
+                 centerY: float,
+                 radius: float,
+                 text: str,
+                 description: Optional[str] = None,
+                 description_type: AutomatonType = AutomatonType.Plain,
+                 brush: Union[QtGui.QBrush, QtCore.Qt.BrushStyle,
+                              QtCore.Qt.GlobalColor, QtGui.QColor,
+                              QtGui.QGradient, QtGui.QImage,
+                              QtGui.QPixmap] = Qt.yellow,
+                 parent: Optional[QtWidgets.QGraphicsItem] = None) -> None:
         super().__init__(centerX - radius, centerY - radius, radius * 2.0,
                          radius * 2.0, parent)
         # pos is initialized to (0, 0).
@@ -35,11 +40,12 @@ class StateItem(QtWidgets.QGraphicsEllipseItem):
         self._radius = radius
         self._final = False
         self._start = False
-        self.lines: List[QtWidgets.QGraphicsPathItem] = []
+        self.lines: List['EdgeItem'] = []
 
         self.setFlag(QtWidgets.QGraphicsItem.ItemIsMovable, True)
         self.setFlag(QtWidgets.QGraphicsItem.ItemSendsGeometryChanges, True)
         self.setBrush(brush)
+        self._desctype = description_type
         self.setDescription(description)  # type: ignore
         self.setAcceptDrops(True)
 
@@ -56,7 +62,7 @@ class StateItem(QtWidgets.QGraphicsEllipseItem):
         # label.setPos(centerX - len(text) / 2.0 * charW, centerY - charH / 2.0)
         label.setPos(centerX - w / 2, centerY - h / 2)
 
-        self._start_sign = QtWidgets.QGraphicsPathItem(parent=self) # ▷
+        self._start_sign = QtWidgets.QGraphicsPathItem(parent=self)  # ▷
         sign = self._start_sign
         a = QtCore.QPointF(centerX - radius, centerY)
         off = radius * 0.6
@@ -73,9 +79,74 @@ class StateItem(QtWidgets.QGraphicsEllipseItem):
         sign.setPen(pen)
 
     def setDescription(self, description: str) -> None:
-        tooltip = description.splitlines()
-        tooltip = sorted(tooltip)
-        self.setToolTip('\n'.join(tooltip))
+        if isspace(description):
+            self.setToolTip('')
+            return
+
+        if self._desctype == AutomatonType.Plain:
+            self.setToolTip(description)
+            return
+        
+        tooltips = description.splitlines()
+        tooltips = sorted(tooltips)
+
+        if self._desctype == AutomatonType.LR0:
+            rows = '\n'.join(map(lambda line:'<tr><td>{}</td></tr>'.format(line), tooltips))
+            s = """
+            <style>
+                td {{ 
+                    border-bottom: 1px solid #000000; color: blue; 
+                    overflow:hidden; white-space:nowrap;
+                }}
+                th {{ white-space:nowrap; }}
+            </style>
+            <table>
+                <tr><th>LR(0) Items</th></tr>
+                {}
+            </table>
+            """.format(rows)
+            self.setToolTip(s)
+            return
+
+        assert(self._desctype == AutomatonType.LR1)
+
+        def to_tablerow(line: Optional[str]) -> str:
+            if isspace(line):
+                return ''
+            assert(line);
+            s = '<tr>\n'
+
+            parts = line.split(',', 1) # Only two parts.
+            s += """
+              <td>{}</td>
+              <td style="text-align: center;">{}</td>
+            """.format(parts[0], parts[1].replace('/', ' '))
+
+            s += '</tr>'
+            return s
+
+        s = '\n'.join(map(to_tablerow, tooltips))
+        s = """
+        <style type="text/css">
+        td {{
+            padding: 0 10px;
+            border-bottom: 1px solid #000000; color: blue;
+            overflow:hidden; white-space:nowrap;
+        }}
+        th {{ 
+            padding: 0 10px; 
+            overflow:hidden; white-space:nowrap; 
+        }}
+        </style>
+        <table>
+            <tr style="border-bottom: 1px solid black;">
+            <th>LR(0) Items</th>
+            <th>Look-Aheads</th>
+            </tr>
+            {}
+        </table>
+        """.format(s)
+        self.setToolTip(s)
 
     def radius(self) -> float:
         return self._radius
@@ -83,18 +154,13 @@ class StateItem(QtWidgets.QGraphicsEllipseItem):
     def center(self) -> QtCore.QPointF:
         return self._center
 
-    def itemChange(self,
-                   change: QtWidgets.QGraphicsItem.GraphicsItemChange,
+    def itemChange(self, change: QtWidgets.QGraphicsItem.GraphicsItemChange,
                    value: Any) -> Any:
-        result = super().itemChange(change, value)
-
-        if change == QtWidgets.QGraphicsItem.ItemPositionChange and self.scene(
-        ):
+        if change == QtWidgets.QGraphicsItem.ItemPositionChange and self.scene():
             self.prepareGeometryChange()
             for line in self.lines:
                 line.updatePath()
-
-        return result
+        return super().itemChange(change, value)
 
     def setFinal(self, final: bool = True) -> None:
         self.prepareGeometryChange()
@@ -126,20 +192,19 @@ class StateItem(QtWidgets.QGraphicsEllipseItem):
         # painter.setBrush(Qt.transparent)
         # painter.drawRect(self.rect())
 
-
 class EdgeItem(QtWidgets.QGraphicsPathItem):
     def __init__(self,
                  src: StateItem,
                  dest: StateItem,
-                 text: str = '') -> None:
+                 actions: Optional[Set[str]] = None) -> None:
         super().__init__()
         self.src = src
         self.dest = dest
-        self.text = text
+        self._actions = actions if actions else set()
         label = QtWidgets.QGraphicsSimpleTextItem(self)
         font = label.font()
         font.setPointSize(config.font.size.small)
-        font.setFamily('Lato')
+        # font.setFamily('Lato') # No need now.
         label.setFont(font)
         self.label = label
         self.updatePath()
@@ -147,21 +212,29 @@ class EdgeItem(QtWidgets.QGraphicsPathItem):
         src.lines.append(self)
         dest.lines.append(self)
 
-        self.setBrush(QtCore.Qt.black)
+        brush = QtGui.QBrush(Qt.black)
+        self.setBrush(brush)
         pen = QtGui.QPen()
-        pen.setStyle(QtCore.Qt.SolidLine)
+        pen.setStyle(Qt.SolidLine)
         pen.setWidth(1)
         pen.setColor(Qt.black)
         self.setPen(pen)
 
-    def setText(self, text) -> None:
-        self.text = text
+    def setActions(self, actions: Set[str]) -> None:
+        self._actions = actions
         self.updatePath()
+
+    def addAction(self, action: str) -> None:
+        self._actions.add(action)
+        self.updatePath()
+
+    def actions(self) -> Set[str]:
+        return self._actions
 
     def boundingRect(self) -> QtCore.QRectF:
         # Include label.
         r = super().boundingRect()
-        w = len(self.text) * 7.0
+        w = len(self._actions) * 7.0
         h = 20.0
         r.setWidth(r.width() + w * 2)
         r.setHeight(r.height() + h)
@@ -211,7 +284,7 @@ class EdgeItem(QtWidgets.QGraphicsPathItem):
         # Draw line label.
         x = (a.x() + b.x()) / 2.0
         y = (a.y() + b.y()) / 2.0
-        self.label.setText(self.text)
+        self.label.setText(' '.join(self._actions))
         self.label.setPos(x, y - 18.0)
 
         self.setPath(path)
@@ -223,43 +296,53 @@ class EdgeItem(QtWidgets.QGraphicsPathItem):
         painter.setPen(self.pen())
         painter.setRenderHint(QtGui.QPainter.TextAntialiasing, True)
         painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
-        painter.setBrush(Qt.black)
+        painter.setBrush(self.brush())
         painter.drawPath(self.path())
-
-        # painter.setBrush(Qt.transparent)
-        # painter.drawRect(self.boundingRect())
 
 
 class AutomatonView(QtWidgets.QGraphicsView):
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, automatonType = AutomatonType.Plain, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
         scene = QtWidgets.QGraphicsScene()
         self.setScene(scene)
         self.setAlignment(Qt.AlignTop | Qt.AlignLeft)  # type: ignore
+        self._automaton_type = automatonType
         self._states = GrowingList(lambda: None)
-        self._edges: List[EdgeItem] = []
+        self._edges: Dict[Tuple[int, int], EdgeItem] = {}
 
     def addState(self, index: int, description: str) -> int:
         radius = config.state.radius
         x = random.uniform(radius, self.rect().width() - radius)
         y = random.uniform(radius, self.rect().height() - radius)
-        state = StateItem(x, y, radius, 's{}'.format(index), description)
+        state = StateItem(x, y, radius, 's{}'.format(index), description, self._automaton_type)
         self._states[index] = state
         self.scene().addItem(state)
         return index
 
     def updateState(self, index: int, description: str) -> None:
         stateItem: StateItem = self._states[index]
-        stateItem.setToolTip(description)
+        stateItem.setDescription(description)
 
     def addEdge(self, a: int, b: int, label: str) -> int:
         A = self._states[a]
         B = self._states[b]
-        edge = EdgeItem(A, B, label)
-        self.scene().addItem(edge)
+
+        if (a, b) not in self._edges.keys():
+            edge = EdgeItem(A, B)
+            self._edges[(a, b)] = edge
+            self.scene().addItem(edge)
+        edge = self._edges[(a, b)]
+        edge.addAction(label)
+
+        """
+        Debug
+        """
+        # print('id(edge): {}', id(edge))
+        # print('edge.actions(): {}', ', '.join(edge._actions))
+        
         index = len(self._edges)
-        self._edges.append(edge)
+        # self._edges.append(edge)
         return index
 
     def setFinal(self, state: int, final: bool = True) -> None:
@@ -276,7 +359,8 @@ class AutomatonView(QtWidgets.QGraphicsView):
 
 
 class AutomatonTab(QtWidgets.QWidget):
-    def __init__(self, parent: QtWidgets.QWidget, opts: LRParserOptions, env: ParsingEnv) -> None:
+    def __init__(self, parent: QtWidgets.QWidget, opts: LRParserOptions,
+                 env: ParsingEnv) -> None:
         super().__init__(parent)  # type: ignore
         # self._opts = opts
         self._env = env
@@ -290,7 +374,8 @@ class AutomatonTab(QtWidgets.QWidget):
             print(err)
             raise Exception()
 
-        automatonView = AutomatonView()
+        type = AutomatonType.LR1 if opts.parser in ['LR(1)', 'LALR(1)'] else AutomatonType.LR0
+        automatonView = AutomatonView(type)
 
         label = QtWidgets.QLabel()
         font = label.font()
@@ -327,16 +412,17 @@ class AutomatonTab(QtWidgets.QWidget):
         m = automatonView
         self._env.addEdge = lambda a, b, s: m.addEdge(a, b, s)  # type: ignore
         self._env.addState = lambda a, s: m.addState(a, s)  # type: ignore
-        self._env.updateState = lambda a, s: m.updateState(a, s)  # type: ignore
+        self._env.updateState = lambda a, s: m.updateState(a, s)  
         self._env.setFinal = lambda s: m.setFinal(s, True)
         self._env.setStart = lambda s: m.setStart(s, True)
         self._env.section = lambda s: self.setSection(s)
         self._env.show = lambda s: label.setText(s)
 
         while self._line < len(self._code) and self._section != 'DFA':
-            self._line = skipSection(self._code, self._line, self._env.__dict__)
+            self._line = skipSection(self._code, self._line,
+                                     self._env.__dict__)
             self._line += 1
-        
+
     def setSection(self, section) -> None:
         self._section = section
 
@@ -349,7 +435,8 @@ class AutomatonTab(QtWidgets.QWidget):
 
     def finishButtonClicked(self) -> None:
         while self._line < len(self._code) and self._section == 'DFA':
-            self._line = execSection(self._code, self._line, self._env.__dict__)
+            self._line = execSection(self._code, self._line,
+                                     self._env.__dict__)
             self._line += 1
         self.finish()
 

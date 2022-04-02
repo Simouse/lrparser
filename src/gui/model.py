@@ -264,7 +264,7 @@ class ParsingEnv():
     def __init__(self) -> None:
         self.symbol = GrowingList(Symbol.new)
         self.production = GrowingList(Production.new)
-        self.table = GrowingList(lambda: GrowingList(lambda: set()))
+        self.table: Any = GrowingList(lambda: GrowingList(lambda: set()))
         self.state_stack: Optional[DequeProtocol] = None
         self.symbol_stack: Optional[DequeProtocol] = None
         self.input_queue: Optional[DequeProtocol] = None

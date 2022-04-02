@@ -133,12 +133,17 @@ if __name__ == "__main__":
 
     font_extra_small = QtGui.QFont('Lato')
     font_extra_small.setPointSize(config.font.size.extrasmall)
+    font_extra_small.setHintingPreference(QtGui.QFont.PreferNoHinting)
     font_small = QtGui.QFont('Lato')
     font_small.setPointSize(config.font.size.small)
+    font_small.setHintingPreference(QtGui.QFont.PreferNoHinting)
     font_normal = QtGui.QFont('Lato')
     font_normal.setPointSize(config.font.size.normal)
+    font_normal.setHintingPreference(QtGui.QFont.PreferNoHinting)
     font_large = QtGui.QFont('Lato')
     font_large.setPointSize(config.font.size.large)
+    font_large.setHintingPreference(QtGui.QFont.PreferNoHinting)
+
     app.setFont(font_extra_small)
     app.setFont(font_small, "QLabel")
     # app.setFont(font_extra_small, 'QPushButton')
