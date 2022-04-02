@@ -13,3 +13,4 @@ contains
 test
 *.y
 out
+**/__pycache__

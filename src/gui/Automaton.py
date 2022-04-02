@@ -177,11 +177,6 @@ class StateItem(QtWidgets.QGraphicsEllipseItem):
         pos = event.screenPos()
         QtWidgets.QToolTip.showText(pos, self.toolTip())
 
-    # def hoverMoveEvent(self, event: QtWidgets.QGraphicsSceneHoverEvent) -> None:
-    #     event.accept()
-    #     pos = event.screenPos()
-    #     QtWidgets.QToolTip.showText(pos, self.toolTip())
-
     def hoverLeaveEvent(self, event: QtWidgets.QGraphicsSceneHoverEvent) -> None:
         super().hoverLeaveEvent(event)
         QtWidgets.QToolTip.hideText()
@@ -267,47 +262,82 @@ class EdgeItem(QtWidgets.QGraphicsPathItem):
         self.prepareGeometryChange()
 
         path = QtGui.QPainterPath()
+
+        # deg: reverse direction of arrow.
+        # tip: tip point of arrow.
+        def drawArrowHead(deg: float, tip: QtCore.QPointF) -> None:
+            leng = 8.0
+            deg1 = deg - math.pi / 6.0
+            deg2 = deg + math.pi / 6.0
+            c1 = QtCore.QPointF(tip.x() + math.cos(deg1) * leng,
+                                tip.y() + math.sin(deg1) * leng)
+            c2 = QtCore.QPointF(tip.x() + math.cos(deg2) * leng,
+                                tip.y() + math.sin(deg2) * leng)
+            path.moveTo(tip)
+            path.lineTo(c1)
+            path.moveTo(tip)
+            path.lineTo(c2)
+
+        # Source position: a
         center = self.src.center()
         pos = self.src.pos()
-        # Source position.
         a = QtCore.QPointF(center.x() + pos.x(), center.y() + pos.y())
+
+        # Destination position: b
         center = self.dest.center()
         pos = self.dest.pos()
-        # Destination position.
         b = QtCore.QPointF(center.x() + pos.x(), center.y() + pos.y())
         deg = math.atan2(a.y() - b.y(), a.x() - b.x())  # b -> a
 
-        # Drag a and b back a little, so arrow will not overlap with labels.
-        r1 = self.src.radius()
-        r2 = self.dest.radius()
-        if (a.x() - b.x())**2 + (a.y() - b.y())**2 > (r1 + r2 + 10)**2:
-            a.setX(a.x() - r1 * math.cos(deg))
-            a.setY(a.y() - r1 * math.sin(deg))
-            b.setX(b.x() + r2 * math.cos(deg))
-            b.setY(b.y() + r2 * math.sin(deg))
+        if self.src != self.dest:
+            # Drag a and b back to the border to avoid overlaps with labels.
+            r1 = self.src.radius()
+            r2 = self.dest.radius()
+            if (a.x() - b.x())**2 + (a.y() - b.y())**2 > (r1 + r2 + 10)**2:
+                a.setX(a.x() - r1 * math.cos(deg))
+                a.setY(a.y() - r1 * math.sin(deg))
+                b.setX(b.x() + r2 * math.cos(deg))
+                b.setY(b.y() + r2 * math.sin(deg))
 
-        # Draw line (i.e. '-' in '->').
-        path.moveTo(a)
-        path.lineTo(b)
+            # Draw line (i.e. '-' in '->').
+            path.moveTo(a)
+            path.lineTo(b)
 
-        # Draw arrow head (i.e. '>' in '->').
-        leng = 8  # Constant.
-        deg1 = deg - math.pi / 6.0
-        deg2 = deg + math.pi / 6.0
-        c1 = QtCore.QPointF(b.x() + math.cos(deg1) * leng,
-                            b.y() + math.sin(deg1) * leng)
-        c2 = QtCore.QPointF(b.x() + math.cos(deg2) * leng,
-                            b.y() + math.sin(deg2) * leng)
-        path.moveTo(b)
-        path.lineTo(c1)
-        path.moveTo(b)
-        path.lineTo(c2)
+            # Draw arrow head (i.e. '>' in '->').
+            drawArrowHead(deg, b)
 
-        # Draw line label.
-        x = (a.x() + b.x()) / 2.0
-        y = (a.y() + b.y()) / 2.0
-        self.label.setText(' '.join(self._actions))
-        self.label.setPos(x, y - 18.0)
+            # Draw line label.
+            x = (a.x() + b.x()) / 2.0
+            y = (a.y() + b.y()) / 2.0
+            self.label.setText(' '.join(self._actions))
+            self.label.setPos(x, y - 18.0)
+        else:
+            # Loop edge.
+            r = self.src.radius()
+            # alpha < 90; smaller alpha => larger arc
+            alpha = 72.0 
+            r2 = math.cos(alpha / 180.0 * math.pi) * 2 * r
+            center = QtCore.QPointF(a.x() + r, a.y())
+
+            alpha_rad = alpha / 180.0 * math.pi
+            x = center.x() - r2 * math.cos(alpha_rad)
+            y = center.y() - r2 * math.sin(alpha_rad)
+            drawArrowHead(alpha_rad - math.pi / 2.0 + 0.2, QtCore.QPointF(x, y))
+
+            # Not using rad?
+            rect = QtCore.QRectF(center.x() - r2, center.y() - r2, r2 * 2, r2 * 2)
+            path.arcMoveTo(rect, 180.0 - alpha) 
+            # arcLenght: negative => clockwise, positive => counter-clockwise.
+            path.arcTo(rect, 180.0 - alpha, 2 * alpha - 360.0)
+            path.arcTo(rect, alpha - 180.0, 360.0 - 2 * alpha) # Close arc.
+
+            # Draw arc label.
+            div = 4.0
+            x = center.x() + r2 + div
+            metrics = QtGui.QFontMetrics(self.label.font())
+            y = center.y() - metrics.height() / 2.0
+            self.label.setText(' '.join(self._actions))
+            self.label.setPos(x, y)
 
         self.setPath(path)
 
@@ -356,12 +386,6 @@ class AutomatonView(QtWidgets.QGraphicsView):
             self.scene().addItem(edge)
         edge = self._edges[(a, b)]
         edge.addAction(label)
-
-        """
-        Debug
-        """
-        # print('id(edge): {}', id(edge))
-        # print('edge.actions(): {}', ', '.join(edge._actions))
         
         index = len(self._edges)
         # self._edges.append(edge)
