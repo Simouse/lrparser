@@ -266,23 +266,25 @@ void Grammar::calFollow() {
     step::addFollow(start, endOfInput, "Follow set of start symbol contains $");
 
     for (auto const &production : productionTable) {
-        auto lhs = production.leftSymbol;
+        // auto lhs = production.leftSymbol;
         auto const &rhs = production.rightSymbols;
         auto len = (int)rhs.size();
         for (int i = 0; i + 1 < len; ++i) { // i and i+1 both have elements
             if (symbols[rhs[i]].type == SymbolType::NON_TERM) {
                 symbols[rhs[i]].followSet |= symbols[rhs[i+1]].firstSet;
                 step::mergeFollowFromFirst(rhs[i], rhs[i+1], epsilon, nullptr);
+
+                // GUI message
+                std::string msg =
+                    "Rule: If A → aBb ∈ P, First(b) - {ε} ⊆ Follow(B).<br/>";
+                msg += "Follow set of symbol ";
+                msg += symbols[rhs[i]].name;
+                msg += " is updated by production ";
+                msg += dumpProductionHtml(production, i);
+                msg += ".";
+                step::show(msg);
             }
         }
-        std::string msg =
-            "Rule: If A → aBb ∈ P, First(b) - {ε} ⊆ Follow(B).<br/>";
-        msg += "Follow set of symbol ";
-        msg += symbols[lhs].name;
-        msg += " is updated by production ";
-        msg += dumpProductionHtml(production, len);
-        msg += ".";
-        step::show(msg);
     }
 
     std::string rule = "Rule: If A → aBb ∈ P and b is nullable, or A → aB, "
