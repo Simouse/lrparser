@@ -277,7 +277,7 @@ class ParsingEnv():
         self.setFinal = lambda s: None
         self.astAddNode = lambda index, label: None
         self.astSetParent = lambda child, parent: None
-        # self.astSetRoot = lambda index: None
+        self.reduce_hint = lambda index: None
 
     def copy(self) -> 'ParsingEnv':
         env = ParsingEnv()

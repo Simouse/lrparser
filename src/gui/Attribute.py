@@ -122,6 +122,9 @@ class SymbolTable(QtWidgets.QWidget):
         header = table.horizontalHeader()
         header.setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         table.setHorizontalHeader(header)
+        # header = table.verticalHeader()
+        # header.setDefaultSectionSize(80)
+        # table.setVerticalHeader(header) # No effect.
 
         layout = QtWidgets.QHBoxLayout()
         label = QtWidgets.QLabel()
@@ -270,7 +273,8 @@ class AttributeTab(QtWidgets.QWidget):
 
     def nextButtonClicked(self) -> None:
         items = [
-            'Recursive Descent', 'LL(1)', 'LR(0)', 'SLR(1)', 'LALR(1)', 'LR(1)'
+            # 'Recursive Descent', 'LL(1)', 'LR(0)', 'SLR(1)', 'LALR(1)', 'LR(1)'
+            'LR(0)', 'SLR(1)', 'LALR(1)', 'LR(1)'
         ]
         item, ok = QtWidgets.QInputDialog.getItem(
             self, 'Parsers', 'Choose a parser from below:', items, 0, False)

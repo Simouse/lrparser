@@ -472,10 +472,6 @@ void LRParser::reduce(ProductionID prodID, int astNodeIndex) {
 
     // Pop those states by production
     for (int i = 0; i < (int)bodySize; ++i) {
-        // symbolStack.pop_back();
-        // stateStack.pop_back();
-        // int node = astNodeStack.back();
-        // astNodeStack.pop_back();
         int node = astNodeStack[astNodeStack.size() - bodySize + i];
         step::astSetParent(node, astNodeIndex);
         step::printf("symbol_stack.pop()\n");
@@ -484,8 +480,10 @@ void LRParser::reduce(ProductionID prodID, int astNodeIndex) {
     symbolStack.resize(symbolStack.size() - bodySize);
     stateStack.resize(stateStack.size() - bodySize);
     astNodeStack.resize(astNodeStack.size() - bodySize);
-    // InputQueue.push_front(head);
-    // step::printf("input_queue.append(%d)\n", head);
+
+    // Used for underlining handles at the top of symbol stack.
+    step::printf("reduce_hint(%zd)\n", symbolStack.size());
+
     symbolStack.push_back(head);
     step::printf("symbol_stack.append(%d)\n", head);
 
@@ -513,7 +511,7 @@ void LRParser::reduce(ProductionID prodID, int astNodeIndex) {
     step::printf("state_stack.append(%d)\n", next);
 
     std::string s = "Apply reduce rule: ";
-    s += std::to_string(prodID);
+    s += gram.dumpProduction(prodID);
     s += ".";
     step::show(s);
 }

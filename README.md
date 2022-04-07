@@ -2,8 +2,6 @@
 
 This is a grammar parser which can read grammar files in our format, analyze attributes (nullable, first set, and follow set) of symbols, generate push-down automatons and parse tables. It aims at learning/teaching LR parsing algorithms and does not have the functionalities to actually translate languages to intermediate code.
 
-<!–– Compile the code online: [replit: lrparser](https://replit.com/@SimonSmith12/lrparser#.replit). Currently, the GUI version cannot be run on repl.it. ––>
-
 ## Output
 
 For grammar (stored in `grammar.txt`):

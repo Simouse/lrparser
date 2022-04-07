@@ -145,15 +145,15 @@ if __name__ == "__main__":
     font_large.setHintingPreference(QtGui.QFont.PreferNoHinting)
 
     app.setFont(font_extra_small)
+    app.setFont(font_small, 'QGraphicsSimpleTextItem')
     app.setFont(font_small, "QLabel")
     # app.setFont(font_extra_small, 'QPushButton')
     # app.setFont(font_extra_small, 'QComboBox')
-    app.setFont(font_small, 'QGraphicsSimpleTextItem')
 
-    # label = QtWidgets.QLabel('label')
-    # label.show()
-
-    window = MainWindow()
+    window = ParserWindow()
     window.show()
+    # self._windows.add(window)
+    # window = MainWindow()
+    # window.show()
 
     sys.exit(app.exec())
