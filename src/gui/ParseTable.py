@@ -14,7 +14,7 @@ from Model import *
 from GuiConfig import *
 
 
-class ParseTableModel(QtCore.QAbstractTableModel):
+class ParseTableModel(DiffTableModel):
     def __init__(self, symvec, prod, table) -> None:
         super().__init__()
         self._symvec = symvec
@@ -77,6 +77,11 @@ class ParseTableModel(QtCore.QAbstractTableModel):
             if len(tip) > 1:
                 s += '\n[Conflicts]'
             return s
+
+        if role == Qt.BackgroundRole:
+            return self.highlightCellByChanges(index)
+
+        return super().data(index, role)
 
     def rowCount(self, index):
         return len(self._table)

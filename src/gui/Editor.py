@@ -8,7 +8,7 @@ from Attribute import AttributeTab
 from Model import *
 from GuiConfig import *
 
-class ProductionEditorModel(QtCore.QAbstractTableModel):
+class ProductionEditorModel(DiffTableModel):
     def __init__(self, data) -> None:
         super().__init__()
         self._data = data
@@ -34,6 +34,12 @@ class ProductionEditorModel(QtCore.QAbstractTableModel):
 
         if role == Qt.FontRole:
             return self._item_font
+
+        # No need.
+        # if role == Qt.BackgroundRole:
+        #     return self.highlightCellByChanges(index)
+
+        return super().data(index, role)
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if orientation == Qt.Horizontal and role == Qt.DisplayRole:

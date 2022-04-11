@@ -8,7 +8,7 @@ from Model import *
 from Automaton import AutomatonTab
 from GuiConfig import *
 
-class SymbolTableModel(QtCore.QAbstractTableModel):
+class SymbolTableModel(DiffTableModel):
     def __init__(self, symvec: List[Symbol]) -> None:
         super().__init__()
         self._symvec = symvec
@@ -41,6 +41,9 @@ class SymbolTableModel(QtCore.QAbstractTableModel):
             sym = self._symvec[index.row()]
             if index.column() == len(self._colheader) - 1 and sym.is_term:
                 return QtGui.QColor(240, 240, 240)
+            return self.highlightCellByChanges(index)
+        
+        return super().data(index, role)
 
     def rowCount(self, index):
         return len(self._symvec)
@@ -63,7 +66,7 @@ class SymbolTableModel(QtCore.QAbstractTableModel):
             return Qt.ItemIsEnabled | Qt.ItemIsSelectable
 
 
-class ProductionTableModel(QtCore.QAbstractTableModel):
+class ProductionTableModel(DiffTableModel):
     def __init__(self, symvec: List[Symbol], prods: List[Production]) -> None:
         super().__init__()
         self._prods = prods
@@ -96,6 +99,12 @@ class ProductionTableModel(QtCore.QAbstractTableModel):
 
         if role == Qt.TextAlignmentRole:
             return Qt.AlignCenter
+
+        # No need.
+        # if role == Qt.BackgroundRole:
+        #     return self.highlightCellByChanges(index)
+
+        return super().data(index, role)
 
     def rowCount(self, index):
         return len(self._prods)
@@ -147,6 +156,16 @@ class SymbolTable(QtWidgets.QWidget):
 
     def refresh(self) -> None:
         self._model.layoutChanged.emit()
+
+    # Not called?
+    # def clearHighlight(self) -> None:
+    #     self._model.clearHightlight()
+    #     self.setLayout(self.layout())
+    
+    # def setHighlightFlag(self, highlight: bool) -> None:
+    #     self._model.setHighlightFlag(highlight)
+    def model(self) -> DiffTableModel:
+        return self._model
 
 
 class ProductionTable(QtWidgets.QWidget):
@@ -256,9 +275,11 @@ class AttributeTab(QtWidgets.QWidget):
             self._line += 1
 
         self.symbolTable.refresh()
+        # self.symbolTable.clearHighlight() # Not used
         self.productionTable.refresh()
 
     def continueButtonClicked(self) -> None:
+        self.symbolTable.model().setHighlight(True)
         self.nextLine()
         self.symbolTable.refresh()
         self.productionTable.refresh()
@@ -327,17 +348,6 @@ class AttributeTab(QtWidgets.QWidget):
         line = execNext(self._code, self._line, self._env.__dict__)
         leng = len(self._code)
         flag = line >= leng or self._section != 'Attributes'
-        # if line < leng:
-        #     code = self._code[line]
-        #     if re.match('#!', code):
-        #         line += 1
-        #         flag = True
-        #     else:
-        #         result = re.match('#\s*(.*)', code)
-        #         if result:
-        #             s = result.group(1)
-        #             self._info_text.setText(s)
-        #             line += 1
         if flag:
             self.prepareNextPart()
         self._line = line + 1

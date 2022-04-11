@@ -1,4 +1,5 @@
 from copy import deepcopy
+from hashlib import new
 from typing_extensions import Protocol
 from typing import Any, Callable, Deque, Dict, List, Optional, Set, Tuple
 # from PySide6 import QtCore, QtWidgets, QtGui, QtSvgWidgets
@@ -426,3 +427,64 @@ def skipSection(code: list, line: int, env: dict):
             break
         line += 1
     return line
+
+
+# Show blink or different background for cells which changed.
+class DiffTableModel(QtCore.QAbstractTableModel):
+    def __init__(self) -> None:
+        super().__init__()
+        self._prev_data: Dict[Tuple[int, int], str] = {}
+        self._prev_color: Dict[Tuple[int, int], QtGui.QColor] = {}
+        self._highlight_color = QtGui.QColor(250, 238, 187)
+        self._default_color = QtGui.QColor(255, 255, 255)
+        self._highlight_flag = False
+
+    def data(self, index: QtCore.QModelIndex, role: int = ...) -> Any:
+        pass
+
+    def setHighlight(self, highlight: bool) -> None:
+        self._highlight_flag = highlight
+    
+    def highlightCellByChanges(self, index: QtCore.QModelIndex) -> QtGui.QColor:
+        color = self._default_color
+        
+        prevdata = self._prev_data
+        prevcolor = self._prev_color
+        highlightColor = self._highlight_color
+
+        # I do not know if QModelIndex can be used as a key...
+        pair = (index.row(), index.column())
+        
+        newdat = self.data(index, Qt.DisplayRole)
+        if isinstance(newdat, str):
+            newdat = newdat.strip()
+            if pair not in prevdata.keys():
+                prevdata[pair] = newdat
+                color = highlightColor
+            elif prevdata[pair] != newdat:
+                prevdata[pair] = newdat
+                color = highlightColor
+
+        # Persistent highlight. (Not working)
+        # if color != highlightColor and pair in prevcolor.keys():
+        #     color = prevcolor[pair]
+        # prevcolor[pair] = color
+        return color if self._highlight_flag else self._default_color
+
+        return color
+
+    # def clearHightlight(self) -> None:
+    #     # Sync all cells.
+    #     prevdata = self._prev_data
+    #     for key in prevdata.keys():
+    #         index = self.index(key[0], key[1])
+    #         prevdata[key] = self.data(index, Qt.DisplayRole)
+    #         self.setData(index, self._default_color, Qt.BackgroundColorRole)
+
+        # Clear highlight
+        # self._prev_color.clear()
+        # No use, either.
+        # self.layoutChanged.emit()
+        # View is not refreshed.
+        
+

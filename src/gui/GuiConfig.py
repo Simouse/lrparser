@@ -48,8 +48,8 @@ class GuiConfig:
 
     @dataclass
     class WindowConfig:
-        width  = 1000
-        height = 700
+        width  = 1100
+        height = 750
     win = WindowConfig()
 
     @dataclass
