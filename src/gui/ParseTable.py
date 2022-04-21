@@ -67,7 +67,7 @@ class ParseTableModel(DiffTableModel):
                     i = result.group(1)
                     production = self._prod[int(i)]
                     s = Production.stringify(production, self._symvec, '→')
-                    tip.append('Reduce by production: {}'.format(s))
+                    tip.append('<div>Reduce by production: {}</div>'.format(s))
                     continue
                 if item == 'acc':
                     tip.append('Success')
@@ -108,6 +108,9 @@ class ParseTableView(QtWidgets.QTableView):
         header.setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         header.setMinimumSectionSize(config.table.cell.minwidth)
         self.setHorizontalHeader(header)
+
+        # Hide epsilon column.
+        self.hideColumn(0)
 
     def emitLayoutChanged(self):
         self._model.layoutChanged.emit()
@@ -595,7 +598,7 @@ if __name__ == '__main__':
         line += 1
 
     window = TableTab(parent=None, opts=opts, env=env)
-    window.resize(1000, 700)
+    window.resize(config.win.width, config.win.height)
     window.show()
 
     sys.exit(app.exec())

@@ -11,7 +11,7 @@ Possible command: lrparser -tslr -g grammar.txt -o results
 
 Grammar file:
   1) Use % to start a line comment.
-  2) \e, _e, and \epsilon are reserved for epsilon. 
+  2) `epsilon` is reserved for epsilon. 
   3) | is reserved for separating multiple bodies of a production.
   4) You shouldn't use token $ in grammar file.
   5) Define productions as the following example shows. All symbols at the left 

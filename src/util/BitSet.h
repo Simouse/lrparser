@@ -68,6 +68,27 @@ template <class T> class BitSet {
         }
     }
 
+    // Ensure bitset can hold at least N bits.
+    void ensure(size_type N) {
+        size_type leastBlocksNeeded = ((N + block_bits - 1) / block_bits);
+        if (leastBlocksNeeded <= m_size) {
+            return;
+        }
+        auto prevData = m_data;
+        auto prevSize = m_size;
+        size_type capacity = roundToNextPowerOf2(leastBlocksNeeded);
+        // Because m_size is always larger than or equal to n_inner_blocks, and
+        // leastBlocksNeeded > m_size now, we know that inner blocks cannot be
+        // used. allocMemory() will definitely request a dynamically allocated
+        // memory space.
+        allocMemory(capacity, false);
+        copyRange(m_data, prevData, 0, prevSize);
+        fillZeros(m_data, prevSize, m_size);
+        if (prevData != &inner_blocks[0]) {
+            delete[] prevData;
+        }
+    }
+
     // T is used for BitSet template argument, use SizeT instead.
     template<class SizeT, typename std::enable_if_t<sizeof(SizeT) == 8, int> = 0>
     static auto roundToNextPowerOf2(SizeT i) {
@@ -126,6 +147,16 @@ template <class T> class BitSet {
         }
     }
 
+    // Set N-th bit. If dynamical expansion is needed, use ensure() first.
+    // Only set() and insert() need to ensure that T >= 0.
+    void set(size_type N, bool flag = true) {
+        assert(N < m_size * block_bits);
+        if (flag)
+            m_data[N / block_bits] |= 1LLU << (N % block_bits);
+        else
+            m_data[N / block_bits] &= ~(1LLU << (N % block_bits));
+    }
+
   public:
     explicit BitSet(size_type N)
         : inner_blocks({0}),
@@ -178,16 +209,6 @@ template <class T> class BitSet {
 
     ~BitSet() { freeMemory(); }
 
-    // Set N-th bit. If dynamical expansion is needed, use ensure() first.
-    // Only set() and insert() need to ensure that T >= 0.
-    void set(size_type N, bool flag = true) {
-        assert(N < m_size * block_bits);
-        if (flag)
-            m_data[N / block_bits] |= 1LLU << (N % block_bits);
-        else
-            m_data[N / block_bits] &= ~(1LLU << (N % block_bits));
-    }
-
     // For remove() and contains(), if N < 0, function will
     // return immediately, so no error can happen.
     void remove(T N_) {
@@ -233,27 +254,6 @@ template <class T> class BitSet {
             m_data[i] = 0;
     }
 
-    // Ensure bitset can hold at least N bits.
-    void ensure(size_type N) {
-        size_type leastBlocksNeeded = ((N + block_bits - 1) / block_bits);
-        if (leastBlocksNeeded <= m_size) {
-            return;
-        }
-        auto prevData = m_data;
-        auto prevSize = m_size;
-        size_type capacity = roundToNextPowerOf2(leastBlocksNeeded);
-        // Because m_size is always larger than or equal to n_inner_blocks, and
-        // leastBlocksNeeded > m_size now, we know that inner blocks cannot be
-        // used. allocMemory() will definitely request a dynamically allocated
-        // memory space.
-        allocMemory(capacity, false);
-        copyRange(m_data, prevData, 0, prevSize);
-        fillZeros(m_data, prevSize, m_size);
-        if (prevData != &inner_blocks[0]) {
-            delete[] prevData;
-        }
-    }
-
     bool operator==(BitSet const &other) const {
         BitSet const *smaller = this;
         BitSet const *larger = &other;
@@ -292,13 +292,14 @@ template <class T> class BitSet {
         return *this;
     }
 
-    BitSet &operator^=(BitSet const &other) {
-        ensure(other.m_size * block_bits);
-        for (size_type i = 0; i < other.m_size; ++i) {
-            m_data[i] ^= other.m_data[i];
-        }
-        return *this;
-    }
+    // Not needed.
+    // BitSet &operator^=(BitSet const &other) {
+    //     ensure(other.m_size * block_bits);
+    //     for (size_type i = 0; i < other.m_size; ++i) {
+    //         m_data[i] ^= other.m_data[i];
+    //     }
+    //     return *this;
+    // }
 
     // Test if two bitsets have intersection
     [[nodiscard]] bool hasIntersection(BitSet const &other) const {

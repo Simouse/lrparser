@@ -8,6 +8,7 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <algorithm>
 
 #include "src/common.h"
 #include "src/display/steps.h"
@@ -177,9 +178,16 @@ auto PushDownAutomaton::transit(
     bool found = false;
     Closure res{states.size()};
 
-    // Copy bitset
-    util::BitSet receivers = receiverVec[actionID];
+    // Copy set
+    auto receivers = receiverVec[actionID];
+    
     receivers &= closure;
+    // Use wrapper of std::set/std::unordered_set instead of BitSet.
+    // for (auto i : receivers) {
+    //     if (!closure.contains(i))
+    //         receivers.remove(i);
+    // }
+
     for (auto state : receivers) {
         // This state can receive current action
         auto const &trans = *states[state].transitions;

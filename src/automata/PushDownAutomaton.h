@@ -14,8 +14,9 @@
 
 #include "src/common.h"
 #include "src/util/BitSet.h"
-// #include "src/util/Process.h"
 #include "src/util/ResourceProvider.h"
+#include "src/util/TreeSet.h"
+#include "src/util/HashSet.h"
 
 namespace gram {
 class Grammar;
@@ -59,6 +60,10 @@ struct TransitionSet {
 };
 
 using Constraint = util::BitSet<ActionID>;
+
+// TreeSet: ~2   seconds
+// BitSet:  ~1.4 seconds
+// HashSet: Result is incorrect.
 using Closure = util::BitSet<StateID>;
 
 // For transformed DFA, state is a pseudo state, only containing transition

@@ -1,24 +1,40 @@
-exp   -> exp + term  | term
-term  -> term * fac  | fac
-fac   -> ID
-fac   -> ( exp )
+% exp   -> exp + term  | term
+% term  -> term * fac  | fac
+% fac   -> ID
+% fac   -> ( exp )
+
+% LR(0)
+% S -> S a
+% S -> epsilon
+
+% SLR(1) but not LR(0)
+% S -> E
+% E -> a E
+% E -> a
+
+% LALR(1) but not SLR(1)
+% S -> A a | b A c | d c | b d a
+% A -> d
+
+% LR(1) but not LALR(1)
+% S' -> S
+S  -> a A d | b B d | a B e | b A e
+A  -> c
+B  -> c
 
 % S -> A B
 % B -> b B | b A
-% A -> \e  | a
+% A -> epsilon  | a
 
 % S -> C D
 % C -> D c
 % D -> C d
-% D -> \e
+% D -> epsilon
 
 % S ->	id | V assign E
 % V ->	id
 % E ->	V | num
 
-% This is LR(1) but not SLR
-% S -> A a | b A c | d c | b d a
-% A -> d
 
 % S -> C C
 % C -> c C | d

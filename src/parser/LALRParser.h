@@ -249,7 +249,7 @@ class LALRParser : public LRParser {
         assert(auxStates.empty());
         for (auto &[lalrClosure, closureIndex] : closureIndexMap) {
             // BitSet that will be moved into automaton.
-            util::BitSet<StateID> closure;
+            Closure closure;
             for (auto &[lr0State, constraint] : lalrClosure) {
                 auto auxIndex = static_cast<StateID>(auxStates.size());
                 // Copy original state and change its ID and constraint

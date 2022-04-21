@@ -46,6 +46,8 @@ class Production:
         s = '{} {} {}'.format(
             symbols[head].name, arrow,
             ' '.join([symbols[i].name for i in production.body]))
+        if len(production.body) == 0:
+            s += 'ε'
         return s
 
 

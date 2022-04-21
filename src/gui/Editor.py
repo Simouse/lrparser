@@ -158,7 +158,7 @@ def grammarFormat(data) -> Tuple[str, Optional[str]]:
     if not isinstance(data, list):
         raise Exception('data is not an instance of list')
 
-    forbidden = ['\\e', '$', '_e', '\\epsilon', '|', '%']
+    forbidden = ['$', '|', '%', ',']
     violations = set()
     s = ''
 
@@ -180,7 +180,7 @@ def grammarFormat(data) -> Tuple[str, Optional[str]]:
                 s += '{} -> {}\n'.format(head, body)
                 check.extend(body.split())
             else:
-                s += '{} -> _e\n'.format(head)
+                s += '{} -> epsilon\n'.format(head)
 
             for token in check:
                 if token in forbidden:
@@ -219,7 +219,13 @@ class GrammarTab(QtWidgets.QWidget):
         self._start_button = button
 
         info = QtWidgets.QLabel()
-        self._normal_info = "Enter productions in the above table. \nAll consecutive symbols should be separated by whitespaces."
+        self._normal_info = """<div>
+            <div align=center>Enter productions in the table by following rules:</div>
+            <ul align=left>
+                <li> Symbols should be separated by whitespaces.</li>
+                <li> To represent epsilon, use keyword <span><i>epsilon</i></span>, or leave the cell blank.</li>
+                <li> Avoid reserved words: $  |  %  ,</li>
+            </ul></div>"""
         self._disabled_info = 'Grammar is locked for further procedures.\nNow it is read-only.'
         info.setText(self._normal_info)
         font = info.font()
@@ -230,7 +236,11 @@ class GrammarTab(QtWidgets.QWidget):
 
         layout.addWidget(table)
         layout.addSpacing(16)
-        layout.addWidget(info)
+        infoLayout = QtWidgets.QHBoxLayout()
+        infoLayout.addStretch(1)
+        infoLayout.addWidget(info)
+        infoLayout.addStretch(1)
+        layout.addLayout(infoLayout)
         layout.addSpacing(16)
         layout.addLayout(buttonLayout)
 

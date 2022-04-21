@@ -26,9 +26,9 @@ namespace gram {
 Grammar::Grammar() {
     // Add built-in symbols
     epsilon = putSymbol(Constants::epsilon, true);
-    addAlias(epsilon, "_e");
-    addAlias(epsilon, "\\e");
-    addAlias(epsilon, "\\epsilon");
+    // addAlias(epsilon, "_e");
+    // addAlias(epsilon, "\\e");
+    addAlias(epsilon, "epsilon");
     endOfInput = putSymbol(Constants::end_of_input, true);
 }
 
@@ -236,6 +236,13 @@ void Grammar::calFirst() {
             auto newFirst = Symbol::SymbolSet();
             for (auto &pindex : left.productions) {
                 auto const &rhs = productionTable[pindex].rightSymbols;
+                if (rhs.empty() && !left.firstSet.contains(epsilon)) {
+                    step::addFirst(
+                        left.id, epsilon,
+                        "Any nullable symbol has ε in its First set.");
+                    left.firstSet.insert(epsilon);
+                    continue;
+                }
                 for (auto right : rhs) {
                     newFirst |= symbols[right].firstSet;
                     step::mergeFirst(left.id, right, nullptr); // No expl.
@@ -246,14 +253,15 @@ void Grammar::calFirst() {
                     change = true;
                     left.firstSet |= newFirst;
                     std::string msg =
-                        "Rule: If X → Y₁Y₂…YₐYₑ…, Y₁Y₂…Yₐ are all "
-                        "nullable, <br/>but Yₑ is not nullable, it follows that First(a) ⊆ First(X) "
-                        "for a ∈ {Y₁, Y₂, …, Yₐ}.<br/>";
+                        "<div>Rule: If X → Y<sub>1</sub>Y<sub>2</sub>…Y<sub>x</sub>Y<sub>y</sub>…, and Y<sub>1</sub>Y<sub>2</sub>…Y<sub>x</sub> are all "
+                        "nullable, <br/>but Y<sub>y</sub> is not nullable, it follows that First(a) ⊆ First(X) "
+                        "for a ∈ {Y<sub>1</sub>, Y<sub>2</sub>, …, Y<sub>x</sub>}.<br/>";
                     msg += "First set of symbol ";
                     msg += left.name;
                     msg += " is updated by production ";
                     msg += dumpProductionHtml(pindex, (int)rhs.size());
                     msg += ".";
+                    msg += "</div>";
                     step::show(msg);
                 }
             }
