@@ -206,12 +206,18 @@ Following packages are required:
 - graphviz
 - PyQt5
 
-And graphviz should be installed so `dot` command appears in `PATH`. 
+And Graphviz should be installed so `dot` command appears in `PATH`. 
 
-Run the program with: (use `/` in *unix shells)
+Run the program with:
 
-```bash
+```cmd
+.\env.cmd
 python3 .\src\gui\main.py
+```
+or 
+```bash
+export PATH=build:$PATH
+python3 ./src/gui/main.py
 ```
 
 Some screenshots:

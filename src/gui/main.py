@@ -1,6 +1,7 @@
 # Tested on Python 3.7
 import sys
 from typing import Set
+import typing
 # from PySide6 import QtCore, QtWidgets, QtGui
 # from PySide6.QtCore import Qt
 from PyQt5 import QtCore, QtWidgets, QtGui
@@ -12,22 +13,25 @@ from ParseTable import *
 from Model import *
 from Editor import *
 from GuiConfig import *
+# import asyncio
 
 # For faster debugging
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-lrparser_path = './build/lrparser'
+lrparser_path = 'lrparser'
 
 class ParserWindow(QtWidgets.QTabWidget):
     def __init__(self) -> None:
         super().__init__()
         self.setTabPosition(QtWidgets.QTabWidget.North)
         self.setMovable(False)
-        self.setWindowTitle('Grammar')
+        self.setWindowTitle('Parser')
         self.resize(config.win.width, config.win.height)
         self._tabs: List[QtWidgets.QWidget] = []
+        self._detachedTabs: List[QtWidgets.QWidget] = []
         self.setTabsClosable(True)
         self.tabBar().tabCloseRequested.connect(self.closeTab)
+        self.tabBar().tabBarDoubleClicked.connect(self.detachTab)
         self.window().setAttribute(Qt.WA_AlwaysShowToolTips, True)
 
         opts = LRParserOptions(tempfile.mkdtemp(),
@@ -36,7 +40,23 @@ class ParserWindow(QtWidgets.QTabWidget):
         tab = GrammarTab(self, opts)
         self.requestNext(tab, 'Grammar', False)
 
+    def detachTab(self, index: int) -> None:
+        # Ignore the first tab
+        if index == 0:
+            return
+
+        widget = self.widget(index)       # w: widget to detach
+        title = self.tabText(index)
+        self.removeTab(self.currentIndex())
+        self._detachedTabs.append(widget) # Keep alive
+        self._tabs.pop(index)
+
+        widget.setParent(None)            # type: ignore
+        widget.setWindowTitle(title)
+        widget.show()
+
     def closeTab(self, index: int) -> None:
+        # print(f'closeTab({self}, {index})')
         widget = self.widget(index)
         if widget:
             widget.deleteLater()
@@ -57,6 +77,8 @@ class ParserWindow(QtWidgets.QTabWidget):
             tabBar.setTabButton(index, QtWidgets.QTabBar.LeftSide, None) # type: ignore
         # print(index)
         self.setCurrentIndex(index)
+        if index > 0:
+            self.setTabToolTip(index, 'Double click to detach')
 
         try:
             tab.onRequestNextSuccess()
@@ -113,42 +135,37 @@ class MainWindow(QtWidgets.QMainWindow):
         self._windows.add(window)
 
 
-if __name__ == "__main__":
+def main():
     app = QtWidgets.QApplication([])
 
     fontpath_list = [
-        './src/gui/resources/Lato-Black.ttf',
-        './src/gui/resources/Lato-BlackItalic.ttf',
-        './src/gui/resources/Lato-Bold.ttf',
-        './src/gui/resources/Lato-BoldItalic.ttf',
-        './src/gui/resources/Lato-Italic.ttf',
-        './src/gui/resources/Lato-Light.ttf',
-        './src/gui/resources/Lato-LightItalic.ttf',
-        './src/gui/resources/Lato-Regular.ttf',
-        './src/gui/resources/Lato-Thin.ttf',
-        './src/gui/resources/Lato-ThinItalic.ttf',
+        './src/gui/resources/Noto_Sans_SC/NotoSansSC-Black.otf',
+        './src/gui/resources/Noto_Sans_SC/NotoSansSC-Bold.otf',
+        './src/gui/resources/Noto_Sans_SC/NotoSansSC-Light.otf',
+        './src/gui/resources/Noto_Sans_SC/NotoSansSC-Medium.otf',
+        './src/gui/resources/Noto_Sans_SC/NotoSansSC-Regular.otf',
+        './src/gui/resources/Noto_Sans_SC/NotoSansSC-Thin.otf',
     ]
     for fontpath in fontpath_list:
         QtGui.QFontDatabase.addApplicationFont(fontpath)
 
-    font_extra_small = QtGui.QFont('Lato')
+    fontname = config.font.name
+    font_extra_small = QtGui.QFont(fontname)
     font_extra_small.setPointSize(config.font.size.extrasmall)
     font_extra_small.setHintingPreference(QtGui.QFont.PreferNoHinting)
-    font_small = QtGui.QFont('Lato')
+    font_small = QtGui.QFont(fontname)
     font_small.setPointSize(config.font.size.small)
     font_small.setHintingPreference(QtGui.QFont.PreferNoHinting)
-    font_normal = QtGui.QFont('Lato')
+    font_normal = QtGui.QFont(fontname)
     font_normal.setPointSize(config.font.size.normal)
     font_normal.setHintingPreference(QtGui.QFont.PreferNoHinting)
-    font_large = QtGui.QFont('Lato')
+    font_large = QtGui.QFont(fontname)
     font_large.setPointSize(config.font.size.large)
     font_large.setHintingPreference(QtGui.QFont.PreferNoHinting)
 
     app.setFont(font_extra_small)
     app.setFont(font_small, 'QGraphicsSimpleTextItem')
     app.setFont(font_small, "QLabel")
-    # app.setFont(font_extra_small, 'QPushButton')
-    # app.setFont(font_extra_small, 'QComboBox')
 
     window = ParserWindow()
     window.show()
@@ -157,3 +174,6 @@ if __name__ == "__main__":
     # window.show()
 
     sys.exit(app.exec())
+
+if __name__ == "__main__":
+    main()

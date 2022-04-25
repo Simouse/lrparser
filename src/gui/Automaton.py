@@ -53,8 +53,6 @@ class StateItem(QtWidgets.QGraphicsEllipseItem):
         label = QtWidgets.QGraphicsSimpleTextItem(parent=self)
         label.setText(text)
         font = label.font()
-        font.setPointSize(config.font.size.small)
-        font.setFamily('Lato')
         label.setFont(font)
         metrics = QtGui.QFontMetrics(font)
         w = metrics.width(text)
@@ -90,6 +88,9 @@ class StateItem(QtWidgets.QGraphicsEllipseItem):
         
         tooltips = description.splitlines()
         tooltips = sorted(tooltips)
+
+        for i in range(len(tooltips)):
+            tooltips[i] = tooltips[i].replace('->', '→', 1)
 
         if self._desctype == AutomatonType.LR0:
             rows = '\n'.join(map(lambda line:'<tr><td>{}</td></tr>'.format(line), tooltips))

@@ -44,6 +44,7 @@ class GuiConfig:
             normal     = 14
             large      = 16
         size = SizeConfig()
+        name = 'Noto Sans SC'
     font = FontConfig()
 
     @dataclass

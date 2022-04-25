@@ -1,9 +1,12 @@
+import asyncio
+from ctypes import alignment
 from getopt import error
 import tempfile
 import signal
 import sys
 import os
 import re
+import threading
 from typing import Any, Callable, Dict, Set, Tuple
 # from PySide6 import QtCore, QtWidgets, QtGui
 # from PySide6.QtCore import Qt
@@ -12,6 +15,7 @@ from PyQt5.QtCore import Qt
 from graphviz import render
 from Model import *
 from GuiConfig import *
+from Lexer import LexerDialog
 
 
 class ParseTableModel(DiffTableModel):
@@ -67,7 +71,7 @@ class ParseTableModel(DiffTableModel):
                     i = result.group(1)
                     production = self._prod[int(i)]
                     s = Production.stringify(production, self._symvec, '→')
-                    tip.append('<div>Reduce by production: {}</div>'.format(s))
+                    tip.append('Reduce by production: {}'.format(s))
                     continue
                 if item == 'acc':
                     tip.append('Success')
@@ -129,48 +133,66 @@ class InputDialog(QtWidgets.QDialog):
 
         self.setWindowTitle('Dialog')
 
-        layout = QtWidgets.QVBoxLayout()
+        topLayout = QtWidgets.QVBoxLayout()
         label = QtWidgets.QLabel()
-        label.setText('Choose input mode from below:')
+        # label.setText('Choose input mode from below:')
+        label.setText('Input space-separated tokens below:')
         font = label.font()
         font.setPointSize(config.font.size.small)
         label.setFont(font)
-        layout.addWidget(label)
-        combo = QtWidgets.QComboBox(self)
-        combo.addItems(['Tokens', 'Source'])
-        combo.setCurrentIndex(0)
-        combo.currentIndexChanged.connect(self.comboBoxIndexChanged)
-        layout.addWidget(combo)
+        topLayout.addWidget(label)
+        # combo = QtWidgets.QComboBox(self)
+        # combo.addItems(['Tokens', 'Source'])
+        # combo.setCurrentIndex(0)
+        # combo.currentIndexChanged.connect(self.comboBoxIndexChanged)
+        # topLayout.addWidget(combo)
         textEdit = QtWidgets.QPlainTextEdit()
         self._textEdit = textEdit
-        layout.addWidget(textEdit, 2)
+        topLayout.addWidget(textEdit, 2)
 
-        buttonStack = QtWidgets.QStackedWidget(self)
+        # buttonStack = QtWidgets.QStackedWidget(self)
+        buttonGroup = QtWidgets.QHBoxLayout()
+        buttonGroup.addStretch(1)
+        # Token as input
         button = QtWidgets.QPushButton('Test')
         button.clicked.connect(self.testButtonPressed)
         button.setCheckable(False)
-        button.setFixedWidth(config.button.width)
-        buttonStack.addWidget(button)
-        button = QtWidgets.QPushButton('Convert')
+        button.setMinimumWidth(config.button.width)
+        buttonGroup.addWidget(button)
+        # buttonStack.addWidget(button)
+
+        # Source as input
+        button = QtWidgets.QPushButton('From source...')
         button.clicked.connect(self.convertButtonPressed)
         button.setCheckable(False)
-        button.setFixedWidth(config.button.width)
-        buttonStack.addWidget(button)
-        buttonStack.setCurrentIndex(0)
+        button.setMinimumWidth(config.button.width)
+        buttonGroup.addSpacing(8)
+        buttonGroup.addWidget(button)
+        buttonGroup.addStretch(1)
+        # lexerButton = QtWidgets.QPushButton('❌')
+        # lexerButton.setStyleSheet("QPushButton { background-color: transparent; border: 0px }")
+        # layout = QtWidgets.QHBoxLayout()
+        # layout.addWidget(button)
+        # layout.addSpacing(16)
+        # layout.addWidget(lexerButton)
+        # widget = QtWidgets.QWidget()
+        # widget.setLayout(layout)
+        # buttonStack.addWidget(button)
+        # buttonStack.setCurrentIndex(0)
 
-        self._buttonStack = buttonStack
+        # self._buttonStack = buttonStack
 
-        buttonLayout = QtWidgets.QHBoxLayout()
-        buttonLayout.addStretch(1)
-        buttonLayout.addWidget(buttonStack)
-        buttonLayout.addStretch(1)
+        # buttonLayout = QtWidgets.QHBoxLayout()
+        # buttonLayout.addStretch(1)
+        # buttonLayout.addWidget(buttonStack)
+        # buttonLayout.addStretch(1)
 
-        layout.addLayout(buttonLayout)
+        topLayout.addLayout(buttonGroup)
 
-        self.setLayout(layout)
+        self.setLayout(topLayout)
 
-    def comboBoxIndexChanged(self, index):
-        self._buttonStack.setCurrentIndex(index)
+    # def comboBoxIndexChanged(self, index):
+    #     self._buttonStack.setCurrentIndex(index)
 
     def testButtonPressed(self):
         # print(self._opts.__dict__)
@@ -180,13 +202,11 @@ class InputDialog(QtWidgets.QDialog):
             self.close()
 
     def convertButtonPressed(self):
-        text = self._textEdit.toPlainText()
+        # text = self._textEdit.toPlainText()
         # print('Convert button pressed')
-        dialog = TextDialog(self, 'Not implemented')
-        dialog.show()
-        # TODO: 
-        # Convert the source into tokens and go back to Test mode.
-        # Well, that I cannot do now.
+        # dialog = TextDialog(self, 'Not implemented')
+        w = LexerDialog(self)
+        w.show()
 
 # Symbol stack -> [] | [] <- Input queue
 # State  stack -> []
@@ -368,6 +388,7 @@ class TableTab(QtWidgets.QWidget):
     def resetButtonClicked(self) -> None:
         dialog = InputDialog(self, self._opts, self.submitTest)
         dialog.show()
+        self.tryCaching()
 
     def refreshAST(self) -> None:
         def onSvgPrepared(svg: bytes):
@@ -424,7 +445,7 @@ class TableTab(QtWidgets.QWidget):
         # Check test string
         for token in test.strip().split():
             if token not in self._symdict.keys():
-                msg = 'Error: Unknown token: {}.'.format(token)
+                msg = 'Error: Unknown token: {}'.format(token)
                 dialog = TextDialog(self, msg)
                 dialog.show()
                 return False
@@ -465,10 +486,22 @@ class TableTab(QtWidgets.QWidget):
 
         # execSection() may change the label. So we reset label text here.
         self._info_label.setText('Click "Continue" button to begin the test.')
+        
         self._ast.clear()
         self._ast_view.loadSvg(None)
-        # self._ast_view.hide()
+
         return True
+
+    # Not helpful.
+    def tryCaching(self) -> None:
+        # ast = Forest()
+        # ast.addNode(0, 'please')
+        # ast.addNode(1, 'cache')
+        # ast.setParent(0, 1)
+        # def receiveSvg(svg: bytes) -> None:
+        #     self._ast_view.loadSvg(svg)
+        # ast.toSvg(lambda svg: receiveSvg(svg))
+        pass
 
     def createTableLayout(self) -> QtWidgets.QVBoxLayout:
         layout = QtWidgets.QVBoxLayout()
@@ -494,7 +527,7 @@ class TableTab(QtWidgets.QWidget):
 
     def createStacks(self) -> QtWidgets.QBoxLayout:
         padding = 24
-        labelWidth = 120
+        labelWidth = 130
 
         layout = QtWidgets.QHBoxLayout()
         layout.addSpacing(padding)
@@ -536,69 +569,69 @@ class TableTab(QtWidgets.QWidget):
         return layout3
 
 
-if __name__ == '__main__':
-    # For faster debugging
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
-    app = QtWidgets.QApplication([])
+# if __name__ == '__main__':
+#     # For faster debugging
+#     signal.signal(signal.SIGINT, signal.SIG_DFL)
+#     app = QtWidgets.QApplication([])
 
-    fontpath_list = [
-        './src/gui/resources/Lato-Black.ttf',
-        './src/gui/resources/Lato-BlackItalic.ttf',
-        './src/gui/resources/Lato-Bold.ttf',
-        './src/gui/resources/Lato-BoldItalic.ttf',
-        './src/gui/resources/Lato-Italic.ttf',
-        './src/gui/resources/Lato-Light.ttf',
-        './src/gui/resources/Lato-LightItalic.ttf',
-        './src/gui/resources/Lato-Regular.ttf',
-        './src/gui/resources/Lato-Thin.ttf',
-        './src/gui/resources/Lato-ThinItalic.ttf',
-    ]
-    for fontpath in fontpath_list:
-        QtGui.QFontDatabase.addApplicationFont(fontpath)
+#     fontpath_list = [
+#         './src/gui/resources/Lato-Black.ttf',
+#         './src/gui/resources/Lato-BlackItalic.ttf',
+#         './src/gui/resources/Lato-Bold.ttf',
+#         './src/gui/resources/Lato-BoldItalic.ttf',
+#         './src/gui/resources/Lato-Italic.ttf',
+#         './src/gui/resources/Lato-Light.ttf',
+#         './src/gui/resources/Lato-LightItalic.ttf',
+#         './src/gui/resources/Lato-Regular.ttf',
+#         './src/gui/resources/Lato-Thin.ttf',
+#         './src/gui/resources/Lato-ThinItalic.ttf',
+#     ]
+#     for fontpath in fontpath_list:
+#         QtGui.QFontDatabase.addApplicationFont(fontpath)
 
-    font_extra_small = QtGui.QFont('Lato')
-    font_extra_small.setPointSize(config.font.size.extrasmall)
-    font_extra_small.setHintingPreference(QtGui.QFont.PreferNoHinting)
-    font_small = QtGui.QFont('Lato')
-    font_small.setPointSize(config.font.size.small)
-    font_small.setHintingPreference(QtGui.QFont.PreferNoHinting)
-    font_normal = QtGui.QFont('Lato')
-    font_normal.setPointSize(config.font.size.normal)
-    font_normal.setHintingPreference(QtGui.QFont.PreferNoHinting)
-    font_large = QtGui.QFont('Lato')
-    font_large.setPointSize(config.font.size.large)
-    font_large.setHintingPreference(QtGui.QFont.PreferNoHinting)
+#     font_extra_small = QtGui.QFont('Lato')
+#     font_extra_small.setPointSize(config.font.size.extrasmall)
+#     font_extra_small.setHintingPreference(QtGui.QFont.PreferNoHinting)
+#     font_small = QtGui.QFont('Lato')
+#     font_small.setPointSize(config.font.size.small)
+#     font_small.setHintingPreference(QtGui.QFont.PreferNoHinting)
+#     font_normal = QtGui.QFont('Lato')
+#     font_normal.setPointSize(config.font.size.normal)
+#     font_normal.setHintingPreference(QtGui.QFont.PreferNoHinting)
+#     font_large = QtGui.QFont('Lato')
+#     font_large.setPointSize(config.font.size.large)
+#     font_large.setHintingPreference(QtGui.QFont.PreferNoHinting)
 
-    app.setFont(font_extra_small)
-    app.setFont(font_small, 'QGraphicsSimpleTextItem')
-    app.setFont(font_small, "QLabel")
+#     app.setFont(font_extra_small)
+#     app.setFont(font_small, 'QGraphicsSimpleTextItem')
+#     app.setFont(font_small, "QLabel")
 
-    opts = LRParserOptions(out=tempfile.mkdtemp(),
-                           bin='./build/lrparser',
-                           grammar='./grammar.txt',
-                           parser='SLR(1)')
-    env = ParsingEnv()
+#     opts = LRParserOptions(out=tempfile.mkdtemp(),
+#                            bin='./build/lrparser',
+#                            grammar='./grammar.txt',
+#                            parser='SLR(1)')
+#     env = ParsingEnv()
 
-    class Section:
-        def __init__(self) -> None:
-            self.section = ''
+#     class Section:
+#         def __init__(self) -> None:
+#             self.section = ''
 
-        def setSection(self, newSection) -> None:
-            self.section = newSection
+#         def setSection(self, newSection) -> None:
+#             self.section = newSection
 
-    section = Section()
-    env.section = lambda s: section.setSection(s)
+#     section = Section()
+#     env.section = lambda s: section.setSection(s)
 
-    steps, err = getLRSteps(opts)
-    if err:
-        raise Exception(err)
-    line = 0
-    while line < len(steps) and section.section != 'Parse Table':
-        line = execSection(steps, line, env.__dict__)
-        line += 1
+#     steps, err = getLRSteps(opts)
+#     if err:
+#         raise Exception(err)
+#     line = 0
+#     while line < len(steps) and section.section != 'Parse Table':
+#         line = execSection(steps, line, env.__dict__)
+#         line += 1
 
-    window = TableTab(parent=None, opts=opts, env=env)
-    window.resize(config.win.width, config.win.height)
-    window.show()
+#     window = TableTab(parent=None, opts=opts, env=env)
+#     window.resize(config.win.width, config.win.height)
+#     window.show()
 
-    sys.exit(app.exec())
+#     sys.exit(app.exec())

@@ -1,0 +1,1 @@
+set PATH=build;%PATH%

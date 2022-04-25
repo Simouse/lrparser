@@ -41,13 +41,13 @@ class Production:
 
     def stringify(production: 'Production',
                   symbols: List[Symbol],
-                  arrow: str = '->') -> str:
+                  arrow: str = '→') -> str:
         head = int(production.head)
-        s = '{} {} {}'.format(
-            symbols[head].name, arrow,
-            ' '.join([symbols[i].name for i in production.body]))
+        s = '{} {} '.format(symbols[head].name, arrow)
         if len(production.body) == 0:
             s += 'ε'
+        else:
+            s += ' '.join([symbols[i].name for i in production.body])
         return s
 
 
@@ -148,6 +148,8 @@ class Forest:
                 deq.append(child)
                 g.edge(str(id(node)), str(id(child)))
         g.node_attr['shape'] = 'circle'
+        fontname = config.font.name
+        g.graph_attr['fontname'] = fontname
 
         # Slow. 160 ~ 240 ms.
         # This is because graphviz on Windows is slow. On *unix, it should take
