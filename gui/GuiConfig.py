@@ -39,12 +39,13 @@ class GuiConfig:
     class FontConfig:
         @dataclass
         class SizeConfig:
-            extrasmall = 10
+            extrasmall = 11
             small      = 12
-            normal     = 14
+            normal     = 13
             large      = 16
         size = SizeConfig()
-        name = 'Noto Sans SC'
+        # name = 'Noto Sans SC'
+        name = 'Murecho'
     font = FontConfig()
 
     @dataclass

@@ -163,6 +163,15 @@ def main():
         './gui/resources/JetBrains_Mono/static/JetBrainsMono-SemiBoldItalic.ttf',
         './gui/resources/JetBrains_Mono/static/JetBrainsMono-Thin.ttf',
         './gui/resources/JetBrains_Mono/static/JetBrainsMono-ThinItalic.ttf',
+        './gui/resources/Murecho/static/Murecho-Black.ttf',
+        './gui/resources/Murecho/static/Murecho-Bold.ttf',
+        './gui/resources/Murecho/static/Murecho-ExtraBold.ttf',
+        './gui/resources/Murecho/static/Murecho-ExtraLight.ttf',
+        './gui/resources/Murecho/static/Murecho-Light.ttf',
+        './gui/resources/Murecho/static/Murecho-Medium.ttf',
+        './gui/resources/Murecho/static/Murecho-Regular.ttf',
+        './gui/resources/Murecho/static/Murecho-SemiBold.ttf',
+        './gui/resources/Murecho/static/Murecho-Thin.ttf',
     ]
     for fontpath in fontpath_list:
         QtGui.QFontDatabase.addApplicationFont(fontpath)
