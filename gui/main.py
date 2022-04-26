@@ -139,12 +139,30 @@ def main():
     app = QtWidgets.QApplication([])
 
     fontpath_list = [
-        './src/gui/resources/Noto_Sans_SC/NotoSansSC-Black.otf',
-        './src/gui/resources/Noto_Sans_SC/NotoSansSC-Bold.otf',
-        './src/gui/resources/Noto_Sans_SC/NotoSansSC-Light.otf',
-        './src/gui/resources/Noto_Sans_SC/NotoSansSC-Medium.otf',
-        './src/gui/resources/Noto_Sans_SC/NotoSansSC-Regular.otf',
-        './src/gui/resources/Noto_Sans_SC/NotoSansSC-Thin.otf',
+        './gui/resources/Noto_Sans_SC/NotoSansSC-Black.otf',
+        './gui/resources/Noto_Sans_SC/NotoSansSC-Bold.otf',
+        './gui/resources/Noto_Sans_SC/NotoSansSC-Light.otf',
+        './gui/resources/Noto_Sans_SC/NotoSansSC-Medium.otf',
+        './gui/resources/Noto_Sans_SC/NotoSansSC-Regular.otf',
+        './gui/resources/Noto_Sans_SC/NotoSansSC-Thin.otf',
+        './gui/resources/JetBrains_Mono/JetBrainsMono-Italic-VariableFont_wght.ttf',
+        './gui/resources/JetBrains_Mono/JetBrainsMono-VariableFont_wght.ttf',
+        './gui/resources/JetBrains_Mono/static/JetBrainsMono-Bold.ttf',
+        './gui/resources/JetBrains_Mono/static/JetBrainsMono-BoldItalic.ttf',
+        './gui/resources/JetBrains_Mono/static/JetBrainsMono-ExtraBold.ttf',
+        './gui/resources/JetBrains_Mono/static/JetBrainsMono-ExtraBoldItalic.ttf',
+        './gui/resources/JetBrains_Mono/static/JetBrainsMono-ExtraLight.ttf',
+        './gui/resources/JetBrains_Mono/static/JetBrainsMono-ExtraLightItalic.ttf',
+        './gui/resources/JetBrains_Mono/static/JetBrainsMono-Italic.ttf',
+        './gui/resources/JetBrains_Mono/static/JetBrainsMono-Light.ttf',
+        './gui/resources/JetBrains_Mono/static/JetBrainsMono-LightItalic.ttf',
+        './gui/resources/JetBrains_Mono/static/JetBrainsMono-Medium.ttf',
+        './gui/resources/JetBrains_Mono/static/JetBrainsMono-MediumItalic.ttf',
+        './gui/resources/JetBrains_Mono/static/JetBrainsMono-Regular.ttf',
+        './gui/resources/JetBrains_Mono/static/JetBrainsMono-SemiBold.ttf',
+        './gui/resources/JetBrains_Mono/static/JetBrainsMono-SemiBoldItalic.ttf',
+        './gui/resources/JetBrains_Mono/static/JetBrainsMono-Thin.ttf',
+        './gui/resources/JetBrains_Mono/static/JetBrainsMono-ThinItalic.ttf',
     ]
     for fontpath in fontpath_list:
         QtGui.QFontDatabase.addApplicationFont(fontpath)
@@ -162,10 +180,14 @@ def main():
     font_large = QtGui.QFont(fontname)
     font_large.setPointSize(config.font.size.large)
     font_large.setHintingPreference(QtGui.QFont.PreferNoHinting)
+    font_code = QtGui.QFont('JetBrains Mono')
+    font_code.setPointSize(config.font.size.extrasmall)
+    font_code.setHintingPreference(QtGui.QFont.PreferNoHinting)
 
     app.setFont(font_extra_small)
     app.setFont(font_small, 'QGraphicsSimpleTextItem')
     app.setFont(font_small, "QLabel")
+    app.setFont(font_code, 'QPlainTextEdit')
 
     window = ParserWindow()
     window.show()

@@ -135,22 +135,15 @@ class InputDialog(QtWidgets.QDialog):
 
         topLayout = QtWidgets.QVBoxLayout()
         label = QtWidgets.QLabel()
-        # label.setText('Choose input mode from below:')
         label.setText('Input space-separated tokens below:')
         font = label.font()
         font.setPointSize(config.font.size.small)
         label.setFont(font)
         topLayout.addWidget(label)
-        # combo = QtWidgets.QComboBox(self)
-        # combo.addItems(['Tokens', 'Source'])
-        # combo.setCurrentIndex(0)
-        # combo.currentIndexChanged.connect(self.comboBoxIndexChanged)
-        # topLayout.addWidget(combo)
         textEdit = QtWidgets.QPlainTextEdit()
         self._textEdit = textEdit
         topLayout.addWidget(textEdit, 2)
 
-        # buttonStack = QtWidgets.QStackedWidget(self)
         buttonGroup = QtWidgets.QHBoxLayout()
         buttonGroup.addStretch(1)
         # Token as input
@@ -169,42 +162,18 @@ class InputDialog(QtWidgets.QDialog):
         buttonGroup.addSpacing(8)
         buttonGroup.addWidget(button)
         buttonGroup.addStretch(1)
-        # lexerButton = QtWidgets.QPushButton('❌')
-        # lexerButton.setStyleSheet("QPushButton { background-color: transparent; border: 0px }")
-        # layout = QtWidgets.QHBoxLayout()
-        # layout.addWidget(button)
-        # layout.addSpacing(16)
-        # layout.addWidget(lexerButton)
-        # widget = QtWidgets.QWidget()
-        # widget.setLayout(layout)
-        # buttonStack.addWidget(button)
-        # buttonStack.setCurrentIndex(0)
-
-        # self._buttonStack = buttonStack
-
-        # buttonLayout = QtWidgets.QHBoxLayout()
-        # buttonLayout.addStretch(1)
-        # buttonLayout.addWidget(buttonStack)
-        # buttonLayout.addStretch(1)
 
         topLayout.addLayout(buttonGroup)
 
         self.setLayout(topLayout)
 
-    # def comboBoxIndexChanged(self, index):
-    #     self._buttonStack.setCurrentIndex(index)
-
     def testButtonPressed(self):
-        # print(self._opts.__dict__)
         text = self._textEdit.toPlainText()
         text += ' $'
         if self._submitText(text):
             self.close()
 
     def convertButtonPressed(self):
-        # text = self._textEdit.toPlainText()
-        # print('Convert button pressed')
-        # dialog = TextDialog(self, 'Not implemented')
         w = LexerDialog(self)
         w.show()
 
