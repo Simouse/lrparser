@@ -31,15 +31,13 @@ function release_win() {
     [[ $OS != Windows_NT ]] && echo 'release function is only for Windows.' && exit 4
     [[ -z "$1" ]] && echo "Usage: ./run.sh release {directoryName}" && exit 4
     mkdir -p "$1/bin"
-    mkdir -p "$1/src"
-    cat checkenv.cmd                  > "$1/run.cmd"
-    echo:                            >> "$1/run.cmd"
-    echo 'set PATH=bin;%PATH%'       >> "$1/run.cmd"
-    echo 'python3 .\gui\main.py' >> "$1/run.cmd"
+    cat env.cmd                    > "$1/run.cmd"
+    echo :                        >> "$1/run.cmd"
+    echo 'python3 .\gui\main.py'  >> "$1/run.cmd"
     cp "$(dirname "$(which dot)")"/* "$1/bin/"
     cp "$(which flex)"               "$1/bin/"
     cp  build/lrparser.exe           "$1/bin/"
-    rm -rf src/gui/__pycache__ && cp -r src/gui "$1/src/gui"
+    cp -r gui                        "$1/gui"
 }
 
 case $1 in
