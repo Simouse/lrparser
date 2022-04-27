@@ -2,7 +2,7 @@
 
 This is a grammar parser which can read grammar files in our format, analyze attributes (nullable, first set, and follow set) of symbols, generate push-down automatons and parse tables. It aims at learning/teaching LR parsing algorithms and does not have the functionalities to actually translate languages to intermediate code.
 
-## Output
+# CLI
 
 For grammar (stored in `grammar.txt`):
 
@@ -128,8 +128,6 @@ SLR DFA:
 
 ## Usage
 
-### lrparser executable
-
 ```txt
 This program reads a possibly LR grammar from <Grammar file>, takes test
 sequence from standard input stream, and stores analysis results into
@@ -200,7 +198,7 @@ The grammar is not compatible with Bison's. It's because Bison has a semicolon a
 
 I provide a script named `run.sh` for format conversion. It provides an easier way to pass arguments as well. The function is minimal. If you want to change the grammar type, you can edit the script directly.
 
-### GUI
+# GUI
 
 Following packages are required:
 - graphviz
@@ -208,7 +206,7 @@ Following packages are required:
 
 And Graphviz should be installed so `dot` command appears in `PATH`. 
 
-Run the program with:
+After building (see next section), run the program with:
 
 ```cmd
 .\env.cmd
@@ -222,23 +220,21 @@ python3 ./src/gui/main.py
 
 Some screenshots:
 
-<img src="assets/image-20220323183019448.png" alt="image-20220323183019448" style="zoom:67%;" />
+![image-20220427222101320](assets/image-20220427222101320.png)
 
-<img src="assets/image-20220323183059797.png" alt="image-20220323183059797" style="zoom:67%;" />
+![image-20220427222144149](assets/image-20220427222144149.png)
 
-<img src="assets/image-20220323183122807.png" alt="image-20220323183122807" style="zoom:67%;" />
+![image-20220427222259501](assets/image-20220427222259501.png)
 
 **Only LR family is implemented.**
 
-<img src="assets/image-20220323183333509.png" alt="image-20220323183333509" style="zoom:67%;" />
+![image-20220427222432367](assets/image-20220427222432367.png)
 
-Those nodes can be dragged. States' descriptions pop up when mouse is hovering on them. e.g.
+Those nodes can be dragged. States' descriptions pop up when mouse is hovering on them. 
 
-<img src="assets/image-20220323183736973.png" alt="image-20220323183736973" style="zoom:67%;" />
+![image-20220427222501362](assets/image-20220427222501362.png)
 
-<img src="assets/image-20220323183537125.png" alt="image-20220323183537125" style="zoom:67%;" />
-
-## Build
+# Build
 
 ```bash
 git clone git@github.com:Simouse/lrparser.git
@@ -248,7 +244,7 @@ cmake -G Ninja .. # Or "cmake .." if you do not have Ninja
 cmake --build .
 ```
 
-## Resources
+# Resources
 
 I found some resources really helpful in my learning. I compared my results with their programs' to detect my bugs and the reasons causing them. I didn't use their code though.
 
@@ -258,17 +254,17 @@ I found some resources really helpful in my learning. I compared my results with
 
 [SilverScar/C-Language-Parser](https://github.com/SilverScar/C-Language-Parser) provides a C89 grammar in yacc.
 
-## Questions and some explanations
+# Questio
 
-### How to show `ε` correctly in console?
+## How to show `ε` correctly in console?
 
 On Windows, you can use `chcp 65001` to enable `UTF-8` in `cmd.exe,` and use `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` in `PowerShell`. On macOS and Linux platforms, this normally shouldn't be a problem.
 
-### `#include <vcruntime.h>` causes compilation error.
+## `#include <vcruntime.h>` causes compilation error.
 
 Just remove those lines. My editor added those for me, but they are not needed. I often forget to delete those lines...
 
-### For large inputs
+## For large inputs
 
 This tool is not a suitable choice for extremely large inputs, for the result can not be easily observed. If you still want to use it against large inputs, continue reading.
 
@@ -276,8 +272,8 @@ For very large test sequences, you can use `--step` flag to disable memory cache
 
 For very large grammars, the result is almost impossible to observe. I tested my tool against C89 grammar, and found hundreds of DFA states had been generated. Chances are that `dot` will freeze when you try to visualize the graph. 
 
-As for performance, for C89 grammar (You can find it with the url stored in `c89.url.txt` and use run.sh to convert the file format) on my Windows machine, it takes the LR(1) parser about 1.5 seconds to finish (when stdout is piped to null). This is because the program generates gv files and a step file, along with stdout. Although you can redirect the output to `/dev/null` (In ` cmd.exe` on Windows, use `> nul` instead), these strings are still calculated, so it won't save much time (but it will be faster than displaying the output in console). Besides, all sets used in the program are based on bitset, which is less efficient when set is sparse and large. The tool assumes grammars to be small because a large grammar is difficult to analyze and study. However, if you intend to test the performance, well, a large grammar should be used. I thought I made a mistake here, cause optimizing for small grammars whose analysis was fast enough seemed pointless. Later I tried std::set and set::unordered_set, but the results were not ideal, either. Compared with the LR(1) parser, other parsers are much faster. (~0.1 s for SLR(1) parser of C89 grammar; ~0.2 s for LALR(1) parser of C89 grammar)
+As for performance, for C89 grammar (You can find it with the url stored in `c89.url.txt` and use run.sh to convert the file format) on my Windows machine, it takes the LR(1) parser about 1.5 seconds to finish (when stdout is piped to null). This is because the program generates gv files and a step file, along with stdout. Although you can redirect the output to `/dev/null` (In ` cmd.exe` on Windows, use `> nul` instead), these strings are still calculated, so it is still slow. Besides, all sets used in the program are based on bitset, which is less efficient when set is sparse and large. The tool assumes grammars to be small because a large grammar is difficult to analyze and study. However, if you intend to test the performance, well, a large grammar should be used. I thought I made a mistake here, cause optimizing for small grammars whose analysis was fast enough seemed pointless. Later I tried `std::set` and `set::unordered_set`, but the results were not ideal, either. Compared with the LR(1) parser, other parsers are much faster. (~0.1 s for SLR(1) parser of C89 grammar; ~0.2 s for LALR(1) parser of C89 grammar)
 
-### Why does your program detect conflicts in C language (ANSI-89) ?
+## Why does your program detect conflicts in C language (ANSI-89) ?
 
 You probably used one of yacc files online and test it with `bison`. Those yacc files define extra rules to gain conflict resolutions, so they are not pure LR. After removing those rules, `bison` will find conflicts as well.
