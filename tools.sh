@@ -32,7 +32,7 @@ function release_win() {
     [[ -z "$1" ]] && echo "Usage: ./run.sh release {directoryName}" && exit 4
     mkdir -p "$1/bin"
     cat env.cmd                    > "$1/run.cmd"
-    echo :                        >> "$1/run.cmd"
+    echo                          >> "$1/run.cmd"
     echo 'python3 .\gui\main.py'  >> "$1/run.cmd"
     cp "$(dirname "$(which dot)")"/* "$1/bin/"
     cp "$(which flex)"               "$1/bin/"

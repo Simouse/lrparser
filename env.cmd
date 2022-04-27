@@ -11,5 +11,5 @@ if %ERRORLEVEL% EQU 1 (
     pause
     exit 1
 )
-echo [Success] Python3 and related packages are installed
+echo [Success] Python3 and related packages are installed.
 set PATH=bin;build;%PATH%
