@@ -58,16 +58,16 @@ class LALRParser : public LRParser {
     std::map<StateID, Constraint> transit(std::vector<State> const &lr0States,
                                           ActionID actionID,
                                           LALRClosure const &lalrClosure) {
-        std::map<StateID, Constraint> res;
+        std::map<StateID, Constraint> result;
 
         for (auto const &[lr0StateID, constraint] : lalrClosure) {
             auto const &lr0State = lr0States[lr0StateID];
             auto const &trans = *lr0State.transitions;
             auto range = trans.rangeOf(actionID);
             for (auto it = range.first; it != range.second; ++it) {
-                auto iter = res.find(it->destination);
-                if (iter == res.end()) {
-                    res.emplace(it->destination, constraint);
+                auto iter = result.find(it->destination);
+                if (iter == result.end()) {
+                    result.emplace(it->destination, constraint);
                 } else {
                     // Must merge
                     iter->second |= constraint;
@@ -75,8 +75,8 @@ class LALRParser : public LRParser {
             }
         }
 
-        makeClosure(lr0States, res);
-        return res;
+        makeClosure(lr0States, result);
+        return result;
     }
 
     // Real constraint resolving method.
@@ -148,7 +148,7 @@ class LALRParser : public LRParser {
         startClosure.emplace(s0, *startState.constraint);
         makeClosure(lr0States, startClosure);
 
-        step::addState(s0, "");
+        step::addState(s0, std::string{kernelLabelMap.back().front()} + ", $");
         step::setStart(s0);
         step::show("Add start state.");
         util::Formatter f;
@@ -162,21 +162,25 @@ class LALRParser : public LRParser {
             // Try different actions
             auto nAction = static_cast<int>(M.actions.size());
             for (int i = 0; i < nAction; ++i) {
-                if (i == epsilonID)
+                if (i == epsilonID) {
                     continue;
+                }
+                    
                 auto actionID = static_cast<ActionID>(i);
                 auto newClosure =
                     transit(lr0States, actionID, closureIter->first);
 
                 // Cannot accept this action
-                if (newClosure.empty())
+                if (newClosure.empty()) {
                     continue;
-
+                }
+                
                 auto iter = closureIndexMap.find(newClosure);
                 if (iter == closureIndexMap.end()) {
                     // Add new closure
                     auto closureID =
                         static_cast<StateID>(closureIndexMap.size());
+                    std::string stateInfo = this->dumpLALRClosure(newClosure);
                     queue.push(closureIndexMap
                                    .emplace(std::move(newClosure), closureID)
                                    .first);
@@ -185,13 +189,13 @@ class LALRParser : public LRParser {
                     M.addTransition(StateID{closureIter->second}, closureID,
                                     actionID);
 
-                    step::addState(closureID, "");
+                    step::addState(closureID, stateInfo);
                     step::addEdge(closureIter->second, closureID,
                                   M.actions[actionID]);
-                    auto sv = f.formatView("Trans(s%d, %s) = s%d",
-                                           closureIter->second,
-                                           M.actions[actionID], closureID);
-                    step::show(sv);
+                    auto message = f.formatView("Trans(s%d, %s) = s%d",
+                                                closureIter->second,
+                                                M.actions[actionID], closureID);
+                    step::show(message);
                 } else {
                     // Merge closures.
                     // Now number of elements in two maps should be the same.
@@ -207,16 +211,16 @@ class LALRParser : public LRParser {
                     M.addTransition(StateID{closureIter->second},
                                     StateID{iter->second}, actionID);
                     // The merged state should be checked again
-                    if (flag)
+                    if (flag) {
                         queue.push(iter);
+                    }
 
-                    // step::updateState(iter->second, M.dumpClosureString(
-                    //                                     StateID{iter->second}));
                     step::addEdge(closureIter->second, iter->second, M.actions[actionID]);
-                    auto sv = f.formatView("Trans(s%d, %s) = s%d",
-                                           closureIter->second,
-                                           M.actions[actionID], iter->second);
-                    step::show(sv);
+                    step::updateState(iter->second, this->dumpLALRClosure(newClosure));
+                    auto message = f.formatView(
+                        "Trans(s%d, %s) = s%d", closureIter->second,
+                        M.actions[actionID], iter->second);
+                    step::show(message);
                 }
             }
         }
@@ -284,6 +288,46 @@ class LALRParser : public LRParser {
                             const Production &production,
                             int rhsIndex) override {
         return allTermConstraint;
+    }
+
+  private:
+    std::string dumpLALRClosure(const LALRClosure &closure) const {
+        std::string result;
+        auto const &states = this->nfa.getAllStates();
+        auto EOI = this->nfa.endOfInputAction;
+        auto const &actions = this->nfa.getAllActions();
+        bool finalFlag = false;
+        bool newLineFlag = false;
+
+        for (auto &[index, constraint] : closure) {
+            if (newLineFlag) {
+                result += "\n";
+            }
+
+            auto const &state = states[index];
+
+            result += escape_ascii(
+                kernelLabelMap[state.productionID][state.rhsIndex]);
+
+            if (!finalFlag && constraint.contains(EOI) &&
+                (state.rhsIndex + 1 ==
+                 kernelLabelMap[state.productionID].size())) {
+                finalFlag = true;
+            }
+
+            result += ", ";
+            bool slash = false;
+            for (auto actionID : constraint) {
+                if (slash) {
+                    result += "/";
+                }
+                result += escape_ascii(actions[actionID]);
+                slash = true;
+            }
+
+            newLineFlag = true;
+        }
+        return result;
     }
 };
 } // namespace gram
