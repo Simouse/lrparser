@@ -1,15 +1,11 @@
 @echo off
-where /q python3
-if %ERRORLEVEL% EQU 1 (
-    echo [Error] python3 is not in PATH.
-    pause
-    exit 1
-)
 python3 -c "import graphviz; import PyQt5; import clipboard;"
-if %ERRORLEVEL% EQU 1 (
-    echo [Error] Packages are not installed completely.
+if not %ERRORLEVEL% equ 0 (
+    echo [91m[Error] Packages are not installed completely.[0m
+    echo You need python3 in PATH.
+    echo You need graphviz, PyQt5, and clipboard in python site-packages.
     pause
-    exit 1
+) else (
+	echo [92m[Success] Python3 and related packages are installed.[0m
+	set "PATH=bin;build;%PATH%"
 )
-echo [Success] Python3 and related packages are installed.
-set PATH=bin;build;%PATH%

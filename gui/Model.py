@@ -319,9 +319,7 @@ class TextDialog(QtWidgets.QDialog):
         label.setAlignment(align)
 
         labelLayout = QtWidgets.QHBoxLayout()
-        # labelLayout.addSpacing(8)
         labelLayout.addWidget(label)
-        # labelLayout.addSpacing(8)
 
         button = QtWidgets.QPushButton('OK')
         button.setCheckable(False)
@@ -334,16 +332,20 @@ class TextDialog(QtWidgets.QDialog):
         buttonLayout.addStretch(1)
 
         layout = QtWidgets.QVBoxLayout()
-        # layout.addSpacing(16)
         layout.addLayout(labelLayout)
         layout.addSpacing(8)
         layout.addLayout(buttonLayout)
-        # layout.addSpacing(16)
+
+        # scroll = QtWidgets.QScrollArea()
+        # scroll.setLayout(layout)
+        # scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        # scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        # layout = QtWidgets.QVBoxLayout()
+        # layout.addWidget(scroll)
 
         self.setLayout(layout)
         self.setModal(True)
         self.setWindowTitle('Dialog')
-        # self.resize(config.dialog.width, config.dialog.height)
 
 
 # Returns (steps, err)

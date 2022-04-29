@@ -153,7 +153,7 @@ number {digit}+(\.{digit}+)?(E[+-]+{digit}+)?</font>
 
             def setRules(self, rules: str):
                 self.rules = rules
-            
+
             def setSource(self, source: str):
                 self.source = source
 
@@ -185,14 +185,26 @@ number {digit}+(\.{digit}+)?(E[+-]+{digit}+)?</font>
                     lexerout, _ = lexer.communicate(source.encode('UTF-8'))
                     tokens = lexerout.decode('UTF-8')
                     clipboard.copy(tokens)
-                    self.slots.success.emit(
-                        f"""<p>
-                        Success. Tokens are copied into clipboard:<br/>
-                        <font face="JetBrains Mono">
-                        {tokens}
-                        </font>
-                        </p>"""
-                    )
+
+                    tokenLineLimit = 32
+                    tokenList = tokens.splitlines()
+                    if len(tokenList) > tokenLineLimit:
+                        tokenList = tokenList[:tokenLineLimit]
+                        tokenList.append('...')
+
+                    tokens_html = '\n'.join(
+                        [f'<li>{item}</li>' for item in tokenList])
+
+                    self.slots.success.emit(f"""
+                        <p>Success. Tokens are copied into clipboard:</p>
+                        <ul style="list-style-type:none; 
+                            text-align:left; 
+                            font-family:'JetBrains Mono'; 
+                            font-size:{config.font.size.extrasmall}pt;
+                            margin-right: 28px;">
+                        {tokens_html}
+                        </ul>
+                        """)
 
         worker = LexWorker()
         worker.setRules(self._ruleEditor.toPlainText())
@@ -203,11 +215,11 @@ number {digit}+(\.{digit}+)?(E[+-]+{digit}+)?</font>
         pool.start(worker)
 
         def onResult(text: str):
-            TextDialog(self, text).show()
+            messageDialog = TextDialog(self, text)
+            # messageDialog.setMinimumWidth(600)
+            messageDialog.show()
             waitDialog.close()
             self._generateButton.setEnabled(True)
 
         slots.success.connect(onResult)
         slots.failure.connect(onResult)
-
-
