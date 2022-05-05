@@ -219,11 +219,12 @@ void Grammar::calNullable() {
 
 void Grammar::calFirst() {
     for (auto &sym : symbols) {
-        if (sym.type == SymbolType::TERM) {
+        if (sym.type == SymbolType::TERM && !sym.nullable) {
             sym.firstSet.insert(sym.id);
             step::addFirst(sym.id, sym.id, nullptr); // No explanation.
         }
     }
+
     // Explain here.
     step::show("First set of each terminal only contains itself.");
 
@@ -236,19 +237,20 @@ void Grammar::calFirst() {
             auto newFirst = Symbol::SymbolSet();
             for (auto &pindex : left.productions) {
                 auto const &rhs = productionTable[pindex].rightSymbols;
-                if (rhs.empty() && !left.firstSet.contains(epsilon)) {
-                    step::addFirst(
-                        left.id, epsilon,
-                        "Any nullable symbol has ε in its First set.");
-                    left.firstSet.insert(epsilon);
-                    continue;
-                }
+    //            if (rhs.empty() && !left.firstSet.contains(epsilon)) {
+    //                step::addFirst(
+    //                    left.id, epsilon,
+    //                    "Any nullable symbol has ε in its First set.");
+    //                left.firstSet.insert(epsilon);
+    //                continue;
+    //            }
                 for (auto right : rhs) {
                     newFirst |= symbols[right].firstSet;
                     step::mergeFirst(left.id, right, nullptr); // No expl.
                     if (!symbols[right].nullable)
                         break;
                 }
+
                 if (!left.firstSet.supersetOf(newFirst)) {
                     change = true;
                     left.firstSet |= newFirst;
@@ -267,6 +269,15 @@ void Grammar::calFirst() {
             }
         }
     }
+
+    // Add epsilon into First set.
+    for (auto &sym : symbols) {
+        if (sym.nullable) {
+            sym.firstSet.insert(epsilon);
+            step::addFirst(sym.id, epsilon, nullptr); // No explanation.
+        }
+    }
+    step::show("Any nullable symbol has ε in its First set.");
 }
 
 void Grammar::calFollow() {
@@ -495,7 +506,9 @@ std::string Grammar::dumpProduction(const Production &production) const {
     std::string s;
     s += symbols[production.leftSymbol].name;
     s += " →";
-    for (int rightSymbol : production.rightSymbols) {
+    if (production.rightSymbols.empty())
+        s += " ε";
+    else for (int rightSymbol : production.rightSymbols) {
         s += ' ';
         s += symbols[rightSymbol].name;
     }
