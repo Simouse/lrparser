@@ -254,7 +254,7 @@ I found some resources really helpful in my learning. I compared my results with
 
 [SilverScar/C-Language-Parser](https://github.com/SilverScar/C-Language-Parser) provides a C89 grammar in yacc.
 
-# Questio
+# Questions
 
 ## How to show `ε` correctly in console?
 
