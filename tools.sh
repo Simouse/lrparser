@@ -13,7 +13,7 @@ function callbison() {
 
 function callmy() {
     [[ -z "$1" ]] && echo "Usage: ./run.sh lrparser {file}" && exit 2
-    parser=./linux/lrparser
+    parser=./build/lrparser
     type=lalr
     ${parser} -g $1 --no-test -t ${type} -o out --sep=':' --strict | \
         perl -0pe 's/.*(> Summary.*)/$1/s'
